@@ -90,6 +90,24 @@
           "run": "local import",
           "source_note": "Focused rerun required after the launcher focus fix; earlier pass retained as history.",
           "recorded_at": "2026-10-28T15:28:54.690758+00:00"
+        },
+        {
+          "sha": "393c4628c0a2fb61a3177881796a95a38c669fa1",
+          "definition": "641b2d916c3e67fb285cc3e677ec100c1caf46f56104d3496c9373a513993777",
+          "status": "pending",
+          "evidence": "mac-dark-71a60eb7-172d-43fc-9938-f43b8d9895d6",
+          "run": "40727811431",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:44:58.718895+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "641b2d916c3e67fb285cc3e677ec100c1caf46f56104d3496c9373a513993777",
+          "status": "passed",
+          "evidence": "mac-dark-95aba875-d44e-4547-85f6-021e6624a556",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:59:02.791701+00:00"
         }
       ],
       "key": "mac/dark/MacControllerJourneyUITests/testControllerOnlyLaunchAndStop",
@@ -98,7 +116,7 @@
       "theme": "dark",
       "definition": "641b2d916c3e67fb285cc3e677ec100c1caf46f56104d3496c9373a513993777",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "pending"
+      "status": "passed"
     },
     "mac/light/MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords": {
       "history": [
@@ -119,6 +137,15 @@
           "run": "local import",
           "source_note": "Uncommitted stabilization tree later committed as 7be86f15; Mac journey definitions unchanged; run interrupted at user request.",
           "recorded_at": "2026-10-28T15:28:54.762471+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "b26edfa97a7e652fe785753b47ac741b700dd2e0687685d557ffc0c4dbe09f38",
+          "status": "passed",
+          "evidence": "mac-light-d469d146-0e5c-48dd-b43c-a68e555c7b2a",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T17:00:31.326635+00:00"
         }
       ],
       "key": "mac/light/MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords",
@@ -127,7 +154,7 @@
       "theme": "light",
       "definition": "b26edfa97a7e652fe785753b47ac741b700dd2e0687685d557ffc0c4dbe09f38",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "failed"
+      "status": "passed"
     },
     "mac/dark/MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords": {
       "history": [
@@ -406,6 +433,22 @@
           "run": "local import",
           "source_note": "Uncommitted stabilization tree later committed as 7be86f15; Mac journey definitions unchanged; run interrupted at user request.",
           "recorded_at": "2026-10-28T15:28:54.762475+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
+          "status": "passed",
+          "evidence": "mac-light-d469d146-0e5c-48dd-b43c-a68e555c7b2a",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T17:00:31.326722+00:00"
+        },
+        {
+          "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724504+00:00"
         }
       ],
       "key": "mac/light/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap",
@@ -414,7 +457,7 @@
       "theme": "light",
       "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "failed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap": {
       "history": [
@@ -426,6 +469,13 @@
           "run": "local import",
           "source_note": "Uncommitted release stabilization tree; mac-complete-dark; successful method definitions reviewed against the current release.",
           "recorded_at": "2026-10-28T15:28:54.690765+00:00"
+        },
+        {
+          "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724508+00:00"
         }
       ],
       "key": "mac/dark/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap",
@@ -434,10 +484,1896 @@
       "theme": "dark",
       "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ios/all/render": {
+      "history": [],
+      "key": "ios/all/render",
+      "test": "render",
+      "device": "ios",
+      "theme": "all",
+      "source": "render and UI batch",
+      "definition": "37176570a63de7011fdf147bad2a3f94b3dc1a98a43718713909a205cf2cab56",
+      "status": "pending"
+    },
+    "mac/dark/MacControllerJourneyUITests/testControllerContextActionsAndBack": {
+      "history": [
+        {
+          "sha": "393c4628c0a2fb61a3177881796a95a38c669fa1",
+          "definition": "32566d2028ca712ce881f2776a2c0f1b0d5ee8c3f659c99a338ac0697e124829",
+          "status": "pending",
+          "evidence": "mac-dark-71a60eb7-172d-43fc-9938-f43b8d9895d6",
+          "run": "40727811431",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:44:58.724160+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "32566d2028ca712ce881f2776a2c0f1b0d5ee8c3f659c99a338ac0697e124829",
+          "status": "passed",
+          "evidence": "mac-dark-95aba875-d44e-4547-85f6-021e6624a556",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:59:02.792019+00:00"
+        }
+      ],
+      "key": "mac/dark/MacControllerJourneyUITests/testControllerContextActionsAndBack",
+      "test": "MacControllerJourneyUITests/testControllerContextActionsAndBack",
+      "device": "mac",
+      "theme": "dark",
+      "definition": "32566d2028ca712ce881f2776a2c0f1b0d5ee8c3f659c99a338ac0697e124829",
+      "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
+      "status": "passed"
+    },
+    "mac/dark/MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap": {
+      "history": [
+        {
+          "sha": "393c4628c0a2fb61a3177881796a95a38c669fa1",
+          "definition": "4c4280c4f72daf46cbf615d074a51192ea82e1c1335ae465e759c446c0ca3dc7",
+          "status": "pending",
+          "evidence": "mac-dark-71a60eb7-172d-43fc-9938-f43b8d9895d6",
+          "run": "40727811431",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:44:58.724188+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "4c4280c4f72daf46cbf615d074a51192ea82e1c1335ae465e759c446c0ca3dc7",
+          "status": "passed",
+          "evidence": "mac-dark-95aba875-d44e-4547-85f6-021e6624a556",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:59:02.792024+00:00"
+        }
+      ],
+      "key": "mac/dark/MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap",
+      "test": "MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap",
+      "device": "mac",
+      "theme": "dark",
+      "definition": "4c4280c4f72daf46cbf615d074a51192ea82e1c1335ae465e759c446c0ca3dc7",
+      "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
+      "status": "passed"
+    },
+    "mac/dark/MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels": {
+      "history": [
+        {
+          "sha": "393c4628c0a2fb61a3177881796a95a38c669fa1",
+          "definition": "efa95f9f76a0922607ed2d39255bad57c37d708db34689274baae45025370a7c",
+          "status": "pending",
+          "evidence": "mac-dark-71a60eb7-172d-43fc-9938-f43b8d9895d6",
+          "run": "40727811431",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:44:58.724261+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "efa95f9f76a0922607ed2d39255bad57c37d708db34689274baae45025370a7c",
+          "status": "passed",
+          "evidence": "mac-dark-95aba875-d44e-4547-85f6-021e6624a556",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T16:59:02.792026+00:00"
+        }
+      ],
+      "key": "mac/dark/MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels",
+      "test": "MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels",
+      "device": "mac",
+      "theme": "dark",
+      "definition": "efa95f9f76a0922607ed2d39255bad57c37d708db34689274baae45025370a7c",
+      "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723726+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "test": "ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "failed"
+    },
+    "iphone/dark/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723539+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "test": "ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "failed"
+    },
+    "ipad/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723997+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "test": "ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "failed"
+    },
+    "ipad/dark/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723869+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "test": "ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "ff5c8cc708ee03a7c4bf3de2e213be5e0c104830e0a14de3943e30f6fe11ba3a",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "failed"
+    },
+    "iphone/light/ControllerJourneyUITests/testPlayStationInputAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723731+00:00"
+        },
+        {
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724517+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723602+00:00"
+        },
+        {
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724519+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/light/ControllerJourneyUITests/testPlayStationInputAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724001+00:00"
+        },
+        {
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724520+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723872+00:00"
+        },
+        {
+          "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724522+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723734+00:00"
+        },
+        {
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724524+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "test": "ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/dark/ControllerJourneyUITests/testXboxInputStatsAndPartialChords": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723606+00:00"
+        },
+        {
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724525+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "test": "ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724003+00:00"
+        },
+        {
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724527+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "test": "ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/dark/ControllerJourneyUITests/testXboxInputStatsAndPartialChords": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723875+00:00"
+        },
+        {
+          "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724529+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "test": "ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "12fff3858cbf581c1c5386cc81935ff79dcc44ef4c3661238b3751e4bdf9a788",
+      "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723738+00:00"
+        },
+        {
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724531+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723610+00:00"
+        },
+        {
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724534+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724006+00:00"
+        },
+        {
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724536+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723878+00:00"
+        },
+        {
+          "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724539+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723741+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723613+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724009+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723881+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723745+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723615+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724012+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723884+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723749+00:00"
+        },
+        {
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724556+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723618+00:00"
+        },
+        {
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724558+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724016+00:00"
+        },
+        {
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724560+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723887+00:00"
+        },
+        {
+          "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-28T17:32:30.724562+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": null,
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723753+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "test": "ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "f36cfb5c2ac32e681a2f90ae2db7f39d2a085edaf8827e4cd029f441e29e94ca",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": null,
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723621+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "test": "ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "f36cfb5c2ac32e681a2f90ae2db7f39d2a085edaf8827e4cd029f441e29e94ca",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": null,
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724019+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "test": "ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "f36cfb5c2ac32e681a2f90ae2db7f39d2a085edaf8827e4cd029f441e29e94ca",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "ipad/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap": {
+      "history": [
+        {
+          "sha": null,
+          "definition": null,
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723890+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "test": "ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "f36cfb5c2ac32e681a2f90ae2db7f39d2a085edaf8827e4cd029f441e29e94ca",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/light/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723756+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "test": "ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723623+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "test": "ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724022+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "test": "ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723893+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "test": "ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "e468a70df232df11bddefa48115a22a5488aa03376fb2bfe0b255a0a3f8c231c",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/ControllerJourneyUITests/testVirtualControllerReachesThePC": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723758+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "test": "ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/ControllerJourneyUITests/testVirtualControllerReachesThePC": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723626+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "test": "ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/ControllerJourneyUITests/testVirtualControllerReachesThePC": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724025+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "test": "ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/ControllerJourneyUITests/testVirtualControllerReachesThePC": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723895+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "test": "ControllerJourneyUITests/testVirtualControllerReachesThePC",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "8dc6ce9a973b21d006e9fc6575315dd71e142bba859d78aa2e709b9047d3efb8",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723761+00:00"
+        }
+      ],
+      "key": "iphone/light/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "test": "ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723629+00:00"
+        }
+      ],
+      "key": "iphone/dark/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "test": "ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724028+00:00"
+        }
+      ],
+      "key": "ipad/light/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "test": "ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723898+00:00"
+        }
+      ],
+      "key": "ipad/dark/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "test": "ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "81728b86f6e590f289047e15f1d5f5fb29817067513fe733bd8734845d220883",
+      "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "46af41f39a9c952a5f1ea66149b3f3f8dbfce699b6f54b00a3ed74da38838b33",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724031+00:00"
+        }
+      ],
+      "key": "ipad/light/IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit",
+      "test": "IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "46af41f39a9c952a5f1ea66149b3f3f8dbfce699b6f54b00a3ed74da38838b33",
+      "source": "iOS/GlimmerUITests/IPadTouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "46af41f39a9c952a5f1ea66149b3f3f8dbfce699b6f54b00a3ed74da38838b33",
+          "status": "failed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723901+00:00"
+        }
+      ],
+      "key": "ipad/dark/IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit",
+      "test": "IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "46af41f39a9c952a5f1ea66149b3f3f8dbfce699b6f54b00a3ed74da38838b33",
+      "source": "iOS/GlimmerUITests/IPadTouchJourneyUITests.swift",
+      "status": "failed"
+    },
+    "iphone/light/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723764+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "test": "TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723631+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "test": "TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724034+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "test": "TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723904+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "test": "TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "fea2edafb11eeeb00dcb28b354fcbb9bb990c402761b3d322343bc22699ccc74",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723767+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "test": "TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723634+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "test": "TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724037+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "test": "TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723907+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "test": "TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "c04ce12ce3b9efd415ba3626b3a5b85f16915ac95646553a361f8f79f34b093e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723770+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "test": "TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723637+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "test": "TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724039+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "test": "TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723910+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "test": "TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "d9dbfbb34e31c52707d61b5d7da012c474fa5be4616e8f92cd8ed5bc0386436e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723773+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "test": "TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723639+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "test": "TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724042+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "test": "TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723912+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "test": "TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "eb2c82245dbb8b65ea0573bdd5a95eea2cde03b6b8fb54d8966cb02f2b0fcd88",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723776+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "iphone-light-34225eb4-c3fc-4573-9bde-b61e232eee81",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T17:07:31.164076+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723642+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "iphone-dark-ab7ef134-5dab-46f3-9881-726a07c86e8b",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T17:12:26.797286+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724045+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "ipad-light-906c66da-3968-4173-9104-d45b4868e43a",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T17:18:09.714515+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723915+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+          "status": "pending",
+          "evidence": "ipad-dark-b0ebac8f-f32c-41fa-92f6-12732886c383",
+          "run": "40730419313",
+          "source_note": "",
+          "recorded_at": "2026-10-28T17:20:58.173943+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "0526629ed728f127cda3593ea86c0758f1e1f83d62c4845db353226df5b9c475",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "pending"
+    },
+    "iphone/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723779+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "test": "TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723644+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "test": "TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724048+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "test": "TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723918+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "test": "TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "4c317018f166e4ffec662110dd67090479de8c004256a9769fab81927f5e3366",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723782+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "test": "TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723647+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "test": "TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724051+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "test": "TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723921+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "test": "TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "9e3840b371af45069fca304f3ddcc5fdc5fa4882b43eb31e6f1cbbf51509775e",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testOverlayAccessibilityLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723785+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "test": "TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testOverlayAccessibilityLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723650+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "test": "TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testOverlayAccessibilityLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724054+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "test": "TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testOverlayAccessibilityLabels": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723924+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "test": "TouchJourneyUITests/testOverlayAccessibilityLabels",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "6ecf6ba99ddaa2458520811521b66118c06a404cbba3f9041645ac3c6894e22b",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/light/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-light-20261027-224059. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723788+00:00"
+        }
+      ],
+      "key": "iphone/light/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "test": "TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "device": "iphone",
+      "theme": "light",
+      "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "iphone/dark/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-0-dark-20261027-225205. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723652+00:00"
+        }
+      ],
+      "key": "iphone/dark/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "test": "TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "device": "iphone",
+      "theme": "dark",
+      "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/light/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-light-20261027-230319. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.724056+00:00"
+        }
+      ],
+      "key": "ipad/light/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "test": "TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "device": "ipad",
+      "theme": "light",
+      "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
+      "status": "passed"
+    },
+    "ipad/dark/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable": {
+      "history": [
+        {
+          "sha": null,
+          "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+          "status": "passed",
+          "evidence": "local simulator evidence retained privately",
+          "run": "local import",
+          "source_note": "Historical working-tree capture on iOS 27.0; exact tested commit unavailable. device-1-dark-20261027-231642. Test definitions reviewed against c6b3912d and current source; affected controller cases require rerun. Expected failures are not passes.",
+          "recorded_at": "2026-10-28T17:32:30.723927+00:00"
+        }
+      ],
+      "key": "ipad/dark/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "test": "TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+      "device": "ipad",
+      "theme": "dark",
+      "definition": "89775b5a1883388133295ef5692d9e247e240485b1af89b726fe1221d151c4e8",
+      "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
       "status": "passed"
     }
   },
   "active": [
+    "ios/all/render",
     "mac/light/MacControllerJourneyUITests/testPictureSurvivesTheFirstFrameWatchdog",
     "mac/dark/MacControllerJourneyUITests/testPictureSurvivesTheFirstFrameWatchdog",
     "mac/light/MacControllerJourneyUITests/testControllerOnlyLaunchAndStop",
@@ -451,11 +2387,96 @@
     "mac/light/MacControllerJourneyUITests/testTwoControllersDisconnectIndependently",
     "mac/dark/MacControllerJourneyUITests/testTwoControllersDisconnectIndependently",
     "mac/light/MacControllerJourneyUITests/testControllerContextActionsAndBack",
+    "mac/dark/MacControllerJourneyUITests/testControllerContextActionsAndBack",
     "mac/light/MacControllerJourneyUITests/testStatsChordTogglesVisibleOverlay",
     "mac/dark/MacControllerJourneyUITests/testStatsChordTogglesVisibleOverlay",
     "mac/light/MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap",
+    "mac/dark/MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap",
     "mac/light/MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels",
+    "mac/dark/MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels",
     "mac/light/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap",
-    "mac/dark/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap"
+    "mac/dark/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap",
+    "iphone/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+    "iphone/dark/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+    "ipad/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+    "ipad/dark/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord",
+    "iphone/light/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+    "iphone/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+    "ipad/light/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+    "ipad/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord",
+    "iphone/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+    "iphone/dark/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+    "ipad/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+    "ipad/dark/ControllerJourneyUITests/testXboxInputStatsAndPartialChords",
+    "iphone/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+    "iphone/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+    "ipad/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+    "ipad/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
+    "iphone/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+    "iphone/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+    "ipad/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+    "ipad/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
+    "iphone/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+    "iphone/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+    "ipad/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+    "ipad/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
+    "iphone/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+    "iphone/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+    "ipad/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+    "ipad/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
+    "iphone/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+    "iphone/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+    "ipad/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+    "ipad/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
+    "iphone/light/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+    "iphone/dark/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+    "ipad/light/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+    "ipad/dark/ControllerJourneyUITests/testTwoControllersKeepIndependentSlotsAndRestoreTouch",
+    "iphone/light/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+    "iphone/dark/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+    "ipad/light/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+    "ipad/dark/ControllerJourneyUITests/testVirtualControllerReachesThePC",
+    "iphone/light/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+    "iphone/dark/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+    "ipad/light/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+    "ipad/dark/ControllerJourneyUITests/testNintendoLabelsKeepStandardButtonPositions",
+    "ipad/light/IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit",
+    "ipad/dark/IPadTouchJourneyUITests/testSplitWindowDuringPlayKeepsPictureAndTouchExit",
+    "iphone/light/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+    "iphone/dark/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+    "ipad/light/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+    "ipad/dark/TouchJourneyUITests/testFirstRunPairLibraryLaunchAndRender",
+    "iphone/light/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+    "iphone/dark/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+    "ipad/light/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+    "ipad/dark/TouchJourneyUITests/testEveryButtonPressHoldReleaseAndBothSticks",
+    "iphone/light/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+    "iphone/dark/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+    "ipad/light/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+    "ipad/dark/TouchJourneyUITests/testDpadDirectionsReleaseWithoutSticking",
+    "iphone/light/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+    "iphone/dark/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+    "ipad/light/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+    "ipad/dark/TouchJourneyUITests/testMenuStatsEditorOpacityCloseAndDisconnect",
+    "iphone/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+    "iphone/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+    "ipad/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+    "ipad/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
+    "iphone/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+    "iphone/dark/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+    "ipad/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+    "ipad/dark/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay",
+    "iphone/light/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+    "iphone/dark/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+    "ipad/light/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+    "ipad/dark/TouchJourneyUITests/testLeaveRunningDisconnectOffersResume",
+    "iphone/light/TouchJourneyUITests/testOverlayAccessibilityLabels",
+    "iphone/dark/TouchJourneyUITests/testOverlayAccessibilityLabels",
+    "ipad/light/TouchJourneyUITests/testOverlayAccessibilityLabels",
+    "ipad/dark/TouchJourneyUITests/testOverlayAccessibilityLabels",
+    "iphone/light/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+    "iphone/dark/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+    "ipad/light/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable",
+    "ipad/dark/TouchJourneyUITests/testLargestTextKeepsOverlayActionsReachable"
   ]
 }
