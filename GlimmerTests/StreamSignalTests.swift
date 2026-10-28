@@ -47,6 +47,19 @@ struct StreamSignalTests {
         #expect(pill.isVisible && pill.noticeFrame != nil)
     }
 
+    // A notice raised while the stream window was ordered out joins it when the window returns.
+    @Test func aNoticeRaisedWhileHiddenAppearsWhenTheWindowReturns() {
+        let (pill, host, _) = banner()
+        host.setFrameOrigin(CGPoint(x: -30_000, y: -30_000))
+        pill.setText("Reconnecting…")
+        pill.setVisible(true)
+        #expect(!pill.isOnScreenWithStream)
+        host.orderFront(nil)
+        defer { host.orderOut(nil) }
+        pill.relayout()
+        #expect(pill.isOnScreenWithStream)
+    }
+
     @Test func macOS15UsesTheMaterialFallback() {
         let (pill, _, _) = banner()
         pill.glassAvailable = false

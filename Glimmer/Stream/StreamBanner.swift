@@ -117,8 +117,6 @@ public final class StreamBanner {
         self.panel = panel
         (panel.contentView as? NSHostingView<StreamNoticeView>)?.rootView = content
         layout()
-        // An offscreen stream window (tests, captures) lays the notice out without putting it on screen.
-        if anchor != .corner, parent.isVisible, panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Motion.short
             panel.animator().alphaValue = 1
@@ -167,6 +165,8 @@ public final class StreamBanner {
     /// Moves a visible notice clear of overlays that appeared since it was laid out.
     func relayout() { if visible { layout() } }
 
+    var isOnScreenWithStream: Bool { panel?.parent != nil }
+
     /// Centres the notice on the anchored edge, never wider than the window less 16pt each side.
     private func layout() {
         guard let parent, let panel, let host = panel.contentView as? NSHostingView<StreamNoticeView> else { return }
@@ -187,6 +187,8 @@ public final class StreamBanner {
         }
         host.frame = CGRect(x: 0, y: 0, width: width, height: height)
         panel.setFrame(CGRect(x: x, y: y, width: width, height: height), display: true)
+        // A window ordered out (Cmd-Tab, tests) defers joining until it is back and relays the notice out.
+        if parent.isVisible, panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
     }
 
     // A badge with no clear corner stays hidden rather than cover another overlay.
