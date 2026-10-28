@@ -279,7 +279,7 @@ jobs:
         timeout-minutes: 25
         run: |
           python3 scripts/ci-local.py core
-          tar -C iOS/build/production/DerivedData/Build -czf "$RUNNER_TEMP/ios-tests.tgz" Products
+          tar -C iOS/build/ci/DerivedData/Build -czf "$RUNNER_TEMP/ios-tests.tgz" Products
 
       - name: Share the Simulator test products
         if:
@@ -339,8 +339,8 @@ jobs:
         if: needs.changes.outputs.apple == 'true'
         timeout-minutes: 40
         run: |
-          mkdir -p iOS/build/production/DerivedData/Build
-          tar -C iOS/build/production/DerivedData/Build -xzf "$RUNNER_TEMP/ios-tests.tgz"
+          mkdir -p iOS/build/ci/DerivedData/Build
+          tar -C iOS/build/ci/DerivedData/Build -xzf "$RUNNER_TEMP/ios-tests.tgz"
           python3 scripts/ci-local.py render --run-only
 
       - name: User journeys
@@ -368,7 +368,7 @@ jobs:
         with:
           name: extended-results
           path: |
-            iOS/build/ci/
+            iOS/build/ci/render/
             build/logs/
             build/Logs/Test/
             build/controller-journey-results/
@@ -432,8 +432,12 @@ jobs:
           sw_vers
           mkdir -p build/Build build/logs
           tar -C build/Build -xzf "$RUNNER_TEMP/sequoia-tests.tgz"
-          make test-run TEST_FLAGS='-resultBundlePath build/sequoia.xcresult' \
-            2>&1 | tee build/logs/sequoia.log
+          status=0
+          make test-run TEST_FLAGS='-test-iterations 1 -resultBundlePath build/sequoia.xcresult' \
+            2>&1 | tee build/logs/sequoia.log || status=$?
+          python3 scripts/ci-local.py mac --validate-result build/sequoia.xcresult || status=1
+          python3 scripts/ci-test-results.py mac build/sequoia.xcresult build/logs/sequoia.log "$status"
+          exit "$status"
 
       - name: Save macOS 15 results
         if: always()

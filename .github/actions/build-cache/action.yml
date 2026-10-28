@@ -40,6 +40,8 @@ runs:
           echo 'build/CompilationCache.noindex'
           echo 'iOS/build/production/DerivedData/SourcePackages'
           echo 'iOS/build/production/DerivedData/CompilationCache.noindex'
+          echo 'iOS/build/ci/DerivedData/SourcePackages'
+          echo 'iOS/build/ci/DerivedData/CompilationCache.noindex'
           echo '.build'
           echo 'CACHE_PATHS'
         } >> "$GITHUB_OUTPUT"
