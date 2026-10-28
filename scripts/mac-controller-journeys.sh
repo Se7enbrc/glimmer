@@ -29,6 +29,7 @@ build=(xcodebuild -project Glimmer.xcodeproj -scheme Glimmer-Controller-Journeys
     CODE_SIGN_ENTITLEMENTS="$PWD/GlimmerUITests/Journey.entitlements" DEVELOPMENT_TEAM=
     PRODUCT_BUNDLE_IDENTIFIER=io.ugfugl.Glimmer.JourneyHost)
 if [ "${JOURNEY_SKIP_BUILD:-0}" != 1 ]; then
+    scripts/generate-build-info.sh
     "${build[@]}" -only-testing:GlimmerUITests build-for-testing
 fi
 status=0
