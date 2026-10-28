@@ -34,7 +34,7 @@ struct StreamNoticeView: View {
         // A badge is a circle of the pill's height; a notice keeps the wider capsule padding.
         .padding(.vertical, 8).padding(.horizontal, text.isEmpty ? 8 : 14))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityName.map(Text.init) ?? Text(text))
     }
 
