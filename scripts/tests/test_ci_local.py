@@ -89,7 +89,7 @@ class CILocalTests(FixtureTestCase):
             RUNNER.configured_test_sources(project, Path("/fixture/iOS"))
 
     def test_normal_runs_use_one_attempt_and_diagnostic_success_stays_nonqualifying(self):
-        self.assertEqual(RUNNER.test_flags(), ["-test-iterations", "1"])
+        self.assertEqual(RUNNER.test_flags(), [])
         self.assertIn("-retry-tests-on-failure", RUNNER.test_flags(True))
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(RUNNER.completion_status(0, False), 0)
@@ -97,6 +97,8 @@ class CILocalTests(FixtureTestCase):
             self.assertEqual(RUNNER.completion_status(65, True), 65)
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         self.assertNotIn("--diagnostic-retry", workflow)
+        self.assertNotIn("-test-iterations", workflow)
+        self.assertNotIn("-retry-tests-on-failure", workflow)
 
     def test_hosted_diagnostic_retry_fails_before_toolchain_or_tests(self):
         with patch.dict(os.environ, GITHUB_ACTIONS="true"), patch.object(sys, "argv", ["ci-local", "core", "--diagnostic-retry"]), \

@@ -30,7 +30,7 @@ runs:
           ${{ hashFiles('**/Package.resolved', 'Package.swift',
           'third_party/**', '**/*.xcconfig', '**/project.pbxproj') }}
       run: |
-        test "$(xcodebuild -version | head -1)" = 'Xcode 26.6'
+        test "$(xcodebuild -version | sed -n '1p')" = 'Xcode 26.6'
         xcode=$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEVELOPER_DIR/../version.plist")
         prefix="compiler-v2-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-${xcode}-${VARIANT}-${LOCKS}"
         printf 'prefix=%s\nkey=%s\n' "$prefix" "$prefix" >> "$GITHUB_OUTPUT"
