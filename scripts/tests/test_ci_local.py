@@ -177,23 +177,32 @@ class CILocalTests(FixtureTestCase):
             with self.subTest(summary=summary), self.assertRaises(ValueError):
                 RUNNER.validate_test_result(summary)
 
-    def test_candidate_needs_successful_tier_two_on_exact_sha(self):
+    def test_candidate_needs_successful_core_on_exact_sha_without_acceptance(self):
         required = CHECKS.REQUIRED[".github/workflows/verify.yml"]
-        self.assertEqual(required, {"macOS", "Tier 2"})
+        self.assertEqual(required, {"macOS"})
         core = {"name": "macOS", "head_sha": SHA, "status": "completed", "conclusion": "success"}
-        full = {**core, "name": "Tier 2"}
-        CHECKS.validate_jobs([core, full], required, SHA)
+        CHECKS.validate_jobs([core], required, SHA)
         for changed in (None, {"status": "queued"}, {"conclusion": "failure"}, {"conclusion": "skipped"}, {"head_sha": "b" * 40}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
-                CHECKS.validate_jobs([core] if changed is None else [core, {**full, **changed}], required, SHA)
+                CHECKS.validate_jobs([] if changed is None else [{**core, **changed}], required, SHA)
 
-    def test_extended_work_waits_for_core_and_has_no_mac_matrix(self):
+    def test_acceptance_is_explicit_and_does_not_repeat_core_or_run_nightly(self):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         self.assertNotIn("matrix:", workflow)
-        self.assertIn("needs: [changes, gate]", workflow)
-        self.assertIn("if: github.event_name != 'pull_request'", " ".join(workflow.split()))
-        for command in ("scripts/ci-local.py core", "scripts/ci-local.py render", "scripts/ci-local.py journeys", "make test-asan"):
-            self.assertIn(command, workflow)
+        self.assertNotIn("schedule:", workflow)
+        extended = workflow.split("  extended:\n", 1)[1].split("  sequoia:\n", 1)[0]
+        self.assertIn("needs: changes", extended)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.mode == 'acceptance'", " ".join(extended.split()))
+        self.assertIn("scripts/ci-local.py acceptance", extended)
+        self.assertIn("name: acceptance-ledger", extended)
+        self.assertIn("retention-days: 90", extended)
+        self.assertIn("if: always()", extended)
+        gate = workflow.split("  gate:\n", 1)[1]
+        self.assertIn("name: ${{ inputs.mode == 'acceptance' && 'Acceptance bookkeeping' || 'macOS' }}", " ".join(gate.split()))
+        self.assertNotIn("name: ios-tests", workflow)
+        for name in ("verify", "ios-core", "fuzz", "checks", "gate"):
+            job = workflow.split(f"  {name}:\n", 1)[1].split("    steps:", 1)[0]
+            self.assertIn("inputs.mode != 'acceptance'", job)
         self.assertIn("branches: [main, feat/2026.10.8]", workflow)
 
 

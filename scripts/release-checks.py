@@ -23,7 +23,7 @@ from release_progress import progress
 REPO = "Se7enbrc/glimmer"
 READ_DEADLINE = ContextVar("release_read_deadline", default=float("inf"))
 REQUIRED = {
-    ".github/workflows/verify.yml": {"macOS", "Tier 2"},
+    ".github/workflows/verify.yml": {"macOS"},
     ".github/workflows/codeql.yml": {"Analyze (swift)", "Analyze (python)", "Analyze (actions)"},
 }
 CATEGORIES = {f"/language:{language}": f"Analyze ({language})"
@@ -89,6 +89,8 @@ def object_api(path):
 def latest_run(runs, workflow, sha, workflow_id, candidate=False):
     eligible = [run for run in runs if run.get("head_sha") == sha
                 and run.get("workflow_id") == workflow_id and run.get("path") == workflow]
+    if workflow.endswith("verify.yml"):
+        eligible = [run for run in eligible if run.get("display_title") != "Release acceptance"]
     if candidate:
         eligible = [run for run in eligible if run.get("head_branch") == "release-candidate"
                     and run.get("event") == "workflow_dispatch"]

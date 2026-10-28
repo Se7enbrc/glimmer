@@ -82,11 +82,13 @@ before committing. Older worktrees must remain usable during migration.
 - `make verify`: Actionlint, the SPDX notice check, strict SwiftLint,
   release-tool tests, `make test` and protocol fuzz tests under
   AddressSanitizer. Hosted Verify runs checks, builds and core tests under
-  `macOS`, reusing Mac test products on macOS 15. Pushes to `main` and
-  `feat/2026.10.8`, nightly runs and dispatches additionally require `Tier 2`
-  render/UI, journey and sanitizer validation. Release candidates require both
-  gates on the exact commit. `make ci-local SHARD=mac|core|render|journeys`
-  reproduces hosted test filters and coverage with Xcode 26.6; see
+  `macOS`, reusing Mac test products on macOS 15. Render/UI and comprehensive
+  journeys are one explicit, resumable acceptance pass per feature release, not
+  a gate on every push or RC. The release owner selects affected reruns;
+  retained receipts name the source actually tested. Candidates still require
+  exact-commit `macOS` and CodeQL plus the Release workflow's sanitizer checks.
+  `make ci-local SHARD=mac|core|render|journeys|acceptance` reproduces hosted
+  test filters and coverage with Xcode 26.6; see
   [local reproduction](docs/CONTRIBUTING.md#hosted-verification-and-local-reproduction).
   There must be no compiler warnings.
 - `make preflight`: the pre-push gate, including `make ci-parity` with Xcode

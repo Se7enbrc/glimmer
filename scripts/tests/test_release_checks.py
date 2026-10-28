@@ -65,6 +65,16 @@ class RequiredChecksTests(FixtureTestCase):
                                   WORKFLOW, SHA, 2)
         self.assertEqual(CHECKS.latest_run([run()], WORKFLOW, SHA, 2)["id"], 1)
 
+    def test_acceptance_history_never_replaces_exact_commit_verification(self):
+        workflow = ".github/workflows/verify.yml"
+        verified = run(path=workflow, display_title="Verify")
+        for status in ("in_progress", "completed"):
+            acceptance = run(path=workflow, id=2, display_title="Release acceptance", status=status,
+                             updated_at="2026-10-10T20:00:00Z")
+            self.assertEqual(CHECKS.latest_run([verified, acceptance], workflow, SHA, 2)["id"], 1)
+            with self.assertRaises(ValueError):
+                CHECKS.latest_run([acceptance], workflow, SHA, 2)
+
     def test_spoofed_name_or_wrong_source_cannot_authorize(self):
         for changes in ({"path": ".github/workflows/fake.yml"}, {"workflow_id": 99},
                         {"head_sha": "c" * 40}, {"head_repository": {"full_name": "fork/glimmer"}},
@@ -139,7 +149,7 @@ class RequiredChecksTests(FixtureTestCase):
                 return [{"jobs": [*jobs.values(), *[{"name": name, "head_sha": SHA,
                                                     "status": "completed", "conclusion": "success",
                                                     "run_id": 1, "run_attempt": 2, "head_branch": None}
-                                                   for name in ("macOS", "Tier 2")]]}]
+                                                   for name in ("macOS",)]]}]
             if "analyses?" in path:
                 return [data]
             alert_queries.append(path)

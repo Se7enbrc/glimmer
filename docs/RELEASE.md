@@ -9,6 +9,15 @@ Build one verified candidate, test the published artifact, then promote those
 exact files. For installing updates or joining the candidate channel, use
 [Releases and updates](UPDATES.md).
 
+Comprehensive render/UI and device/appearance journeys are a single resumable
+acceptance pass for this feature release, not a restart for every RC. Dispatch
+Verify in `acceptance` mode and resume its ledger; keep completed testcase
+evidence and rerun failures or the cases affected by reviewed changes. Each
+receipt names its actual tested source, including an explicit note for reviewed
+uncommitted working-tree evidence. The release owner reviews affected scope;
+historical passes are not claims of complete latest-SHA coverage. See
+[acceptance and local reproduction](CONTRIBUTING.md#hosted-verification-and-local-reproduction).
+
 ## iPhone and iPad artifacts
 
 Choose the compiled flavour before archiving: `beta` enables adaptive stream
