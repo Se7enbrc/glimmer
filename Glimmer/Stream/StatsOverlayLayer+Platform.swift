@@ -20,10 +20,14 @@ typealias StatsInsets = UIEdgeInsets
 #endif
 
 extension StatsOverlayLayer {
-    /// Point geometry, rather than pixel density, keeps a resized window and an external display consistent.
+    /// iPhone and iPad grow the HUD with the window; the Mac keeps 2026.10.7's fixed size at any window size.
     static func viewportScale(in size: CGSize) -> CGFloat {
+        #if os(macOS)
+        1
+        #else
         guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return 1 }
         return min(1.6, max(1, sqrt(min(size.width, size.height) / 440)))
+        #endif
     }
 
     var resolvedLabelFont: StatsFont {
