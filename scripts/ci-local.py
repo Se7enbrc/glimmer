@@ -123,13 +123,25 @@ def simulator():
         raise ValueError(f"Install the iOS {sdk} Simulator runtime for Xcode 26.6 before running this shard.")
     device = output([*command, "create", f"Glimmer CI {uuid.uuid4()}",
                      "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro", runtime])
+    failed = False
     try:
         subprocess.run([*command, "boot", device], check=True, timeout=60)
-        subprocess.run([*command, "bootstatus", device, "-b"], check=True, timeout=180)
+        subprocess.run([*command, "bootstatus", device, "-b"], check=True, timeout=300)
         yield f"platform=iOS Simulator,id={device}"
+    except BaseException:
+        failed = True
+        raise
     finally:
-        subprocess.run([*command, "shutdown", device], check=False, timeout=30)
-        subprocess.run([*command, "delete", device], check=True, timeout=30)
+        errors = []
+        for action in ("shutdown", "delete"):
+            try:
+                subprocess.run([*command, action, device], check=action == "delete", timeout=30)
+            except (OSError, subprocess.SubprocessError) as error:
+                errors.append(error)
+        if errors:
+            if not failed:
+                raise errors[0]
+            print("Simulator cleanup also failed: " + "; ".join(map(str, errors)), file=sys.stderr)
 
 
 def run(command, log, timeout=2400):

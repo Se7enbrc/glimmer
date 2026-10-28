@@ -155,6 +155,49 @@ class CILocalTests(FixtureTestCase):
             self.assertIn(["shutdown", "fixture-udid"], operations)
             self.assertIn(["delete", "fixture-udid"], operations)
 
+    def test_cold_boot_has_headroom_without_changing_command_timeouts(self):
+        runtimes = '{"runtimes":[{"isAvailable":true,"platform":"iOS","version":"26.5","identifier":"ios-26-5"}]}'
+        with patch.object(RUNNER, "output", side_effect=["26.5", runtimes, "owned-device"]), \
+                patch.object(RUNNER.subprocess, "run") as command:
+            with RUNNER.simulator():
+                pass
+        self.assertEqual([call.kwargs["timeout"] for call in command.call_args_list], [60, 300, 30, 30])
+
+    def test_cleanup_errors_preserve_boot_or_test_exception_and_still_delete(self):
+        runtimes = '{"runtimes":[{"isAvailable":true,"platform":"iOS","version":"26.5","identifier":"ios-26-5"}]}'
+        for phase in ("bootstatus", "test"):
+            original = subprocess.TimeoutExpired("bootstatus", 300) if phase == "bootstatus" else ValueError("test failed")
+            def execute(command, **options):
+                if command[2] == phase:
+                    raise original
+                if command[2] in {"shutdown", "delete"}:
+                    raise subprocess.TimeoutExpired(command, 30)
+            with self.subTest(phase=phase), patch.object(RUNNER, "output", side_effect=["26.5", runtimes, "owned-device"]), \
+                    patch.object(RUNNER.subprocess, "run", side_effect=execute) as command, \
+                    contextlib.redirect_stderr(io.StringIO()) as errors:
+                with self.assertRaises(type(original)) as raised:
+                    with RUNNER.simulator():
+                        raise original
+                self.assertIs(raised.exception, original)
+                self.assertEqual([call.args[0][-2:] for call in command.call_args_list[-2:]],
+                                 [["shutdown", "owned-device"], ["delete", "owned-device"]])
+                self.assertIn("cleanup", errors.getvalue().lower())
+
+    def test_cleanup_failure_after_success_is_surfaced_and_delete_is_attempted(self):
+        runtimes = '{"runtimes":[{"isAvailable":true,"platform":"iOS","version":"26.5","identifier":"ios-26-5"}]}'
+        for action in ("shutdown", "delete"):
+            failure = subprocess.TimeoutExpired(action, 30)
+            def execute(command, **options):
+                if command[2] == action:
+                    raise failure
+            with self.subTest(action=action), patch.object(RUNNER, "output", side_effect=["26.5", runtimes, "owned-device"]), \
+                    patch.object(RUNNER.subprocess, "run", side_effect=execute) as command:
+                with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                    with RUNNER.simulator():
+                        pass
+                self.assertIs(raised.exception, failure)
+                self.assertEqual(command.call_args_list[-1].args[0][-2:], ["delete", "owned-device"])
+
     def test_process_exit_and_compiler_warning_both_fail_the_shard(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
             log = Path(directory) / "test.log"
