@@ -39,7 +39,7 @@ if name == "make" and "test-run" in args and os.environ.get("JOURNEY_TEST_FAIL")
 
 class IOSTouchJourneyTests(unittest.TestCase):
     def run_journeys(self, *, supplied=False, fail=False, speech=False, booted=False, device="all",
-                     appearance="all", selection="", skip_build=False):
+                     appearance="all", selection="", skip_build=False, github_actions=False, runner_environment=""):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             binaries = directory / "bin"
@@ -50,7 +50,8 @@ class IOSTouchJourneyTests(unittest.TestCase):
                 tool.chmod(0o755)
             log = directory / "calls.jsonl"
             environment = dict(os.environ)
-            for key in ["JOURNEY_PHONE_ID", "JOURNEY_IPAD_ID", "JOURNEY_TEST_FAIL", "JOURNEY_TEST_BOOTED"]:
+            for key in ["JOURNEY_PHONE_ID", "JOURNEY_IPAD_ID", "JOURNEY_TEST_FAIL", "JOURNEY_TEST_BOOTED",
+                        "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"]:
                 environment.pop(key, None)
             environment.update({
                 "PATH": str(binaries) + os.pathsep + environment["PATH"],
@@ -60,6 +61,7 @@ class IOSTouchJourneyTests(unittest.TestCase):
                 "JOURNEY_TEST_DATA": str(directory),
                 "JOURNEY_DEVICE": device, "JOURNEY_APPEARANCE": appearance,
                 "JOURNEY_TEST_FLAGS": selection, "JOURNEY_SKIP_BUILD": "1" if skip_build else "0",
+                "GITHUB_ACTIONS": "true" if github_actions else "false", "RUNNER_ENVIRONMENT": runner_environment,
             })
             if speech:
                 preferences = directory / "Library/Preferences"
@@ -105,6 +107,22 @@ class IOSTouchJourneyTests(unittest.TestCase):
         self.assertFalse(any(call[:3] == ["xcrun", "simctl", "delete"] for call in calls))
         self.assertIn("Touch journeys:", result.stdout)
 
+    def test_owned_hosted_devices_keep_disk_check_and_tests_without_live_speech_ipc(self):
+        result, calls = self.run_journeys(github_actions=True, runner_environment="github-hosted")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sum(call == ["xcrun", "simctl", "list", "devices", "--json"] for call in calls), 2)
+        self.assertEqual(sum(call[0] == "make" and "test-run" in call for call in calls), 4)
+        self.assertFalse(any(call[:3] == ["xcrun", "simctl", "spawn"] for call in calls))
+        self.assertEqual(sum(call[:3] == ["xcrun", "simctl", "delete"] for call in calls), 2)
+
+    def test_other_environments_and_supplied_devices_keep_live_checks(self):
+        for actions, environment, supplied in [(False, "github-hosted", False), (True, "self-hosted", False),
+                                               (True, "", False), (True, "github-hosted", True)]:
+            with self.subTest(actions=actions, environment=environment, supplied=supplied):
+                result, calls = self.run_journeys(github_actions=actions, runner_environment=environment, supplied=supplied)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(sum(call[:3] == ["xcrun", "simctl", "spawn"] for call in calls), 8)
+
     def test_ci_shard_runs_only_selected_device_and_appearance(self):
         result, calls = self.run_journeys(device="ipad", appearance="dark")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -130,11 +148,13 @@ class IOSTouchJourneyTests(unittest.TestCase):
         self.assertEqual(sum(call[0] == "make" and "test-run" in call for call in calls), 2)
 
     def test_voiceover_refuses_to_build_or_boot(self):
-        result, calls = self.run_journeys(speech=True)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("VoiceOverTouchEnabled is enabled", result.stderr)
-        self.assertFalse(any(call[0] == "make" for call in calls))
-        self.assertFalse(any(call[:3] == ["xcrun", "simctl", "bootstatus"] for call in calls))
+        for actions in (False, True):
+            with self.subTest(github_actions=actions):
+                result, calls = self.run_journeys(speech=True, github_actions=actions, runner_environment="github-hosted")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("VoiceOverTouchEnabled is enabled", result.stderr)
+                self.assertFalse(any(call[0] == "make" for call in calls))
+                self.assertFalse(any(call[:3] == ["xcrun", "simctl", "bootstatus"] for call in calls))
 
     def test_ci_scheme_skips_every_journey_class(self):
         # CI's Simulator shards run Glimmer-iOS; journeys belong to their own scheme and time budget.

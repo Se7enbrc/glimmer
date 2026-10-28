@@ -19,6 +19,18 @@ cleanup() {
     done
 }
 trap 'cleanup' EXIT
+check_live_silence() {
+    if [ "${GITHUB_ACTIONS:-}" = true ] && [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ] && [ "${#created[@]}" -gt 0 ]; then
+        for owned in "${created[@]}"; do
+            if [ "$owned" = "$1" ]; then
+                # Disposable hosted devices cannot speak on the user's desktop; tests still assert VoiceOver is off.
+                echo 'Hosted disposable Simulator: pre-boot speech checked; VoiceOver checked by tests.'
+                return
+            fi
+        done
+    fi
+    python3 scripts/check-journey-silence.py --simulator "$1" --booted
+}
 types=(iPhone-17-Pro iPad-Pro-11-inch-M5-12GB)
 indices=(0 1)
 case "${JOURNEY_DEVICE:-all}" in
@@ -64,7 +76,7 @@ for index in "${indices[@]}"; do
     for appearance in "${appearances[@]}"; do
         # Already checked before the build; finish booting first so the live speech check can reach it.
         xcrun simctl bootstatus "$device" -b
-        python3 scripts/check-journey-silence.py --simulator "$device" --booted
+        check_live_silence "$device"
         xcrun simctl uninstall "$device" io.ugfugl.Glimmer.iOS.UITests.xctrunner >/dev/null 2>&1 || true
         xcrun simctl uninstall "$device" io.ugfugl.Glimmer.iOS >/dev/null 2>&1 || true
         xcrun simctl ui "$device" appearance "$appearance"
