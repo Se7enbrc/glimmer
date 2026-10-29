@@ -25,7 +25,7 @@ public struct ControllerShortcutGesture: Sendable {
     }
 
     public var suppressing: ControllerPhysicalChord? {
-        latched.map { $0 == .stop ? stop : stats }
+        (latched ?? candidate).map { $0 == .stop ? stop : stats }
     }
 
     public mutating func update(_ sample: ControllerMappingSample, at now: TimeInterval) -> ControllerShortcutAction? {

@@ -739,6 +739,7 @@
 		0E71DD174FA02F0B707E9761 /* ControllerLayoutCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */; };
 		3907115182434F9A8F0FB75F /* ControllerLayoutDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327B6FA79D4D4A5584956925 /* ControllerLayoutDeliveryTests.swift */; };
 		BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */; };
+		9BC4E36783814FD18C0C8A2D /* ControllerMenuDismissal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6E5A7E720948E0BB17A3D4 /* ControllerMenuDismissal.swift */; };
 		388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */; };
 		67208A0EDA4DDDDD610A8176 /* ControllerLayoutBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */; };
 		ED42D881756D5526B8FBA435 /* ControllerLayoutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E3DDA1106D496F9D8D71D3 /* ControllerLayoutRenderTests.swift */; };
@@ -1596,6 +1597,7 @@
 		5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutCaptureTests.swift"; sourceTree = SOURCE_ROOT; };
 		327B6FA79D4D4A5584956925 /* ControllerLayoutDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutDeliveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutNavigation.swift"; sourceTree = SOURCE_ROOT; };
+		AE6E5A7E720948E0BB17A3D4 /* ControllerMenuDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerMenuDismissal.swift"; sourceTree = SOURCE_ROOT; };
 		A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutEditing.swift"; sourceTree = SOURCE_ROOT; };
 		EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutBoundaryTests.swift"; sourceTree = SOURCE_ROOT; };
 		81E3DDA1106D496F9D8D71D3 /* ControllerLayoutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -1783,6 +1785,7 @@
 				98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */,
 				A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */,
 				13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */,
+				AE6E5A7E720948E0BB17A3D4 /* ControllerMenuDismissal.swift */,
 				92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */,
 				6479EC1148735D6B42B6203B /* MacControllerLayouts.swift */,
 				1CFA45FAA958701CA57AC2C5 /* ControllerLayoutPresentation.swift */,
@@ -2770,6 +2773,7 @@
 				3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */,
 				388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */,
 				BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */,
+				9BC4E36783814FD18C0C8A2D /* ControllerMenuDismissal.swift in Sources */,
 				40D16091D3CC534FEEC8DAC5 /* HIDControllerLayouts.swift in Sources */,
 				564DC345EE1DC392E19BA02D /* MacControllerLayouts.swift in Sources */,
 				3D9D82AF1D8B74FF7695E486 /* ControllerLayoutPresentation.swift in Sources */,

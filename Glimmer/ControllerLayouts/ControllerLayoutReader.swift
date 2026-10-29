@@ -219,6 +219,7 @@ enum ControllerStreamHandlers {
     static func install(controller: GCController, input: GCControllerLiveInput, queue: DispatchQueue,
                         mapsGameInput: Bool, shortcutElements: Set<ObjectIdentifier>,
                         read: @escaping @Sendable () -> ControllerMappingSample,
+                        now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
                         receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
         controller.extendedGamepad?.valueChangedHandler = nil
         input.elementValueDidChangeHandler = nil
@@ -242,16 +243,17 @@ enum ControllerStreamHandlers {
         }
         // A button route repeats what the profile already delivered unless the controller used only that route.
         ControllerButtonRoutes.set(controller) { @Sendable _, _, _ in
-            deliver(ProcessInfo.processInfo.systemUptime, true)
+            deliver(now(), true)
         }
         if mapsGameInput || !shortcutElements.isEmpty {
             input.elementValueDidChangeHandler = { @Sendable input, element in
                 guard mapsGameInput || shortcutElements.contains(ObjectIdentifier(element)) else { return }
-                deliver(ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency), false)
+                deliver(now() - max(0, input.lastEventLatency), false)
             }
         }
         if !mapsGameInput {
-            controller.extendedGamepad?.valueChangedHandler = { @Sendable pad, _ in deliver(pad.lastEventTimestamp, false) }
+            // Live reads use the hold timer's uptime clock, not a profile-specific event clock.
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable _, _ in deliver(now(), false) }
         }
     }
 }

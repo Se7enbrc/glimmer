@@ -141,8 +141,11 @@ final class MacControllerJourneyUITests: XCTestCase {
         try checks.dpad()
         try checks.partialChord()
         record("mac-" + profile + "-input")
+        let chordStart = receipts().count
         try chord(["lb", "rb", "options", "menu"])
         XCTAssertTrue(waitForReceipt("quit"))
+        XCTAssertFalse(receipts().dropFirst(chordStart).contains { Int($0["pcButtons"] ?? 0) & 0x330 == 0x330 },
+                       "The complete Stop chord must never reach the PC")
         XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
     }
 

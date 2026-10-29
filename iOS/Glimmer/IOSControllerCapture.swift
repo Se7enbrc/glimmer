@@ -216,7 +216,7 @@ final class IOSControllerCapture {
             // Hold validity through submission so focus loss and detach finish after any in-flight sample.
             delivery.registrations.withLock { registrations in
                 guard registrations[registration] == epoch else { return }
-                submit(registration, Self.sample(pad), pad.lastEventTimestamp)
+                submit(registration, Self.sample(pad), ProcessInfo.processInfo.systemUptime)
             }
         }
     }

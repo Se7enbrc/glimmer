@@ -8,6 +8,38 @@ import Testing
 struct ControllerShortcutTests {
     private let available = Set(ControllerMappedButton.allCases.map { ControllerLayoutSource.button($0) })
 
+    @Test(arguments: ControllerShortcutAction.allCases)
+    func completeShortcutIsCapturedImmediatelyButAnAbandonedHoldDoesNotFire(action: ControllerShortcutAction) throws {
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
+        var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
+        let chord = action == .stop ? config.stop : config.stats
+        let full = ControllerMappingSample(buttons: chord.buttons)
+        let partial = ControllerMappingSample(buttons: chord.buttons & ~ControllerMappedButton.rightShoulder.rawValue)
+        #expect(gesture.update(partial, at: 10) == nil)
+        #expect(gesture.suppressing == nil)
+        #expect(gesture.update(full, at: 10.1) == nil)
+        #expect(gesture.suppressing?.removing(from: full).buttons == 0)
+        #expect(gesture.latched == nil)
+        #expect(gesture.update(partial, at: 10.2) == nil)
+        #expect(gesture.suppressing == nil)
+        #expect(gesture.deadline == nil)
+        #expect(gesture.update(.init(), at: 11) == nil)
+    }
+
+    @Test(arguments: [0.1, 0.75, 1, 2.499, 2.5, 2.501, 3])
+    func menuNeedsADeliberateHoldWhileMouseModeKeepsItsShorterHold(seconds: Double) {
+        for opensMenu in [false, true] {
+            var state = ControllerMouseState()
+            let duration = opensMenu ? ControllerMouseState.menuHoldSeconds : ControllerMouseState.holdSeconds
+            #expect(state.update(buttons: Int32(ControllerMappedButton.menu.rawValue), analog: InputCore.neutral,
+                chordHeld: false, now: 10, toggleOnHold: !opensMenu, holdSeconds: duration) == false)
+            let toggled = state.update(buttons: 0, analog: InputCore.neutral, chordHeld: false,
+                now: 10 + seconds, toggleOnHold: !opensMenu, holdSeconds: duration)
+            #expect(toggled == (seconds > (opensMenu ? 2.5 : 0.75)))
+            #expect(state.isMouse == (!opensMenu && seconds > 0.75))
+        }
+    }
+
     @Test func recordingsRequireThreePhysicalButtonsAndRejectBothConflictDirections() {
         var value = ControllerLayoutShortcuts()
         #expect(value.recordingProblem(for: .stop, available: available) == nil)
@@ -114,9 +146,9 @@ struct ControllerShortcutTests {
         var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
         let full = ControllerMappingSample(buttons: config.stats.buttons)
         #expect(gesture.update(full, at: 10) == nil)
-        #expect(gesture.suppressing == nil)
+        #expect(gesture.suppressing?.removing(from: full).buttons == 0)
         #expect(gesture.update(full, at: 10.39) == nil)
-        #expect(gesture.suppressing == nil)
+        #expect(gesture.suppressing?.removing(from: full).buttons == 0)
         #expect(gesture.update(full, at: 10.4) == .stats)
         #expect(gesture.suppressing?.removing(from: full).buttons == 0)
         #expect(gesture.update(.init(buttons: ControllerMappedButton.leftStick.rawValue), at: 10.5) == nil)

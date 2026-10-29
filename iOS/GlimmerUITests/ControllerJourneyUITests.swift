@@ -66,6 +66,7 @@ final class ControllerJourneyUITests: TouchJourneyTestCase {
         try inputChecks.dpad()
         try inputChecks.analog()
         try assertPicture(app)
+        let chordStart = receipts().count
         try controller(steps: ["lb", "rb", "options", "menu"].map {
             ["element": $0, "value": 1, "milliseconds": $0 == "menu" ? 600 : 10,
              "route": $0 == "menu" ? "button" : "profile"]
@@ -74,6 +75,8 @@ final class ControllerJourneyUITests: TouchJourneyTestCase {
         })
         record("controller-stop-chord")
         XCTAssertTrue(waitForReceipt("stop"))
+        XCTAssertFalse(receipts().dropFirst(chordStart).contains { Int($0["pcButtons"] ?? 0) & 0x330 == 0x330 },
+                       "The complete Stop chord must never reach the PC")
         XCTAssertTrue(app.buttons["launcher-app-1"].firstMatch.waitForExistence(timeout: 5))
     }
 

@@ -73,6 +73,34 @@ struct ControllerChordHoldConflictTests {
         var isMouse: Bool { core.withLock { core.controllerMouseStates[0]?.isMouse == true } }
     }
 
+    @Test func completeStopChordNeverReachesThePCWhileWaitingForTheHold() throws {
+        let rig = try Rig(menuOpensControls: false)
+        let full = Self.stop.reduce(UInt32(0)) { $0 | $1.rawValue }
+        for button in Self.stop { rig.set(button, true); rig.wait(0.01) }
+        #expect(rig.actions.withLock { $0.isEmpty })
+        #expect(rig.backend.calls.contains { UInt32(bitPattern: $0.buttons) & full == full } == false)
+        #expect(rig.backend.calls.last?.buttons == 0)
+        rig.wait(0.5)
+        #expect(rig.actions.withLock { $0 } == [.stop])
+    }
+
+    @Test func switchingPendingShortcutsCapturesTheNewButtonsBeforeSendingToThePC() throws {
+        let rig = try Rig(menuOpensControls: false)
+        let stats = ControllerLayoutShortcuts.defaultStats.reduce(UInt32(0)) { result, source in
+            if case .button(let button) = source { return result | button.rawValue }
+            return result
+        }
+        rig.held = stats
+        rig.deliver()
+        #expect(rig.backend.calls.last?.buttons == 0)
+        rig.wait(0.1)
+        rig.held = Self.stop.reduce(UInt32(0)) { $0 | $1.rawValue }
+        rig.deliver()
+        #expect(rig.backend.calls.last?.buttons == 0)
+        rig.wait(0.5)
+        #expect(rig.actions.withLock { $0 } == [.stop])
+    }
+
     private static let orders: [[Int]] = {
         func permutations(_ items: [Int]) -> [[Int]] {
             items.count <= 1 ? [items] : items.indices.flatMap { index in
@@ -124,7 +152,7 @@ struct ControllerChordHoldConflictTests {
         #expect(!rig.isMouse && rig.menus.withLock { $0 } == 0)
         rig.wait(0.1)
         rig.set(.menu, true)
-        rig.wait(0.8)
+        rig.wait(menuOpensControls ? 2.501 : 0.8)
         rig.set(.menu, false)
         #expect(menuOpensControls ? rig.menus.withLock { $0 } == 1 : rig.isMouse)
     }
@@ -160,7 +188,7 @@ struct ControllerChordHoldConflictTests {
     func loneMenuHoldStillTogglesMouseModeOrOpensControls(menuOpensControls: Bool) throws {
         let rig = try Rig(menuOpensControls: menuOpensControls)
         rig.set(.menu, true)
-        rig.wait(0.8)
+        rig.wait(menuOpensControls ? 2.501 : 0.8)
         rig.set(.menu, false)
         #expect(menuOpensControls ? rig.menus.withLock { $0 } == 1 : rig.isMouse)
     }

@@ -138,10 +138,10 @@ extension InputCore {
             removeLayout(slot: slot)
         }
         current[slot] = (Int32(bitPattern: sample.buttons), sample.gamepadAnalog)
-        let wasLatched = state.gesture.latched != nil
+        let previousSuppression = state.gesture.suppressing
         let action = state.gesture.update(sample, at: now)
         let suppression = state.gesture.suppressing
-        if !wasLatched, suppression != nil {
+        if previousSuppression != suppression, suppression != nil {
             let sameButtons = sample.buttons == gameSample.buttons && sample.analog[0] == gameSample.analog[0]
                 && sample.analog[1] == gameSample.analog[1]
             // A system remap has no compiled plan; release its held outputs conservatively.

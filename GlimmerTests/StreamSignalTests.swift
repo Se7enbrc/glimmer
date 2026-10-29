@@ -36,6 +36,19 @@ struct StreamSignalTests {
         return (pill, host, spoken)
     }
 
+    @Test func teardownRemovesNoticesBeforeTheClosingAnimation() {
+        let window = StreamWindow(displayMode: .window)
+        let presentation = SessionPresentation(window)
+        for notice in window.notices {
+            notice.announce = { _ in }
+            notice.setText("Stream stuttering")
+            notice.setVisible(true)
+        }
+        presentation.hideOverlay()
+        #expect(window.notices.allSatisfy { !$0.isVisible && $0.noticeWindow == nil })
+        window.close()
+    }
+
     @Test func aNoticeExistsOnlyWhileShownAndReshowsDuringItsFade() {
         let (pill, _, _) = banner()
         pill.setText("Reconnecting…")
@@ -344,7 +357,6 @@ struct MouseModeBadgeTests {
         stream.mouseModeBadge.setVisible(true)
         #expect(stream.leaveHintBanner.noticeFrame != nil)
         stream.close()
-        try await Task.sleep(for: .seconds(1))
         for notice in [stream.leaveHintBanner, stream.mouseModeBadge] {
             #expect(!notice.isVisible && notice.noticeFrame == nil)
         }

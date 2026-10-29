@@ -518,7 +518,7 @@ extension InputForwarder {
                                             (pad.leftThumbstick.xAxis.value, pad.leftThumbstick.yAxis.value),
                                             (pad.rightThumbstick.xAxis.value, pad.rightThumbstick.yAxis.value)),
                                         chordButtons: Self.controllerChordButtons(pad, buttons: buttons),
-                                        touchpad: surface, capturedAt: pad.lastEventTimestamp)
+                                        touchpad: surface, capturedAt: ProcessInfo.processInfo.systemUptime)
         }
         // Centre-button edges reuse the bound pad's captured GC axes, without resubmitting touches.
         // Raw shoulders also recheck the chord when GameController withholds a gesture-bound frame.

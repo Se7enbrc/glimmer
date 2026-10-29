@@ -11,6 +11,52 @@ import Testing
 
 @MainActor
 struct ControllerLayoutDeliveryTests {
+    @Test func menuDismissalUsesFreshBPressAndRestoresThePreviousOwner() throws {
+        let controller = GCController.withExtendedGamepad()
+        let button = try #require(controller.extendedGamepad?.buttonB)
+        let oldCalls = Mutex(0)
+        button.setValue(1)
+        button.pressedChangedHandler = { @Sendable _, _, _ in oldCalls.withLock { $0 += 1 } }
+        let previous = oldCalls.withLock { $0 }
+        let dismissal = ControllerMenuDismissal()
+        var dismissals = 0
+        dismissal.start(controllers: [controller]) { dismissals += 1 }
+        let callback = try #require(button.pressedChangedHandler)
+        callback(button, 1, true)
+        #expect(dismissals == 0)
+        callback(button, 0, false)
+        callback(button, 1, true)
+        callback(button, 1, true)
+        #expect(dismissals == 1)
+        dismissal.stop()
+        callback(button, 0, false)
+        callback(button, 1, true)
+        #expect(dismissals == 1)
+        button.pressedChangedHandler?(button, 0, false)
+        #expect(oldCalls.withLock { $0 } == previous + 1)
+    }
+
+    @Test func legacyCallbackUsesTheSameClockAsTheShortcutDeadline() throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let clock = Mutex<TimeInterval>(10)
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil,
+            available: Set(ControllerMappedButton.allCases.map { .button($0) }))
+        let gesture = Mutex(ControllerShortcutGesture(stop: config.stop, stats: config.stats))
+        ControllerStreamHandlers.install(controller: controller, input: controller.input, queue: .main,
+            mapsGameInput: false, shortcutElements: [], read: { .init(buttons: config.stop.buttons) },
+            now: { clock.withLock { $0 } },
+            receive: { sample, time in gesture.withLock { _ = $0.update(sample, at: time) } })
+        let handler = try #require(pad.valueChangedHandler)
+        handler(pad, pad.buttonMenu)
+        #expect(gesture.withLock { $0.deadline } == 10.4)
+        clock.withLock { $0 = 10.4 }
+        let result = gesture.withLock { $0.update(.init(buttons: config.stop.buttons), at: 10.4) }
+        #expect(result == .stop)
+        pad.valueChangedHandler = nil
+        ControllerButtonRoutes.set(controller, nil)
+    }
+
     @Test func controllerMouseStartsRightHandedWithoutFaceButtonClicks() {
         let core = InputCore()
         #expect(core.controllerMouseMapping == .rightStick)

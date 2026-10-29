@@ -77,7 +77,7 @@ struct ControllerStopChordTests {
         pad.buttonMenu.setValue(1)
         rig.deliver()
         let now = ProcessInfo.processInfo.systemUptime
-        rig.core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: now + 1)
+        rig.core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: now + 3)
         #if os(iOS)
         #expect(menus.withLock { $0 } == 1)
         #expect(rig.core.controllerMouseStates[0]?.isMouse != true)
@@ -90,12 +90,12 @@ struct ControllerStopChordTests {
             if case .button(let button) = source { return result | button.rawValue }
             return result
         })
-        rig.core.receive(slot: 0, buttons: full, analog: InputCore.neutral, chordButtons: full, capturedAt: now + 2)
+        rig.core.receive(slot: 0, buttons: full, analog: InputCore.neutral, chordButtons: full, capturedAt: now + 4)
         let state = try #require(rig.core.layouts?.states[0])
         rig.advance(state, at: try #require(state.gesture.deadline))
         rig.core.receive(slot: 0, buttons: StreamProtocol.PLAY_FLAG, analog: InputCore.neutral,
-                         chordButtons: StreamProtocol.PLAY_FLAG, capturedAt: now + 3)
-        rig.core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: now + 4)
+                         chordButtons: StreamProtocol.PLAY_FLAG, capturedAt: now + 5)
+        rig.core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: now + 6)
         #expect(rig.actions.withLock { $0 } == [.stop])
         #if os(iOS)
         #expect(menus.withLock { $0 } == 1)

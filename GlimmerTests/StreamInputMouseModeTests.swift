@@ -38,10 +38,10 @@ struct StreamInputMouseModeTests {
         }
     }
 
-    private func toggle(_ input: StreamInput, _ registration: ControllerRegistration) {
+    private func toggle(_ input: StreamInput, _ registration: ControllerRegistration, seconds: TimeInterval = 0.751) {
         let start = now
         submit(input, registration, .init(buttons: .menu), capturedAt: start)
-        submit(input, registration, .init(), capturedAt: start + 0.751)
+        submit(input, registration, .init(), capturedAt: start + seconds)
     }
 
     @Test func gamepadModeNeverEvaluatesMouseMotion() {
@@ -64,17 +64,28 @@ struct StreamInputMouseModeTests {
         #expect(!mouse.isMoving((.zero, .zero)))
     }
 
+    @Test(arguments: [0.1, 0.75, 1.2, 2.49])
+    func pausingTheGameDoesNotOpenStreamControls(seconds: Double) throws {
+        let rig = rig()
+        defer { rig.input.stop() }
+        rig.input.setControllerMenuOpensControls(true)
+        let controller = try #require(rig.input.registerController(descriptor))
+        toggle(rig.input, controller, seconds: seconds)
+        #expect(rig.events.withLock { $0.contains(.controlsRequested(controller)) } == false)
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == false)
+    }
+
     @Test func nativeMenuHoldKeepsMouseModeAndExplicitSwitchRejectsStaleControllers() throws {
         let rig = rig()
         defer { rig.input.stop() }
         rig.input.setControllerMenuOpensControls(true)
         let controller = try #require(rig.input.registerController(descriptor))
-        toggle(rig.input, controller)
+        toggle(rig.input, controller, seconds: 2.501)
         #expect(rig.events.withLock { $0.contains(.controlsRequested(controller)) })
         #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == false)
         rig.input.setControllerMouseMode(true, for: controller)
         #expect(rig.events.withLock { $0.last } == .mouseMode(controller, enabled: true))
-        toggle(rig.input, controller)
+        toggle(rig.input, controller, seconds: 2.501)
         #expect(rig.events.withLock { $0.last } == .controlsRequested(controller))
         #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == true)
         rig.input.setControllerMouseMode(false, for: controller)

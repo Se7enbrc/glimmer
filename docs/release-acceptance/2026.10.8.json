@@ -1593,6 +1593,15 @@
           "run": "40747278955",
           "source_note": "",
           "recorded_at": "2026-10-28T18:59:27.297316+00:00"
+        },
+        {
+          "sha": "ef4b45a386b1717c8c810ff686fd934bb6afa968",
+          "definition": "f36cfb5c2ac32e681a2f90ae2db7f39d2a085edaf8827e4cd029f441e29e94ca",
+          "status": "failed",
+          "evidence": "ipad-light-f9510afa-be57-42c5-8385-bfa1a6dce79f",
+          "run": "40752593474",
+          "source_note": "",
+          "recorded_at": "2026-10-28T19:27:07.723756+00:00"
         }
       ],
       "key": "ipad/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap",
@@ -1601,7 +1610,8 @@
       "theme": "light",
       "definition": "f36cfb5c2ac32e681a2f90ae2db7f39d2a085edaf8827e4cd029f441e29e94ca",
       "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
-      "status": "failed"
+      "status": "failed",
+      "review_note": "40752593474 completed all product assertions and entered teardown at177.90s; app termination began178.27s and orientation restoration179.35s. The180s allowance expired during orientation restoration, and xcresult records Failed despite the console reporting passed184.503s. Retain failed status, no blind rerun. Same strict flow passed iPhone both themes and iPad dark; hosted screenshots and fake-PC receipts confirm light-mode product assertions completed."
     },
     "ipad/dark/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap": {
       "history": [
@@ -2269,13 +2279,23 @@
           "run": "40730419313",
           "source_note": " Definition review: this prior pass observed runningBackground, which also satisfies the corrected predicate accepting runningBackground or runningBackgroundSuspended. Rotation, foreground recovery, neutral input and Disconnect assertions are unchanged. Actual tested source retained; not reexecuted.",
           "recorded_at": "2026-10-28T17:07:31.164076+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
+          "status": "passed",
+          "evidence": "iphone-light-34225eb4-c3fc-4573-9bde-b61e232eee81",
+          "run": "40730419313",
+          "source_note": " Definition review: this prior pass observed runningBackground, which also satisfies the corrected predicate accepting runningBackground or runningBackgroundSuspended. Rotation, foreground recovery, neutral input and Disconnect assertions are unchanged. Actual tested source retained; not reexecuted. Final predicate-formatting review: the current array formatting is semantically identical to the reviewed background-state predicate. This prior pass observed runningBackground, which satisfies the current predicate. Recovery/input/Disconnect checks are unchanged; original tested source is retained, not reexecuted.",
+          "recorded_at": "2026-10-28T17:07:31.164076+00:00",
+          "reviewed_at": "2026-10-28T19:36:05.514847+00:00"
         }
       ],
       "key": "iphone/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "device": "iphone",
       "theme": "light",
-      "definition": "cf2587bb8c16d9b845479d0419964da6156b44910f2f0384e2b2fefa1381351a",
+      "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
       "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
       "status": "passed"
     },
@@ -2307,13 +2327,23 @@
           "run": "40730419313",
           "source_note": " Definition review: this prior pass observed runningBackground, which also satisfies the corrected predicate accepting runningBackground or runningBackgroundSuspended. Rotation, foreground recovery, neutral input and Disconnect assertions are unchanged. Actual tested source retained; not reexecuted.",
           "recorded_at": "2026-10-28T17:12:26.797286+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
+          "status": "passed",
+          "evidence": "iphone-dark-ab7ef134-5dab-46f3-9881-726a07c86e8b",
+          "run": "40730419313",
+          "source_note": " Definition review: this prior pass observed runningBackground, which also satisfies the corrected predicate accepting runningBackground or runningBackgroundSuspended. Rotation, foreground recovery, neutral input and Disconnect assertions are unchanged. Actual tested source retained; not reexecuted. Final predicate-formatting review: the current array formatting is semantically identical to the reviewed background-state predicate. This prior pass observed runningBackground, which satisfies the current predicate. Recovery/input/Disconnect checks are unchanged; original tested source is retained, not reexecuted.",
+          "recorded_at": "2026-10-28T17:12:26.797286+00:00",
+          "reviewed_at": "2026-10-28T19:36:05.514916+00:00"
         }
       ],
       "key": "iphone/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "device": "iphone",
       "theme": "dark",
-      "definition": "cf2587bb8c16d9b845479d0419964da6156b44910f2f0384e2b2fefa1381351a",
+      "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
       "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
       "status": "passed"
     },
@@ -2345,13 +2375,23 @@
           "run": "40730419313",
           "source_note": " Definition review: this prior pass observed runningBackground, which also satisfies the corrected predicate accepting runningBackground or runningBackgroundSuspended. Rotation, foreground recovery, neutral input and Disconnect assertions are unchanged. Actual tested source retained; not reexecuted.",
           "recorded_at": "2026-10-28T17:18:09.714515+00:00"
+        },
+        {
+          "sha": "28f55f2d3b62e2db8065ca159c6d1e6ecacfa765",
+          "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
+          "status": "passed",
+          "evidence": "ipad-light-906c66da-3968-4173-9104-d45b4868e43a",
+          "run": "40730419313",
+          "source_note": " Definition review: this prior pass observed runningBackground, which also satisfies the corrected predicate accepting runningBackground or runningBackgroundSuspended. Rotation, foreground recovery, neutral input and Disconnect assertions are unchanged. Actual tested source retained; not reexecuted. Final predicate-formatting review: the current array formatting is semantically identical to the reviewed background-state predicate. This prior pass observed runningBackground, which satisfies the current predicate. Recovery/input/Disconnect checks are unchanged; original tested source is retained, not reexecuted.",
+          "recorded_at": "2026-10-28T17:18:09.714515+00:00",
+          "reviewed_at": "2026-10-28T19:36:05.514921+00:00"
         }
       ],
       "key": "ipad/light/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "device": "ipad",
       "theme": "light",
-      "definition": "cf2587bb8c16d9b845479d0419964da6156b44910f2f0384e2b2fefa1381351a",
+      "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
       "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
       "status": "passed"
     },
@@ -2383,15 +2423,24 @@
           "run": "40747278955",
           "source_note": "",
           "recorded_at": "2026-10-28T19:08:56.308273+00:00"
+        },
+        {
+          "sha": "ef4b45a386b1717c8c810ff686fd934bb6afa968",
+          "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
+          "status": "passed",
+          "evidence": "ipad-dark-6fea35f8-0cd3-44d8-86ea-7e85989de346",
+          "run": "40752593474",
+          "source_note": "",
+          "recorded_at": "2026-10-28T19:32:44.714761+00:00"
         }
       ],
       "key": "ipad/dark/TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "test": "TouchJourneyUITests/testTouchOnlyCanAlwaysStopAfterRotationAndBackground",
       "device": "ipad",
       "theme": "dark",
-      "definition": "cf2587bb8c16d9b845479d0419964da6156b44910f2f0384e2b2fefa1381351a",
+      "definition": "bc65a11c62782c3296e2b700898edb47af4b4a3ebf1de050b5c588c331e9c611",
       "source": "iOS/GlimmerUITests/TouchJourneyUITests.swift",
-      "status": "pending"
+      "status": "passed"
     },
     "iphone/light/TouchJourneyUITests/testControllerArrivalAndRemovalRestoresTouchPlay": {
       "history": [

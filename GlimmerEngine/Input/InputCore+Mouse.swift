@@ -5,6 +5,7 @@ import Foundation
 
 package struct ControllerMouseState {
     package static let holdSeconds = 0.75
+    package static let menuHoldSeconds = 2.5
     package var isMouse = false
     package var buttons: Int32 = 0
     package var analog = InputCore.neutral
@@ -73,6 +74,7 @@ package struct ControllerMouseState {
     // is released, so its buttons never become a lone hold when suppression or a reset hides the others.
     package mutating func update(buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
                                  now: TimeInterval, toggleOnHold: Bool = true,
+                                 holdSeconds: TimeInterval = Self.holdSeconds,
                                  toggleChord: ControllerPhysicalChord = ControllerMousePlan().toggle,
                                  extras: SIMD2<UInt64> = .zero) -> Bool {
         let sample = ControllerMappingSample(buttons: buttons, analog: analog, extras: extras)
@@ -83,7 +85,7 @@ package struct ControllerMouseState {
         let otherTriggers = (sample.analog[0] >= 128 && toggleChord.triggers & 1 == 0)
             || (sample.analog[1] >= 128 && toggleChord.triggers & 2 == 0)
         if chordHeld || otherButtons || otherTriggers { blocked = true }
-        if startDownAt.map({ now - $0 > Self.holdSeconds }) == true { holdComplete = true }
+        if startDownAt.map({ now - $0 > holdSeconds }) == true { holdComplete = true }
         if !isDown && !holdComplete { blocked = true }
         let released = toggleChord.released(in: sample)
         let toggle = wasDown && released && !blocked
@@ -120,7 +122,9 @@ extension InputCore {
         let plan = mousePlan(slot: slot)
         let opensControls = controllerMenuOpensControls && notifyMode
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now,
-                                   toggleOnHold: !opensControls, toggleChord: plan.toggle, extras: extras)
+                                   toggleOnHold: !opensControls,
+                                   holdSeconds: opensControls ? ControllerMouseState.menuHoldSeconds : ControllerMouseState.holdSeconds,
+                                   toggleChord: plan.toggle, extras: extras)
         if toggled && opensControls {
             controllerMouseStates[slot] = state
             onControllerMenu?(slot)

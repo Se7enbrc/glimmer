@@ -24,6 +24,13 @@ struct StreamControls: View {
         ZStack(alignment: .trailing) {
             if !model.editingTouchControls {
                 if model.controlsVisible || model.phase != .streaming {
+                    if model.phase == .streaming {
+                        Button(action: model.resumeInput) { Color.clear.contentShape(.rect) }
+                            .buttonStyle(.plain)
+                            .focusable(false)
+                            .accessibilityHidden(true)
+                            .disabled(!model.hasGameInput)
+                    }
                     GeometryReader { geometry in
                         // A short landscape window lays actions out in two columns so every row fits.
                         let wide = !textSize.isAccessibilitySize && geometry.size.height < 500
@@ -56,6 +63,9 @@ struct StreamControls: View {
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
         .accessibilityHidden(model.dismissWhenStopped)
+        .controllerMenuDismissal(active: model.controlsVisible && model.phase == .streaming
+            && model.canStart && !model.editingTouchControls && !showingHelp && !confirmingQuit,
+            perform: model.resumeInput)
         .onChange(of: chromeVisible, initial: true) { _, visible in model.showOverlayChrome(visible) }
         .onChange(of: model.phase.isEnded && model.dismissWhenStopped, initial: true) { _, finished in
             if finished { close() }

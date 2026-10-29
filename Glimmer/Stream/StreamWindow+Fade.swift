@@ -97,6 +97,7 @@ extension StreamWindow {
     public func close() {
         guard !didClose else { return }
         didClose = true
+        for notice in notices { notice.removeWithStream() }
         window.ignoresMouseEvents = true
         setCursorHidden(false)
         removeCloseObservers()
