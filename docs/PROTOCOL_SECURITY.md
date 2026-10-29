@@ -2,12 +2,16 @@
 
 Review the trust boundaries before changing pairing, commands or transport.
 
-Review these boundaries when changing pairing, transport or local commands.
-
 ## Threat model
 
 Treat Glimmer as a client for your own PC, not an isolation boundary against a
 compromised Mac or PC.
+
+Pairing and transport use the shared engine on Mac, iPhone and iPad.
+Mac-specific storage, local automation and privileged-helper boundaries are
+identified below. The iOS app uses its own app container, with no Mac command
+channel or root helper; a compromised device or operating system remains outside
+this protection model.
 
 | Threat                                       | Protection or limit                                                                                                      |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -24,11 +28,11 @@ Sunshine protocol-design limits are documented below. Bugs in
 
 Distinguish local automation from links that can arrive through a browser.
 
-| Entry point           | Boundary                                                                                                                                                                               |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local command channel | Distributed notifications are unauthenticated. Software running as you can start or end streams, quit PC apps and authorize takeover. CLI/UI confirmation happens before dispatch.     |
-| `glimmer://` links    | Stream, wake, quit and stop for saved PCs; stop may omit the PC. Quit always asks; stream uses normal takeover checks. Stop ends the local stream and its PC app without confirmation. |
-| Malformed links       | Unknown or duplicate parameters, empty/control-character values, paths, credentials, ports and fragments are rejected without logging their contents.                                  |
+| Entry point           | Boundary                                                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local command channel | Distributed notifications are unauthenticated. Software running as you can start or end streams, quit PC apps and authorize takeover. CLI/UI confirmation happens before dispatch.                |
+| `glimmer://` links    | Stream, wake, quit and stop for saved PCs; stop may omit the PC. Quit always asks; stream uses normal takeover checks. Stop needs no confirmation and follows the leave-games-running preference. |
+| Malformed links       | Unknown or duplicate parameters, empty/control-character values, paths, credentials, ports and fragments are rejected without logging their contents.                                             |
 
 See [URL commands](COMMAND_LINE.md#url-commands). There is no pair URL action.
 
@@ -144,7 +148,7 @@ Sandbox.
 | Helper authorization | Requires the signed `io.ugfugl.Glimmer` app from Apple team `5T7M4RH3F8`, not just a claimed bundle ID.                  |
 | Helper API           | Only `setAWDLDown(_:reason:)` changes state; status, ping and suppression count are read-only. No arbitrary-command API. |
 | Release runtime      | Hardened Runtime, no JIT or library injection, library validation enabled.                                               |
-| Distribution         | Developer ID signing, Apple notarization and a stapled ticket on the app.                                                |
+| Mac distribution     | Developer ID signing, Apple notarization and stapled tickets on the app and current DMG candidates.                      |
 | Parser checks        | Deterministic fuzz tests and coverage-guided fuzzing under AddressSanitizer; neither contains a successful exploit.      |
 
 The current helper architecture is unsandboxed. USB access alone does not

@@ -1,8 +1,8 @@
 # Play your PC games on Mac, iPhone and iPad with Glimmer
 
 Glimmer is a native Swift Sunshine client for Mac, iPhone and iPad. Pair with
-your PC, choose a game and play on Mac, iPhone or iPad. Free, now and always. No
-account or analytics.
+your PC, choose a game and play with a controller, keyboard and mouse, or touch.
+Free, now and always. No account or analytics.
 
 The Mac app is generally available; iPhone and iPad are in TestFlight beta.
 
@@ -32,8 +32,8 @@ On Mac:
 2. [Pair your PC](docs/GETTING_STARTED.md).
 
 Mac installs update in the app through Sparkle. On iPhone or iPad, install
-through the [TestFlight beta](docs/INSTALL.md#iphone-and-ipad) now, or through
-the App Store when released.
+through the [TestFlight beta](docs/INSTALL.md#iphone-and-ipad). App Store
+availability is still ahead.
 
 ## Choose how you play
 
@@ -48,13 +48,16 @@ the App Store when released.
 Use a controller on any device, or touch controls on iPhone and iPad. On Mac,
 use Mini Player, the menu bar, Wake on LAN and the optional Wi-Fi helper.
 
-{% hint style="warning" %}
+> Save before stopping: ending a stream quits its PC app by default. To continue
+> on another device, turn on “Leave games running when you disconnect” in
+> Settings › General before streaming.
 
-Save before stopping: ending a stream quits its PC app by default. To continue
-on another device, turn on “Leave games running when you disconnect” in Settings
-› General before streaming.
+## Apple clients
 
-{% endhint %}
+This repository contains the Mac app, the [iPhone/iPad app](iOS/README.md), and
+the shared streaming engine. See
+[repository ownership](docs/APPLE_REPOSITORY.md) for development and checks. The
+Homebrew tap and Raycast extension stay in their own repositories.
 
 ## Help and project
 
@@ -70,10 +73,3 @@ on another device, turn on “Leave games running when you disconnect” in Sett
 [GPLv3](LICENSE). Copyright © 2026 ugfugl.io. [Credits](CREDITS.md).
 
 Next: [start your first stream](docs/GETTING_STARTED.md).
-
-## Apple clients
-
-This repository contains the Mac app, the [iPhone/iPad app](iOS/README.md), and
-the shared streaming engine. See
-[repository ownership](docs/APPLE_REPOSITORY.md) for development and checks. The
-Homebrew tap and Raycast extension stay in their own repositories.

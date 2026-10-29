@@ -8,7 +8,7 @@ Change shared behavior once, then verify both apps from the same checkout.
 | `Glimmer/`, `Glimmer.xcodeproj`                             | Mac app and native adapters                                     |
 | `iOS/Glimmer/`, `iOS/Glimmer.xcodeproj`                     | iPhone/iPad app and native adapters                             |
 | `GlimmerTests/`, `EnginePackageTests/`, `iOS/GlimmerTests/` | Mac, public package and iOS tests                               |
-| `scripts/`, `.github/workflows/`                            | Shared checks, CI and Mac release tooling                       |
+| `scripts/`, `.github/workflows/`                            | Shared checks, CI and separate Mac/iOS release workflows        |
 
 ## Build and verify
 
@@ -16,10 +16,11 @@ Change shared behavior once, then verify both apps from the same checkout.
    iPhone/iPad. Choose `Glimmer` or `Glimmer-iOS`, respectively.
 2. Run the focused checks while editing: `make test`, `make ios-test`, or
    `swift test -Xswiftc -warnings-as-errors` for public engine contracts.
-3. Run `make verify-all` before handing off a change. This runs source checks,
-   Mac tests, AddressSanitizer tests, public package tests, iOS Simulator tests
-   and an unsigned production iOS device build. Use `TEST_DESTINATION` for
-   another installed iOS 26+ Simulator.
+3. Use normal pre-push checks and hosted Verify/CodeQL for the changed source.
+   `make verify-all` is available when a full local cross-platform pass is
+   needed: source checks, Mac tests, AddressSanitizer, public package tests, iOS
+   Simulator tests and an unsigned production iOS device build. Use
+   `TEST_DESTINATION` for another installed iOS 26+ Simulator.
 
 Build checks never sign, provision or install onto physical devices. Simulator
 tests run the test host in Simulator. For unsigned compile checks, use
@@ -56,17 +57,20 @@ required CI gate; a successful engine-only build does not validate an app.
 The existing required `macOS` check remains named the same and now includes both
 iOS Simulator tests and the unsigned iOS Release device build. Shared or app
 code changes run both clients; documentation-only changes still run source
-checks. CodeQL builds both apps and requires successful extraction of every
-tracked production Swift file, including `iOS/Glimmer/`. Lint, credential scans,
-dependency updates and source checks are configured at the root.
+checks. Render/UI and comprehensive journeys are one resumable acceptance pass
+per feature release; rerun only pending or affected cases. CodeQL builds both
+apps and requires successful extraction of every tracked production Swift file,
+including `iOS/Glimmer/`. Lint, credential scans, dependency updates and source
+checks are configured at the root.
 
 Mac and iOS keep separate bundle identifiers and release lifecycles. The Mac and
 iOS apps share the CalVer in `Glimmer/Version.xcconfig`; iOS includes that file
 and overrides only its increasing build number in `iOS/Config/App.xcconfig`. The
-Mac release workflow and artifacts retain their paths. Internal iOS beta
-distribution follows the [TestFlight guide](../iOS/docs/TESTFLIGHT.md). Public
-App Store release is separate. The Raycast extension and Homebrew tap remain
-separate repositories with their existing distribution roles.
+Mac release workflow and artifacts retain their paths. Internal and external iOS
+beta distribution follow the [TestFlight guide](../iOS/docs/TESTFLIGHT.md);
+upload eligibility does not establish Beta App Review approval. Public App Store
+release is separate. The Raycast extension and Homebrew tap remain separate
+repositories with their existing distribution roles.
 
 ## Import provenance
 
@@ -78,10 +82,11 @@ original iOS repository is unchanged by this local migration.
 Use `git log --all` to inspect original iOS commits. Before the import, their
 paths are relative to the old repository root. For example,
 `git show bbe3d84:Glimmer/LauncherModel.swift` reads an original source file.
-Preserving those original commit IDs when publishing requires retaining the
-import's parent history. Do not squash this migration: a squash would discard
-that ancestry from the main branch. Check live merge/ruleset restrictions before
-publication; any required policy exception is a separate maintainer action.
+The maintainer's original iOS repository was bootstrap work, with no functional
+release to preserve. Normal squash merges are permitted for this integration;
+retaining its parent history on main is not a release requirement. The recorded
+import commit and retained candidate history provide provenance without a
+repository merge-policy exception.
 
 The import is a one-time move, not an ongoing bidirectional subtree sync.
 Superseded nested workflows and scanners remain available in Git history.

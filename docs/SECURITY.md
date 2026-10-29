@@ -6,6 +6,9 @@ icon: shield-halved
 
 # Protect your connection to the PC
 
+Use these precautions on Mac, iPhone and iPad. Shared pairing and transport
+protections have the same protocol limits on each platform.
+
 ## Pairing
 
 1. Pair on a trusted network or authenticated encrypted tunnel.
@@ -33,9 +36,9 @@ never silently replaces that trust.
 
 ## Runtime hardening
 
-The optional [Wi-Fi helper](guides/WIFI.md) pauses AirDrop's radio during
-streams. It needs administrator approval and accepts requests only from the
-signed Glimmer app. It cannot run arbitrary commands.
+On Mac, the optional [Wi-Fi helper](guides/WIFI.md) pauses AirDrop's radio
+during streams. It needs administrator approval and accepts requests only from
+the signed Glimmer app. It cannot run arbitrary commands.
 
 ## Threat model
 
@@ -43,8 +46,9 @@ signed Glimmer app. It cannot run arbitrary commands.
 
 Protect your Mac account. Glimmer runs without App Sandbox; software running as
 you can read pairing data and send local commands, including quitting PC apps.
-Pairing does not make a compromised PC safe. Streams can appear in screen
-recordings.
+The iPhone/iPad app keeps its identity and pins in its app container and has no
+root helper or Mac local command channel. Neither platform makes a compromised
+PC safe. Streams can appear in screen recordings.
 
 {% endhint %}
 
@@ -52,8 +56,9 @@ recordings.
 
 [`glimmer://` links](COMMAND_LINE.md#url-commands) work only with saved PCs.
 Quit links always ask; stream links keep takeover checks. Stop links end the
-current local stream and its PC app without confirmation; an optional PC limits
-the request. Treat local automation as trusted software.
+current local stream without confirmation and follow “Leave games running when
+you disconnect”; the default also quits the PC app. An optional PC limits the
+request. Treat local automation as trusted software.
 
 ## Network paths
 
@@ -65,8 +70,12 @@ See [Architecture](ARCHITECTURE.md#protocol-security) for technical protections.
 
 ## Verifying a download
 
-[Check the download](VERIFY_DOWNLOAD.md) for its origin, Apple signature and
-notarization.
+[Check a Mac download](VERIFY_DOWNLOAD.md) for its origin, Apple signature and
+notarization. Current candidates sign and notarize both the app and DMG; Sparkle
+verifies update ZIP signatures. Stable promotion reuses the accepted candidate's
+files. On iPhone and iPad, use the project's TestFlight distribution; an
+uploaded beta is not an App Store release or evidence of Apple's review
+approval.
 
 ## Reporting
 

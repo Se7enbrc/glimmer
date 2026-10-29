@@ -25,6 +25,22 @@ investigation.
 
 {% endhint %}
 
+## Check the DMG before mounting
+
+Current candidates sign and notarize the DMG container separately from the app.
+For 2026.10.8, run:
+
+```bash
+codesign --verify --strict --verbose=2 Glimmer-2026.10.8.dmg
+spctl -a -t open --context context:primary-signature --verbose=2 Glimmer-2026.10.8.dmg
+xcrun stapler validate Glimmer-2026.10.8.dmg
+```
+
+Expect a valid signature, `accepted` with `Notarized Developer ID`, and
+successful ticket validation. These checks do not mount the image or launch the
+app. Older releases can have unsigned DMG containers; check their recorded
+release evidence rather than applying that exception to a current candidate.
+
 ## Check the app
 
 1. Mount your downloaded DMG read-only:
@@ -61,8 +77,8 @@ investigation.
 {% hint style="warning" %}
 
 Stop if a check fails. Expect `accepted`, `Notarized Developer ID`,
-`steven Miller (5T7M4RH3F8)` and successful ticket validation. The app is
-signed; the DMG container is unsigned. Updates verify automatically;
+`steven Miller (5T7M4RH3F8)` and successful ticket validation. The app and
+current DMG container are separately signed. Updates verify automatically;
 [manual ZIP checks](CONTRIBUTING.md#release-artifact-checks) use the
 [appcast](https://se7enbrc.github.io/glimmer/appcast.xml).
 

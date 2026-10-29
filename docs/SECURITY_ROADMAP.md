@@ -42,7 +42,25 @@ four-digit PINs, default plaintext video and unauthenticated audio CBC remain
 ## Evidence already in the repository
 
 Retain dated results for each release; a previous green run does not authorize a
-new commit.
+new commit. Acceptance journeys retain their actual tested source and resume
+only for pending or affected cases; they are not a mandatory repeat suite for
+every push. Exact-source core and security gates remain separate.
+
+### 2026.10.8 candidate checkpoint
+
+[RC23](https://github.com/Se7enbrc/glimmer/releases/tag/2026.10.8-rc.23) and iOS
+beta 13 use `3e59901396c3445c04e9fe73be3d3fafb1a30ce8`. Direct candidate
+[Verify](https://github.com/Se7enbrc/glimmer/actions/runs/40937378057) and
+[CodeQL](https://github.com/Se7enbrc/glimmer/actions/runs/40937384613) passed.
+Mac delivery verified signed/notarized app and DMG artifacts, provenance and
+update signatures. iOS delivery bound the reviewed archive and matching symbols
+to the signed beta and successful upload receipt.
+
+These are release-control results, not an independent security audit, new badge
+assessment or full hardware acceptance. The
+[acceptance checkpoint](release-acceptance/2026.10.8.md) records remaining gaps.
+
+### Ongoing controls
 
 | Area                 | Evidence                                                                                                                                                                                                            |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -67,13 +85,15 @@ denominator.
 | Coverage         | Hosted Swift/Python reports, no gate; [#124](https://github.com/Se7enbrc/glimmer/pull/124).                                               | UI tests, instrumented login item and installed helper; measure before targeting 80/90% criteria. |
 | ASan/fuzzing     | Deterministic parser/stream tests in Verify; libFuzzer harnesses in a separate job; [#123](https://github.com/Se7enbrc/glimmer/pull/123). | Validate ThreadSanitizer and real playback/controller/concurrency lifecycles.                     |
 | Reproducibility  | Local unsigned payload matched on 2026-10-10, Xcode 27.0/macOS 27.0.1, 69 files with catalog normalization.                               | Hosted Xcode 26.6 run and normalized published candidate comparison.                              |
-| Source notices   | SPDX notices, including upstream credits on 55 ported files; enforced by `make check`.                                                    | Audit contributor rights separately.                                                              |
+| Source notices   | SPDX notices and retained upstream credits; enforced by `make check`.                                                                     | Audit contributor rights separately, including clean-room replacements and later contributions.   |
 | Release evidence | [Verification commands](VERIFY_DOWNLOAD.md), [#121](https://github.com/Se7enbrc/glimmer/pull/121).                                        | Keep exact artifact/SHA and verification results for each release.                                |
 
 The 2026-10-10 release check covered Sparkle ZIP apps 2026.10.2 through
 2026.10.6: Apple signing/notarization/stapling passed and appcast signatures
-existed. 2026.10.6 was the first release with hosted provenance. DMG containers
-and GitHub-generated source archives are not separately signed.
+existed. 2026.10.6 was the first release with hosted provenance. At that dated
+checkpoint, DMG containers were unsigned. Current 2026.10.8 candidates sign,
+notarize and staple the DMG separately; GitHub-generated source archives are not
+the signed distribution artifacts.
 
 ### Coverage results
 
@@ -109,8 +129,9 @@ branch counts. A zero denominator is not full coverage. See the
 
 Shell coverage is unmeasured. Python fixture copies outside `scripts/`,
 including candidate tooling, can record no coverage. Initial app covered-line
-counts varied from 25,080 to 25,083 across three runs. The remaining app gap is
-mostly UI.
+counts varied from 25,080 to 25,083 across three runs. At that checkpoint, the
+remaining app gap was mostly UI. Later render/UI and iOS coverage runs need
+their own measured denominators; these old numbers are not current coverage.
 
 ### Sanitizer runs
 

@@ -50,9 +50,11 @@ arrow-key moves.
 
 Tap **…** to open the stream menu. If it is hidden, tap the top of the picture
 to reveal it, or tap with three fingers to open it directly. With a controller,
-hold Menu alone for a second and release. Choose **Use mouse mode** or **Use
+hold Menu alone for two seconds and release. Choose **Use mouse mode** or **Use
 gamepad mode**, then **Resume** to return to play. The choice applies to the
-controller that opened the menu.
+controller that opened the menu. Circle/B or a tap outside the menu dismisses
+it. Ordinary Menu/Start presses reach the PC immediately; the hold does not
+delay a short pause press.
 
 With a keyboard connected, Control-/ opens the stream menu, ⌃Z shows stream
 stats and ⌃Q disconnects. The last two shortcuts can be changed in Settings →
@@ -100,11 +102,13 @@ uses the reported controller type; an explicitly forced type can override it.
 
 Hold Menu, Options and both shoulder buttons to disconnect using the shared stop
 chord. It returns directly to the launcher after teardown, without a
-confirmation or a second Close action, and leaves the PC game running.
-Controllers that lack one of those controls can use the native player controls.
-UIKit owns controller navigation while those controls are visible; the capture
-adapter restores prior handlers and system gesture preferences when it releases
-ownership.
+confirmation or a second Close action. It follows “Leave games running when you
+disconnect”; by default, disconnecting quits the PC game. The complete chord is
+captured, but a Start press made before the other buttons can already have
+reached the game. Controllers that lack one of those controls can use the native
+player controls. UIKit owns controller navigation while those controls are
+visible; the capture adapter restores prior handlers and system gesture
+preferences when it releases ownership.
 
 Temporary inactivity, showing controls, backgrounding, screen lock and leaving
 release held input. App switching preserves the stream for a maximum of 15

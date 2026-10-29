@@ -3,6 +3,29 @@
 See where Glimmer is heading before proposing a change. This covers at least the
 next year, with no delivery dates or feature promises.
 
+## 2026.10.8 baseline
+
+The release branch already contains the shared Mac/iOS engine, native
+iPhone/iPad app, controller layouts and shortcuts, touch editing, session
+continuation and separate platform delivery workflows. These are implemented
+features, not a new extraction project. iPhone/iPad distribution remains in
+TestFlight; App Store submission is separate from Mac release promotion.
+
+Use the [release checkpoint](release-acceptance/2026.10.8.md) for candidate
+acceptance and the [shared-engine roadmap](IOS_ENGINE_ROADMAP.md) for remaining
+hardware and adapter work. Historical test gaps stay visible without turning
+every small fix into another full release-validation pass.
+
+## Near-term priorities
+
+- Resolve reported playback, input and lifecycle issues with focused regression
+  coverage and the affected hardware check.
+- Progress TestFlight access and production-flavour App Store readiness.
+- Make concurrent Mac/iOS delivery bookkeeping and Apple build-number selection
+  reliable without manual guesswork or weaker release gates.
+- Measure sustained mobile energy, thermal behavior and advanced display/audio
+  combinations where evidence is still missing.
+
 ## Next year
 
 Expect work to stay focused on stream quality and a native experience across

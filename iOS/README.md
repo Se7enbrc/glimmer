@@ -1,69 +1,78 @@
 # Glimmer for iPhone and iPad
 
-Your PC games, on your iPhone or iPad. Native controls. No accounts or tracking.
+Play your PC games through a native Sunshine client with controller layouts,
+touch controls, keyboard and mouse input, and the same streaming engine as
+Glimmer for Mac. No accounts or tracking. Free software under [GPLv3](LICENSE).
 
-**This is an early development build.** The app finds nearby PCs running
-Sunshine, pairs with a PIN, lists their apps and connects a video and stereo
-audio stream. Physical controllers and simple touch use the shared input engine.
-See the fixed [input mapping](docs/INPUT.md).
+The app is available through TestFlight beta and requires iOS or iPadOS 26 or
+later. App Store availability is still ahead. See
+[installation and beta access](../docs/INSTALL.md#iphone-and-ipad).
 
-Use the iPhone launcher, Settings and pairing screens in portrait or landscape.
-iPhone streams stay in landscape; menus can rotate again after disconnecting.
-iPad streams start in either orientation and use the whole window, including
-Split View and Stage Manager. After a window resize settles, the stream moves to
-the new window's listed mode without quitting the game. The picture fills the
-window and can crop at the edges. A connected external display can show the
-picture while the device keeps the controls. See
-[external display validation](docs/EXTERNAL_DISPLAYS.md) for hardware checks.
-The app opts into iOS Game Mode; the system controls its activation.
+## Start playing
 
-The launcher shows the PC, its requested stream settings and its app buttons.
-The last connected PC loads automatically, including after disconnecting. With
-no previous connection, a single paired PC is selected. Use the PC name to
-switch PCs; pairing, quality, controller preferences and connection settings
-live in Settings. Settings → General offers Buttons or Covers. Both layouts
-adapt to the screen and text size; Covers uses artwork supplied by the PC, with
-a glyph fallback.
+1. Set up [Sunshine and the mobile display modes](../docs/HOST_SETUP.md) on the
+   PC.
+2. Open Glimmer and pair the PC with the PIN shown in the app. If discovery
+   cannot find it, use Settings › PCs › Add PC by address….
+3. Connect a controller, or use the on-screen controls, then choose a game.
 
-To remove a saved pairing, open Settings → PCs, choose Forget… next to the PC,
-and confirm Forget PC. This removes the local pairing and its remembered
-selection; it leaves the game running on the PC. Pair again through discovery or
-Add PC by address…. If Sunshine's identity changed because you reset it, use
-this recovery path instead of accepting a changed certificate automatically.
-Disconnect your stream before forgetting a PC.
+Settings holds paired PCs, stream quality and input preferences. The launcher
+remembers the last PC and offers Buttons or Covers using artwork from the PC. To
+remove a pairing, disconnect first, then choose Settings › PCs › Forget…. A
+changed PC certificate requires deliberate re-pairing; it is never accepted
+silently.
 
-Native is the default, followed by 1080p 60 and 1080p 120 in Settings. Install
-[the iPhone and iPad display modes](../docs/HOST_SETUP.md#pick-your-file) on the
-PC. Both devices request only modes from that file. Native chooses the closest
-listed size to the window's pixels; 1080p always requests 1920 × 1080. The
-choice is saved. Requests use the listed refresh rate up to the profile and
-display maximum, so window modes generally run at 60 fps. All three choices
-request stereo and 20 Mbps. VideoToolbox capabilities enable AV1 or HEVC with
-H.264 fallback; HDR-capable displays can request 10-bit HDR. Sustained hardware
-and colour acceptance remains pending; see
-[video fidelity checks](docs/VIDEO_FIDELITY.md). Video fills behind cutouts. A
-different aspect crops edges; a lower resolution loses detail. The PC and game
-must use the requested aspect to avoid black bars inside the video. If discovery
-cannot find the PC, choose Settings → PCs → Add PC by address… and enter its IP
-address or hostname. Pairing and certificate verification use the same
-connection flow. Development builds keep the display awake throughout the active
-app. Release builds do so only during a stream. Leaving the app restores
-ordinary auto-lock; manually locking still stops a stream. Disconnecting stops
-the local stream immediately. Brief app switches preserve it for up to 15
-seconds, with input released; staying away longer disconnects. iOS may end this
-grace period earlier. Screen lock disconnects immediately. Each of these
-disconnects quits the game on the PC unless Settings → General → Leave games
-running when you disconnect is on. Real-PC playback and physical-device behavior
-still need validation.
+## Controls that fit your device
 
-- Requires iOS or iPadOS 26 or later.
-- Built for physical controllers, including Backbone One.
-- Streaming uses Sunshine on the PC.
+- Use physical controllers, including Backbone One, with per-game button layouts
+  and remappable Stop/Stats shortcuts. Ordinary Start reaches the game
+  immediately; holding Menu for two seconds and releasing opens stream controls.
+- Press Circle/B or tap outside the stream menu to dismiss it. Touch, controller
+  and keyboard actions remain available together.
+- Edit the touch gamepad's position, size, visibility and opacity. When a
+  controller is connected, choose “Show touch controls” to add a touch player.
+- Use the free video area as a mouse, or connect a keyboard and pointing device.
+  Three-finger tap and Control-/ open stream controls.
 
-Want to build or help? Start with [CONTRIBUTING.md](CONTRIBUTING.md). See the
-[engine roadmap](../docs/IOS_ENGINE_ROADMAP.md) for what comes next. Free
-software under [GPLv3](LICENSE).
+See [controller and touch setup](../docs/guides/CONTROLLERS.md) and
+[keyboard and mouse controls](../docs/guides/KEYBOARD_MOUSE.md).
 
-See [PC setup](docs/HOST_SETUP.md) for Sunshine and native display modes, and
-[diagnostics](docs/DIAGNOSTICS.md) for investigating problems with Apple logs
-and reports.
+## Picture and sound
+
+The iPhone launcher and Settings support portrait and landscape; streams use
+landscape. iPad streams use the available window in either orientation,
+including Split View and Stage Manager. Video fills the surface, so mismatched
+PC and device aspect ratios can crop the picture. Match the PC's display modes
+to the requested stream for the best result.
+
+Hardware capabilities determine codec and HDR availability. Stereo audio,
+external-display presentation and window resizing use native platform adapters.
+See [display choices](../docs/guides/STREAMING.md),
+[video fidelity checks](docs/VIDEO_FIDELITY.md) and
+[external-display validation](docs/EXTERNAL_DISPLAYS.md) for setup and the
+hardware evidence still needed. Feature availability is not a claim that every
+codec, display or device combination has completed sustained testing.
+
+## Disconnect and return
+
+Save before disconnecting: Glimmer quits the PC game by default. Enable “Leave
+games running when you disconnect” in Settings › General to keep it running.
+Explicit Quit still quits the game.
+
+Brief app switches can retain the session for up to 15 seconds with input
+released. iOS may end that grace period earlier; screen lock disconnects
+immediately. Returning after teardown requires a new connection.
+
+Neither beta nor production builds record custom diagnostics. For a problem,
+note the time and steps, then use [Apple logs and reports](docs/DIAGNOSTICS.md).
+Review reports before sharing them and never include pairing files or PINs.
+
+## Develop and contribute
+
+Both clients consume the root `GlimmerEngine` source. Start with
+[repository ownership](../docs/APPLE_REPOSITORY.md) and
+[iOS contributing](CONTRIBUTING.md). The
+[shared-engine roadmap](../docs/IOS_ENGINE_ROADMAP.md) separates implemented
+features from remaining validation and future work.
+
+Next: [pair your PC and start a stream](../docs/GETTING_STARTED.md).
