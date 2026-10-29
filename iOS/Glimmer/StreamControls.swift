@@ -27,6 +27,7 @@ struct StreamControls: View {
                     if model.phase == .streaming {
                         Button(action: model.resumeInput) { Color.clear.contentShape(.rect) }
                             .buttonStyle(.plain)
+                            .ignoresSafeArea()
                             .focusable(false)
                             .accessibilityHidden(true)
                             .disabled(!model.hasGameInput)

@@ -19,7 +19,7 @@ struct ControllerShortcutRoutingTests {
         return (core, backend, config)
     }
 
-    @Test func forwardsImmediatelyThenReleasesAndSuppressesUntilTheLastButtonIsUp() throws {
+    @Test func partialInputForwardsButFullShortcutIsCapturedBeforeItsHold() throws {
         let (core, backend, config) = try rig()
         let actions = Mutex<[ControllerShortcutAction]>([])
         core.onControllerShortcut = { action in actions.withLock { $0.append(action) } }
@@ -28,7 +28,8 @@ struct ControllerShortcutRoutingTests {
         core.receive(slot: 0, buttons: partial, analog: InputCore.neutral, capturedAt: 10)
         #expect(backend.calls.last?.buttons == partial)
         core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10.1)
-        #expect(backend.calls.last?.buttons == full)
+        #expect(backend.calls.last?.buttons == 0)
+        #expect(actions.withLock { $0.isEmpty })
         let state = try #require(core.layouts?.states[0])
         core.advanceLayoutHold(state, slot: 0, at: 10.51)
         #expect(backend.calls.last?.buttons == 0)
@@ -52,8 +53,12 @@ struct ControllerShortcutRoutingTests {
         let actions = Mutex(0)
         core.onControllerShortcut = { _ in actions.withLock { $0 += 1 } }
         let full = Int32(bitPattern: config.stats.buttons)
-        core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10)
+        let partial = full & ~Int32(bitPattern: ControllerMappedButton.rightShoulder.rawValue)
+        core.receive(slot: 0, buttons: partial, analog: InputCore.neutral, capturedAt: 9.9)
         #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG | StreamProtocol.B_FLAG | StreamProtocol.X_FLAG)
+        core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10)
+        #expect(backend.calls.last?.buttons == 0)
+        #expect(actions.withLock { $0 } == 0)
         core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10.5)
         #expect(backend.calls.last?.buttons == 0)
         #expect(actions.withLock { $0 } == 1)

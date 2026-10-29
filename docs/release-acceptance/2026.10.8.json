@@ -27,9 +27,9 @@
       "test": "MacControllerJourneyUITests/testPictureSurvivesTheFirstFrameWatchdog",
       "device": "mac",
       "theme": "light",
-      "definition": "ab6ddbd76adba92e23fef23c16edc861cb15f763caf8528a28b89764598fa4eb",
+      "definition": "c7ff134bcdefa99c875e17f9804e1e802ddaefd7c815923168b392c9c8203465",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testPictureSurvivesTheFirstFrameWatchdog": {
       "history": [
@@ -47,9 +47,9 @@
       "test": "MacControllerJourneyUITests/testPictureSurvivesTheFirstFrameWatchdog",
       "device": "mac",
       "theme": "dark",
-      "definition": "ab6ddbd76adba92e23fef23c16edc861cb15f763caf8528a28b89764598fa4eb",
+      "definition": "c7ff134bcdefa99c875e17f9804e1e802ddaefd7c815923168b392c9c8203465",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testControllerOnlyLaunchAndStop": {
       "history": [
@@ -67,9 +67,9 @@
       "test": "MacControllerJourneyUITests/testControllerOnlyLaunchAndStop",
       "device": "mac",
       "theme": "light",
-      "definition": "641b2d916c3e67fb285cc3e677ec100c1caf46f56104d3496c9373a513993777",
+      "definition": "946bca0526aa6982b63dc093c0fcb46f89df87474fabdeedcf63c93a0e90db4c",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testControllerOnlyLaunchAndStop": {
       "history": [
@@ -114,9 +114,9 @@
       "test": "MacControllerJourneyUITests/testControllerOnlyLaunchAndStop",
       "device": "mac",
       "theme": "dark",
-      "definition": "641b2d916c3e67fb285cc3e677ec100c1caf46f56104d3496c9373a513993777",
+      "definition": "946bca0526aa6982b63dc093c0fcb46f89df87474fabdeedcf63c93a0e90db4c",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords": {
       "history": [
@@ -152,9 +152,9 @@
       "test": "MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords",
       "device": "mac",
       "theme": "light",
-      "definition": "b26edfa97a7e652fe785753b47ac741b700dd2e0687685d557ffc0c4dbe09f38",
+      "definition": "f3b2c9f07ddd88192cabd3d588dee37feb28138f056a8b45537d6644542daa70",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords": {
       "history": [
@@ -172,9 +172,9 @@
       "test": "MacControllerJourneyUITests/testPlayStationAllInputsAndPartialChords",
       "device": "mac",
       "theme": "dark",
-      "definition": "b26edfa97a7e652fe785753b47ac741b700dd2e0687685d557ffc0c4dbe09f38",
+      "definition": "f3b2c9f07ddd88192cabd3d588dee37feb28138f056a8b45537d6644542daa70",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testXboxAllInputsAndPartialChords": {
       "history": [
@@ -186,13 +186,29 @@
           "run": "local import",
           "source_note": "Uncommitted release stabilization tree; mac-complete-light; successful method definitions reviewed against the current release.",
           "recorded_at": "2026-10-28T15:28:54.654389+00:00"
+        },
+        {
+          "definition": "e8fdd0e7ac83e60c11af83b2c5dd0ae39c0d9e762a990ab2323c088c721c9574",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-29T13:21:35.462602+00:00"
+        },
+        {
+          "sha": "f4428b5fbb1f5573fbe93d3ce674da5eeecf193d",
+          "definition": "e8fdd0e7ac83e60c11af83b2c5dd0ae39c0d9e762a990ab2323c088c721c9574",
+          "status": "passed",
+          "evidence": "mac-light-05006ce7-e599-434d-a62f-f846e039f206",
+          "run": "40881119266",
+          "source_note": "",
+          "recorded_at": "2026-10-29T13:24:13.466721+00:00"
         }
       ],
       "key": "mac/light/MacControllerJourneyUITests/testXboxAllInputsAndPartialChords",
       "test": "MacControllerJourneyUITests/testXboxAllInputsAndPartialChords",
       "device": "mac",
       "theme": "light",
-      "definition": "dc5f03b5d3c4d959a852bd122dada3bc00c2a5c5d935ba530b75de9bb49a15fd",
+      "definition": "e8fdd0e7ac83e60c11af83b2c5dd0ae39c0d9e762a990ab2323c088c721c9574",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
       "status": "passed"
     },
@@ -212,9 +228,9 @@
       "test": "MacControllerJourneyUITests/testXboxAllInputsAndPartialChords",
       "device": "mac",
       "theme": "dark",
-      "definition": "dc5f03b5d3c4d959a852bd122dada3bc00c2a5c5d935ba530b75de9bb49a15fd",
+      "definition": "e8fdd0e7ac83e60c11af83b2c5dd0ae39c0d9e762a990ab2323c088c721c9574",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testNintendoPositionalInputs": {
       "history": [
@@ -241,9 +257,9 @@
       "test": "MacControllerJourneyUITests/testNintendoPositionalInputs",
       "device": "mac",
       "theme": "light",
-      "definition": "6b98dd23a665e406657127fca4ac96cc9e5682995c11a682efc987a6a439c450",
+      "definition": "56fab1eb587c1b7d66b4ac2a6167deca4e95d50822d8445c90d98985ed9d07cd",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testNintendoPositionalInputs": {
       "history": [
@@ -261,9 +277,9 @@
       "test": "MacControllerJourneyUITests/testNintendoPositionalInputs",
       "device": "mac",
       "theme": "dark",
-      "definition": "6b98dd23a665e406657127fca4ac96cc9e5682995c11a682efc987a6a439c450",
+      "definition": "56fab1eb587c1b7d66b4ac2a6167deca4e95d50822d8445c90d98985ed9d07cd",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testTwoControllersDisconnectIndependently": {
       "history": [
@@ -281,9 +297,9 @@
       "test": "MacControllerJourneyUITests/testTwoControllersDisconnectIndependently",
       "device": "mac",
       "theme": "light",
-      "definition": "8431f472748900cf8e23f77aba9e6ddfd726e2f49d473645dbcbd5ee651bc12e",
+      "definition": "a8e5140473c74f5cd96e96266875e1fc1dc46110da808e9cc669104ffa3da976",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testTwoControllersDisconnectIndependently": {
       "history": [
@@ -301,9 +317,9 @@
       "test": "MacControllerJourneyUITests/testTwoControllersDisconnectIndependently",
       "device": "mac",
       "theme": "dark",
-      "definition": "8431f472748900cf8e23f77aba9e6ddfd726e2f49d473645dbcbd5ee651bc12e",
+      "definition": "a8e5140473c74f5cd96e96266875e1fc1dc46110da808e9cc669104ffa3da976",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testControllerContextActionsAndBack": {
       "history": [
@@ -321,9 +337,9 @@
       "test": "MacControllerJourneyUITests/testControllerContextActionsAndBack",
       "device": "mac",
       "theme": "light",
-      "definition": "32566d2028ca712ce881f2776a2c0f1b0d5ee8c3f659c99a338ac0697e124829",
+      "definition": "9594a5b53d9b356afb39ab3ed58686d5e123a2201c12b582659718c07dc83640",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testStatsChordTogglesVisibleOverlay": {
       "history": [
@@ -335,13 +351,29 @@
           "run": "local import",
           "source_note": "Uncommitted release stabilization tree; mac-complete-light; successful method definitions reviewed against the current release.",
           "recorded_at": "2026-10-28T15:28:54.654391+00:00"
+        },
+        {
+          "definition": "d0e22dad62c1f7fb1ee3b857b7200dc1406220dedf7b15cb5eef2d735ead4f26",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-29T13:21:35.462846+00:00"
+        },
+        {
+          "sha": "f4428b5fbb1f5573fbe93d3ce674da5eeecf193d",
+          "definition": "d0e22dad62c1f7fb1ee3b857b7200dc1406220dedf7b15cb5eef2d735ead4f26",
+          "status": "passed",
+          "evidence": "mac-light-05006ce7-e599-434d-a62f-f846e039f206",
+          "run": "40881119266",
+          "source_note": "",
+          "recorded_at": "2026-10-29T13:24:13.466940+00:00"
         }
       ],
       "key": "mac/light/MacControllerJourneyUITests/testStatsChordTogglesVisibleOverlay",
       "test": "MacControllerJourneyUITests/testStatsChordTogglesVisibleOverlay",
       "device": "mac",
       "theme": "light",
-      "definition": "7db2f86807cc43e107fb348dab1ba2a952ce500440bde0065a02fadb88b674b5",
+      "definition": "d0e22dad62c1f7fb1ee3b857b7200dc1406220dedf7b15cb5eef2d735ead4f26",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
       "status": "passed"
     },
@@ -361,9 +393,9 @@
       "test": "MacControllerJourneyUITests/testStatsChordTogglesVisibleOverlay",
       "device": "mac",
       "theme": "dark",
-      "definition": "7db2f86807cc43e107fb348dab1ba2a952ce500440bde0065a02fadb88b674b5",
+      "definition": "d0e22dad62c1f7fb1ee3b857b7200dc1406220dedf7b15cb5eef2d735ead4f26",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap": {
       "history": [
@@ -381,9 +413,9 @@
       "test": "MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap",
       "device": "mac",
       "theme": "light",
-      "definition": "4c4280c4f72daf46cbf615d074a51192ea82e1c1335ae465e759c446c0ca3dc7",
+      "definition": "45557ebc2fa0d4932213cac0fc878338566e73b443f4758cb031ab9574d78c39",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels": {
       "history": [
@@ -410,9 +442,9 @@
       "test": "MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels",
       "device": "mac",
       "theme": "light",
-      "definition": "efa95f9f76a0922607ed2d39255bad57c37d708db34689274baae45025370a7c",
+      "definition": "6af14710b21788eeff748fa00929ce4d0d66a53e6784cfccbd890f6044874a2c",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/light/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap": {
       "history": [
@@ -464,9 +496,9 @@
       "test": "MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap",
       "device": "mac",
       "theme": "light",
-      "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
+      "definition": "8cc483991189377e80ebf53e0af3e7a82d9e08cea3bf4b31923837e858d8437d",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap": {
       "history": [
@@ -500,9 +532,9 @@
       "test": "MacControllerJourneyUITests/testPlayStationGlyphLabelsAndRecordedStopRemap",
       "device": "mac",
       "theme": "dark",
-      "definition": "10bbada51220e98c3de6a73098a7dfecef474caacc104f67244e2792914148f6",
+      "definition": "8cc483991189377e80ebf53e0af3e7a82d9e08cea3bf4b31923837e858d8437d",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ios/all/render": {
       "history": [
@@ -567,9 +599,9 @@
       "test": "MacControllerJourneyUITests/testControllerContextActionsAndBack",
       "device": "mac",
       "theme": "dark",
-      "definition": "32566d2028ca712ce881f2776a2c0f1b0d5ee8c3f659c99a338ac0697e124829",
+      "definition": "9594a5b53d9b356afb39ab3ed58686d5e123a2201c12b582659718c07dc83640",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap": {
       "history": [
@@ -596,9 +628,9 @@
       "test": "MacControllerJourneyUITests/testRightHandedMouseWithRecordedClickRemap",
       "device": "mac",
       "theme": "dark",
-      "definition": "4c4280c4f72daf46cbf615d074a51192ea82e1c1335ae465e759c446c0ca3dc7",
+      "definition": "45557ebc2fa0d4932213cac0fc878338566e73b443f4758cb031ab9574d78c39",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "mac/dark/MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels": {
       "history": [
@@ -625,9 +657,9 @@
       "test": "MacControllerJourneyUITests/testLeftHandedMouseMatchesLabels",
       "device": "mac",
       "theme": "dark",
-      "definition": "efa95f9f76a0922607ed2d39255bad57c37d708db34689274baae45025370a7c",
+      "definition": "6af14710b21788eeff748fa00929ce4d0d66a53e6784cfccbd890f6044874a2c",
       "source": "GlimmerUITests/MacControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/light/ControllerJourneyUITests/testControllerOnlyLaunchAndStopChord": {
       "history": [
@@ -735,13 +767,29 @@
           "run": "40739393548",
           "source_note": "",
           "recorded_at": "2026-10-28T18:03:35.564230+00:00"
+        },
+        {
+          "definition": "8175ecdb31a35601608f5c47a49936c12e192b2ab35c58b4fed28f4062f3dc52",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-29T13:21:35.462869+00:00"
+        },
+        {
+          "sha": "f4428b5fbb1f5573fbe93d3ce674da5eeecf193d",
+          "definition": "8175ecdb31a35601608f5c47a49936c12e192b2ab35c58b4fed28f4062f3dc52",
+          "status": "passed",
+          "evidence": "iphone-light-ef6429d9-3947-428c-9a85-d0de89c1ad61",
+          "run": "40881119266",
+          "source_note": "",
+          "recorded_at": "2026-10-29T13:32:17.152623+00:00"
         }
       ],
       "key": "iphone/light/ControllerJourneyUITests/testPlayStationInputAndStopChord",
       "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
       "device": "iphone",
       "theme": "light",
-      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "definition": "8175ecdb31a35601608f5c47a49936c12e192b2ab35c58b4fed28f4062f3dc52",
       "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
       "status": "passed"
     },
@@ -777,9 +825,9 @@
       "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
       "device": "iphone",
       "theme": "dark",
-      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "definition": "8175ecdb31a35601608f5c47a49936c12e192b2ab35c58b4fed28f4062f3dc52",
       "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/light/ControllerJourneyUITests/testPlayStationInputAndStopChord": {
       "history": [
@@ -823,9 +871,9 @@
       "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
       "device": "ipad",
       "theme": "light",
-      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "definition": "8175ecdb31a35601608f5c47a49936c12e192b2ab35c58b4fed28f4062f3dc52",
       "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/dark/ControllerJourneyUITests/testPlayStationInputAndStopChord": {
       "history": [
@@ -860,9 +908,9 @@
       "test": "ControllerJourneyUITests/testPlayStationInputAndStopChord",
       "device": "ipad",
       "theme": "dark",
-      "definition": "0b46e0fa773ed501699f692cee0dfa683d47a826c6d03e0aa3bc8e648b3285fd",
+      "definition": "8175ecdb31a35601608f5c47a49936c12e192b2ab35c58b4fed28f4062f3dc52",
       "source": "iOS/GlimmerUITests/ControllerJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/light/ControllerJourneyUITests/testXboxInputStatsAndPartialChords": {
       "history": [
@@ -1051,9 +1099,9 @@
       "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
       "device": "iphone",
       "theme": "light",
-      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "definition": "e9441bbb753ce263a8447dd59ef17d04728494104782c7c39b691e1045324ef5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
       "history": [
@@ -1087,9 +1135,9 @@
       "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
       "device": "iphone",
       "theme": "dark",
-      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "definition": "e9441bbb753ce263a8447dd59ef17d04728494104782c7c39b691e1045324ef5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/light/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
       "history": [
@@ -1133,9 +1181,9 @@
       "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
       "device": "ipad",
       "theme": "light",
-      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "definition": "e9441bbb753ce263a8447dd59ef17d04728494104782c7c39b691e1045324ef5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/dark/ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap": {
       "history": [
@@ -1170,9 +1218,9 @@
       "test": "ControllerJourneyUITests/testRightHandedMouseAndControllerRecordedClickRemap",
       "device": "ipad",
       "theme": "dark",
-      "definition": "a0340d02755ce586bc681813a8b2fffd683e2509d77649d459504439e0821d73",
+      "definition": "e9441bbb753ce263a8447dd59ef17d04728494104782c7c39b691e1045324ef5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
       "history": [
@@ -1190,9 +1238,9 @@
       "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
       "device": "iphone",
       "theme": "light",
-      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "definition": "811539c00b2a840a7bc020914bec52438b2ee5129d7c9ac60a928f616c46171c",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
       "history": [
@@ -1210,9 +1258,9 @@
       "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
       "device": "iphone",
       "theme": "dark",
-      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "definition": "811539c00b2a840a7bc020914bec52438b2ee5129d7c9ac60a928f616c46171c",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/light/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
       "history": [
@@ -1230,9 +1278,9 @@
       "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
       "device": "ipad",
       "theme": "light",
-      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "definition": "811539c00b2a840a7bc020914bec52438b2ee5129d7c9ac60a928f616c46171c",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/dark/ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels": {
       "history": [
@@ -1250,9 +1298,9 @@
       "test": "ControllerJourneyUITests/testLeftHandedMousePresetMatchesItsLabels",
       "device": "ipad",
       "theme": "dark",
-      "definition": "297b9396344d465126f873e90ef2c26608015bf1ade855452acaa0b49e246067",
+      "definition": "811539c00b2a840a7bc020914bec52438b2ee5129d7c9ac60a928f616c46171c",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
       "history": [
@@ -1270,9 +1318,9 @@
       "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
       "device": "iphone",
       "theme": "light",
-      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "definition": "c770dbaa6731c6069bbe53e914b031cf35d51c69470fbe0c87ca8a702cfc69a5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
       "history": [
@@ -1290,9 +1338,9 @@
       "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
       "device": "iphone",
       "theme": "dark",
-      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "definition": "c770dbaa6731c6069bbe53e914b031cf35d51c69470fbe0c87ca8a702cfc69a5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/light/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
       "history": [
@@ -1310,9 +1358,9 @@
       "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
       "device": "ipad",
       "theme": "light",
-      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "definition": "c770dbaa6731c6069bbe53e914b031cf35d51c69470fbe0c87ca8a702cfc69a5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/dark/ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls": {
       "history": [
@@ -1330,9 +1378,9 @@
       "test": "ControllerJourneyUITests/testMouseModeBadgeStaysClearWithStatsAndTouchControls",
       "device": "ipad",
       "theme": "dark",
-      "definition": "7c34e760e7f474ab2585cca338a9e96aed5c36bb81bcc0b0a38b93da8bdce2c0",
+      "definition": "c770dbaa6731c6069bbe53e914b031cf35d51c69470fbe0c87ca8a702cfc69a5",
       "source": "iOS/GlimmerUITests/ControllerMouseJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
       "history": [
@@ -1360,15 +1408,31 @@
           "run": "40739393548",
           "source_note": "",
           "recorded_at": "2026-10-28T18:03:35.565081+00:00"
+        },
+        {
+          "definition": "9b409f45d4a551e6c43799066ae4423c5e83e17c377f432cf26a5019a1aa8f4a",
+          "status": "pending",
+          "sha": null,
+          "source_note": "Affected-case rerun requested; previous pass retained as history",
+          "recorded_at": "2026-10-29T13:21:35.462903+00:00"
+        },
+        {
+          "sha": "f4428b5fbb1f5573fbe93d3ce674da5eeecf193d",
+          "definition": "9b409f45d4a551e6c43799066ae4423c5e83e17c377f432cf26a5019a1aa8f4a",
+          "status": "failed",
+          "evidence": "iphone-light-ef6429d9-3947-428c-9a85-d0de89c1ad61",
+          "run": "40881119266",
+          "source_note": "",
+          "recorded_at": "2026-10-29T13:32:17.153469+00:00"
         }
       ],
       "key": "iphone/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
       "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
       "device": "iphone",
       "theme": "light",
-      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "definition": "9b409f45d4a551e6c43799066ae4423c5e83e17c377f432cf26a5019a1aa8f4a",
       "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
-      "status": "passed"
+      "status": "failed"
     },
     "iphone/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
       "history": [
@@ -1402,9 +1466,9 @@
       "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
       "device": "iphone",
       "theme": "dark",
-      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "definition": "9b409f45d4a551e6c43799066ae4423c5e83e17c377f432cf26a5019a1aa8f4a",
       "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/light/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
       "history": [
@@ -1448,9 +1512,9 @@
       "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
       "device": "ipad",
       "theme": "light",
-      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "definition": "9b409f45d4a551e6c43799066ae4423c5e83e17c377f432cf26a5019a1aa8f4a",
       "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "ipad/dark/ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit": {
       "history": [
@@ -1485,9 +1549,9 @@
       "test": "ControllerJourneyUITests/testMenuHoldRevealsControllerUsableExit",
       "device": "ipad",
       "theme": "dark",
-      "definition": "956fc6c97bbdbce7188d2044dcda5d1663e81284a3acaac4a3d4f559f6ba7094",
+      "definition": "9b409f45d4a551e6c43799066ae4423c5e83e17c377f432cf26a5019a1aa8f4a",
       "source": "iOS/GlimmerUITests/ControllerSettingsJourneyUITests.swift",
-      "status": "passed"
+      "status": "pending"
     },
     "iphone/light/ControllerJourneyUITests/testPlayStationLabelsAndRecordedStopRemap": {
       "history": [

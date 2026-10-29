@@ -21,7 +21,8 @@ extension ControllerJourneyUITests {
         XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
         try press("menu", duration: 2700)
         XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        // Cover visible video outside the safe area, away from the camera cutout.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.15)).tap()
         XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
         try controller(connect: false)
         XCTAssertTrue(app.buttons["A"].waitForExistence(timeout: 5))
