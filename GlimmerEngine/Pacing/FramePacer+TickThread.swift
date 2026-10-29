@@ -172,6 +172,9 @@ final class PacerTickThread: @unchecked Sendable {
         stopRequested = true
         let cf = cfRunLoop
         let exitSignal = exited
+        #if DEBUG
+        let stoppingOnTickThread = thread === Thread.current
+        #endif
         runLoop = nil
         cfRunLoop = nil
         thread = nil
@@ -181,11 +184,10 @@ final class PacerTickThread: @unchecked Sendable {
         // join - return before touching the (already-signalled-or-unused) exit.
         guard let cf else { return }
         CFRunLoopStop(cf)
-        // DEBUG-only bounded join: confirm the loop actually returned so a missed
-        // CFRunLoopStop (defense-in-depth - the cross-thread stop on this single-
-        // level loop is reliable) would trip the assert instead of silently
-        // orphaning a high-QoS thread. Release teardown SKIPS this entirely.
+        // A callback can release the last pacer reference on this thread.
+        // It must return before the run loop can exit; only other threads join.
         #if DEBUG
+        guard !stoppingOnTickThread else { return }
         let r = exitSignal.wait(timeout: .now() + .milliseconds(50))
         assert(r == .success, "pacer tick thread did not exit")
         #endif

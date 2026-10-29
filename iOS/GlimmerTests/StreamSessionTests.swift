@@ -99,7 +99,10 @@ struct StreamSessionTests {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
         window.addSubview(surface)
         defer { surface.removeFromSuperview() }
-        let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface) { quiesces += 1 }
+        var pacingStarts = 0
+        let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface,
+                                               startPacing: { _, _, _ in pacingStarts += 1 },
+                                               quiesce: { quiesces += 1 })
         let expected = try testLaunch().profile.resolve(surface: surface)
         #expect(playback.format == expected)
         await playback.stop()
@@ -114,6 +117,8 @@ struct StreamSessionTests {
         }
         #expect(stopped == 1)
         await #expect(throws: CancellationError.self) { try await playback.start() }
+        #expect(pacingStarts == 0)
+        #expect(quiesces == 1)
     }
 
     @Test func unavailableDisplayEndsBeforeMediaOrIdleTimerChanges() {

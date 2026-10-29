@@ -77,6 +77,13 @@ struct StreamPlayback {
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
+        try make(launch: launch, surface: surface,
+                 startPacing: { $0.startPacing(display: $1, configuredFps: $2) }, quiesce: quiesce)
+    }
+
+    static func make(launch: StreamLaunch, surface: StreamSurface,
+                     startPacing: @escaping @MainActor @Sendable (VideoDecoder, PacerDisplay, Int32) -> Void,
+                     quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
         guard let screen = surface.window?.windowScene?.screen else { throw StreamProfile.Failure.displayUnavailable }
         let pixels = surface.streamPixels
         let native = try launch.profile.resolve(surface: surface, useScreenSize: launch.useScreenSize)
@@ -96,21 +103,15 @@ struct StreamPlayback {
         let audio = AudioDecoder(platform: IOSAudio.platform(environment: {
             StreamSession.audioEnvironment(host: pcID)
         }))
-        video.rebuildDisplayLayerHook = { [weak surface, weak video] in
-            guard let video else { return nil }
-            return surface?.replaceDisplayLayer { video.attach(to: $0) }
-        }
-        video.attach(to: surface.displayLayer)
-        let stats = StreamStats(surface: surface, snapshot: { video.overlaySnapshot() },
-            collection: { video.statsOverlayEnabled = $0 }, videoSize: { video.overlayVideoSize },
-            backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance },
-            chromeSampling: { video.overlayChromeEnabled = $0 }, observeBackdrop: { video.observeBackdrop($0) })
+        let stats = preparePresentation(surface: surface, video: video)
         let nativeInput = NativeInputLifetime()
+        let lifetime = PlaybackStartLifetime()
         let adaptive = AdaptiveBandwidth.isEnabled()
         let bandwidth = BandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
             quiesce: { nativeInput.focus(false); quiesce() },
             finalDispose: {
+                lifetime.stop()
                 stats.setChromeVisible(false)
                 stats.setVisible(false)
                 nativeInput.stop()
@@ -121,33 +122,37 @@ struct StreamPlayback {
             bandwidthInputs: bandwidth.inputs, adaptiveBandwidth: adaptive)
         configureInput(input)
         nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))
-        return StreamPlayback(id: session.id, events: session.events, start: {
+        return StreamPlayback(id: session.id, events: session.events, start: { @MainActor in
+            try lifetime.checkActive()
             if launch.continuing {
                 await session.requireContinuation(previous: launch.useScreenSize ? launch.previousFormat : nil)
             }
             if let occupant = launch.approvedOccupant { await session.approveReplacement(of: occupant) }
             let address = await launch.network.destinationAddress()
-            try Task.checkCancellation()
-            await bandwidth.start(host: address)
-            // Low Data Mode starts at the reduced listed mode; the session moves sizes on later edges.
-            if adaptive { await bandwidth.waitForPath() }
-            // A continued game keeps its known size, so it never trades sizes for Low Data Mode.
-            let sized = adaptive && !launch.continuing
-            let started = formats.start(lowData: sized && bandwidth.inputs.snapshot().path.constrained == true)
-            await MainActor.run { video.startPacing(display: surface.pacerDisplay, configuredFps: started.pacingFPS) }
+            try lifetime.checkActive()
+            bandwidth.start(host: address)
             do {
+                // Low Data Mode starts at the reduced listed mode; the session moves sizes on later edges.
+                if adaptive { await bandwidth.waitForPath() }
+                try lifetime.checkActive()
+                // A continued game keeps its known size, so it never trades sizes for Low Data Mode.
+                let sized = adaptive && !launch.continuing
+                let started = formats.start(lowData: sized && bandwidth.inputs.snapshot().path.constrained == true)
+                startPacing(video, surface.pacerDisplay, started.pacingFPS)
                 try await session.start(appID: launch.appID,
                                         configuration: started.configuration(potentialEDRHeadroom: headroom,
                                                                             sizes: sized ? formats.sizes : nil))
                 // Fixed quality needs launch-time route facts, but no path observation during play.
-                if !adaptive { await bandwidth.stop() }
+                if !adaptive { bandwidth.stop() }
                 return StreamStart(format: started, startKbps: await session.adaptiveStartKbps)
             } catch {
-                await bandwidth.stop()
+                bandwidth.stop()
                 throw error
             }
-        }, stop: { await session.stop() }, screenChanged: { video.pacingScreenDidChange() },
-           quit: {
+        }, stop: { @MainActor in lifetime.stop(); await session.stop() },
+           screenChanged: { video.pacingScreenDidChange() },
+           quit: { @MainActor in
+               lifetime.stop()
                await session.disconnectLeavingGameRunning()
                try await StreamSession.quitRunningApp(network: launch.network, expectedAppID: launch.appID)
            }, input: input, focusInput: nativeInput.focus, format: format,
@@ -159,5 +164,28 @@ struct StreamPlayback {
            showTouchControls: nativeInput.showTouchControls,
            requestFormatChange: { await StreamWindowResize.request($0, session: session) }, showStats: stats.setVisible,
            showOverlayChrome: stats.setChromeVisible)
+    }
+
+    private static func preparePresentation(surface: StreamSurface, video: VideoDecoder) -> StreamStats {
+        video.rebuildDisplayLayerHook = { [weak surface, weak video] in
+            guard let video else { return nil }
+            return surface?.replaceDisplayLayer { video.attach(to: $0) }
+        }
+        video.attach(to: surface.displayLayer)
+        return StreamStats(surface: surface, snapshot: { video.overlaySnapshot() },
+            collection: { video.statsOverlayEnabled = $0 }, videoSize: { video.overlayVideoSize },
+            backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance },
+            chromeSampling: { video.overlayChromeEnabled = $0 }, observeBackdrop: { video.observeBackdrop($0) })
+    }
+}
+
+// Native startup must not recreate resources after the session's terminal disposal.
+@MainActor
+private final class PlaybackStartLifetime {
+    private var stopped = false
+    func stop() { stopped = true }
+    func checkActive() throws {
+        try Task.checkCancellation()
+        if stopped { throw CancellationError() }
     }
 }
