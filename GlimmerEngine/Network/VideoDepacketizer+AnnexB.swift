@@ -13,11 +13,22 @@ extension VideoDepacketizer {
 
     static func isIdrFrameStart<Bytes: RandomAccessCollection>(_ payload: Bytes, hevc: Bool) -> Bool
     where Bytes.Element == UInt8, Bytes.Index == Int {
-        guard var marker = nextNALMarker(payload, from: payload.startIndex),
-              payload[payload.startIndex..<marker.start].allSatisfy({ $0 == 0 }) else { return false }
+        idrEvidence(payload, hevc: hevc) == true
+    }
+
+    // Nil when the bytes end before the answer: a payload cut inside a start code, a NAL header
+    // or a metadata NAL. The caller decides again once the access unit is whole.
+    static func idrEvidence<Bytes: RandomAccessCollection>(_ payload: Bytes, hevc: Bool) -> Bool?
+    where Bytes.Element == UInt8, Bytes.Index == Int {
+        guard var marker = nextNALMarker(payload, from: payload.startIndex) else {
+            return payload.allSatisfy { $0 == 0 } ? nil : false
+        }
+        guard payload[payload.startIndex..<marker.start].allSatisfy({ $0 == 0 }) else { return false }
         while true {
             let headerSize = hevc ? 2 : 1
-            guard payload.endIndex - marker.header >= headerSize else { return false }
+            guard payload.endIndex - marker.header >= headerSize else {
+                return payload.endIndex > marker.header && payload[marker.header] & 0x80 != 0 ? false : nil
+            }
             let byte = payload[marker.header]
             guard byte & 0x80 == 0 else { return false }
             if hevc, payload[marker.header + 1] & 7 == 0 { return false }
@@ -26,8 +37,9 @@ extension VideoDepacketizer {
                 return hevc ? payload[marker.header + 1] & 7 == 1 : byte & 0x60 != 0
             }
             let metadata = hevc ? kind == 35 || kind == 39 : kind == 9 || kind == 6
-            guard metadata, hevc || byte & 0x60 == 0, let following = nextNALMarker(payload, from: marker.header),
-                  following.start - marker.header > headerSize else { return false }
+            guard metadata, hevc || byte & 0x60 == 0 else { return false }
+            guard let following = nextNALMarker(payload, from: marker.header) else { return nil }
+            guard following.start - marker.header > headerSize else { return false }
             marker = following
         }
     }

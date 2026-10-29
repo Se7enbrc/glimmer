@@ -17,6 +17,9 @@ package struct HUDBackdropState {
     package var luminance: Double?
     package var pixelFormat: OSType?
     package var transfer: String?
+    package var intervalNanos = VideoDecoder.backdropSampleIntervalNanos
+    /// Called on the present path with each reading, so chrome reacts without a main-thread timer.
+    package var observer: (@Sendable (Double) -> Void)?
 }
 
 /// A read-only view of a decoded frame's luma plane.
@@ -35,6 +38,8 @@ struct LumaPlane {
 extension VideoDecoder {
 
     nonisolated static let backdropSampleIntervalNanos: UInt64 = 250_000_000
+    /// Chrome alone only needs to follow scene changes, so it samples once a second.
+    nonisolated static let chromeSampleIntervalNanos: UInt64 = 1_000_000_000
     nonisolated static let backdropGridColumns = 16
     nonisolated static let backdropGridRows = 8
 
@@ -56,8 +61,14 @@ extension VideoDecoder {
 
     package var hudBackdropState: HUDBackdropState { backdropBox.withLock { $0 } }
 
-    nonisolated static func backdropSampleDue(now: UInt64, last: UInt64) -> Bool {
-        last == 0 || now &- last >= backdropSampleIntervalNanos
+    /// Receives each brightness reading on the present path; nil stops the callbacks.
+    public func observeBackdrop(_ observer: (@Sendable (Double) -> Void)?) {
+        backdropBox.withLock { $0.observer = observer }
+    }
+
+    nonisolated static func backdropSampleDue(now: UInt64, last: UInt64,
+                                              interval: UInt64 = backdropSampleIntervalNanos) -> Bool {
+        last == 0 || now &- last >= interval
     }
 
     /// Called after a frame reaches the renderer. One uncontended lock when idle; never waits.
@@ -65,7 +76,8 @@ extension VideoDecoder {
         let now = DispatchTime.now().uptimeNanoseconds
         let claimed: CGRect? = backdropBox.withLock { state in
             guard state.overlayEnabled, !state.rect.isEmpty,
-                  Self.backdropSampleDue(now: now, last: state.lastSampleNanos) else { return nil }
+                  Self.backdropSampleDue(now: now, last: state.lastSampleNanos, interval: state.intervalNanos)
+            else { return nil }
             state.lastSampleNanos = now
             return state.rect
         }
@@ -73,13 +85,15 @@ extension VideoDecoder {
         let luminance = Self.backdropLuminance(of: pixelBuffer, in: rect)
         let transfer = CVBufferCopyAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey, nil) as? String
         let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
-        backdropBox.withLock {
+        let observer: (@Sendable (Double) -> Void)? = backdropBox.withLock {
             // A layout change or hide must not publish a reading from the old region.
-            guard $0.overlayEnabled, $0.rect == rect else { return }
+            guard $0.overlayEnabled, $0.rect == rect else { return nil }
             $0.luminance = luminance
             $0.pixelFormat = format
             $0.transfer = transfer
+            return $0.observer
         }
+        if let luminance { observer?(luminance) }
     }
 
     nonisolated static func backdropLuminance(of pixelBuffer: CVPixelBuffer, in rect: CGRect) -> Double? {

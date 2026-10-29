@@ -44,6 +44,23 @@ struct LauncherControllerTests {
                                                columns: 2, hasSwitcher: true) == .pc)
     }
 
+    @Test func nativeMenuKeepsPollingAcrossNeutralInputUntilTrackingEnds() {
+        let pad = GCController.withExtendedGamepad()
+        let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        let controller = LauncherController(navigationEnabled: { true }, availableControllers: { [pad] })
+        defer { controller.detach() }
+        controller.attach(window: window)
+        #expect(!controller.isPolling)
+        let menu = NSMenu()
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: menu)
+        #expect(controller.isPolling)
+        controller.poll(inputs: [ObjectIdentifier(pad): .init()])
+        #expect(controller.isPolling)
+        NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: menu)
+        controller.poll(inputs: [ObjectIdentifier(pad): .init()])
+        #expect(!controller.isPolling)
+    }
+
     @Test func pairingSheetReceivesDirectionsAndActivationAfterNeutralInput() {
         let sheet = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         let window = PairingParentWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)

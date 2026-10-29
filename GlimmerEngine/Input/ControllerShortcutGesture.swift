@@ -25,21 +25,25 @@ public struct ControllerShortcutGesture: Sendable {
     }
 
     public var suppressing: ControllerPhysicalChord? {
-        latched.map { $0 == .stop ? stop : stats }
+        (latched ?? candidate).map { $0 == .stop ? stop : stats }
     }
 
     public mutating func update(_ sample: ControllerMappingSample, at now: TimeInterval) -> ControllerShortcutAction? {
-        guard now.isFinite, now >= lastTime else { reset(); return nil }
+        guard now.isFinite else { reset(); return nil }
+        // A hold timer can overtake a queued native report without ending the physical hold.
+        let now = max(now, lastTime)
         lastTime = now
         if let deadline, now >= deadline, let candidate {
             latched = candidate
             self.deadline = nil
             self.candidate = nil
+            if suppressing?.released(in: sample) == true { reset() }
+            return candidate
         }
-        if let latched, let chord = suppressing {
+        if latched != nil, let chord = suppressing {
             guard chord.released(in: sample) else { return nil }
             reset()
-            return latched
+            return nil
         }
         let stopHeld = stop.held(in: sample)
         let statsHeld = stats.held(in: sample)

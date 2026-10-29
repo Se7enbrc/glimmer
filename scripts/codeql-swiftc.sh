@@ -11,4 +11,5 @@ set -euo pipefail
 test -x "$GLIMMER_SWIFTC"
 test -f "$SEMMLE_PRELOAD_libtrace"
 export DYLD_INSERT_LIBRARIES="$SEMMLE_PRELOAD_libtrace"
-exec "$GLIMMER_SWIFTC" "$@"
+# Two platform builds share a three-core hosted runner; cap each compiler's WMO threads.
+exec "$GLIMMER_SWIFTC" "$@" -num-threads 1

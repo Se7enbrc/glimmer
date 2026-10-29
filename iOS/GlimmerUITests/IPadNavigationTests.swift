@@ -46,7 +46,7 @@ final class IPadNavigationTests: XCTestCase {
             XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
             app.buttons["Desktop"].tap()
             app.openStreamControls()
-            XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.buttons["Disconnect"].isHittable)
             recordScreen(app, name: "whole-window-native-stream-\(orientation.rawValue)")
             app.buttons["Disconnect"].tap()
@@ -103,7 +103,7 @@ final class IPadNavigationTests: XCTestCase {
         recordScreen(app, name: "whole-window-\(mode)-launcher")
         app.buttons["Desktop"].tap()
         app.openStreamControls()
-        XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Disconnect"].isHittable)
         XCTAssertLessThan(app.windows.firstMatch.frame.width, app.windows.firstMatch.frame.height)
         recordScreen(app, name: "whole-window-\(mode)-stream")
@@ -180,7 +180,6 @@ final class IPadNavigationTests: XCTestCase {
         let suffix = largeText ? "ax5" : "default"
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
-        app.connectHardwareKeyboard()
         recordScreen(app, name: "native-window-full-\(suffix)")
         app.buttons.matching(identifier: "Living room gaming PC 1").firstMatch.tap()
         let lastPC = app.buttons["pc-picker-fixture-11"]
@@ -192,7 +191,8 @@ final class IPadNavigationTests: XCTestCase {
         XCTAssertEqual(lastPC.label, "Living room gaming PC 12")
         XCTAssertTrue(lastPC.isHittable)
         recordScreen(app, name: "native-pc-picker-\(suffix)")
-        app.typeKey(".", modifierFlags: .command)
+        // With no first responder, UIKit routes keys to the menu or its source button; a tap outside always closes it.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
         XCTAssertTrue(lastPC.waitForNonExistence(timeout: 5))
         if min(app.windows.firstMatch.frame.width, app.windows.firstMatch.frame.height) >= 700 {
             let fullSize = app.windows.firstMatch.frame.size

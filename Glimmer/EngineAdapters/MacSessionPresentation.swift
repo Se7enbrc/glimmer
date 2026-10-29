@@ -23,7 +23,10 @@ extension SessionPresentation {
             if let text { window.reconnectBanner.setText(text) }
             window.reconnectBanner.setVisible(text != nil)
         }
-        hideOverlay = { window.statsOverlay.setVisible(false) }
+        hideOverlay = {
+            window.statsOverlay.setVisible(false)
+            for notice in window.notices { notice.removeWithStream() }
+        }
         close = { window.close() }
         waitForVisualClose = { await window.waitForVisualClose() }
         setCursorHidden = { window.setCursorHidden($0) }

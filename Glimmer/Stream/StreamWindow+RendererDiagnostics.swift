@@ -70,10 +70,7 @@ extension StreamWindow {
         let presented = layer.presentation() ?? layer
         guard !presented.isHidden, presented.opacity > 0 else { return }
         // Fixed roles and runtime classes are public-safe; arbitrary layer names and text contents are not.
-        let roles = [(statsOverlay.layer, "stats"), (reconnectBanner.layer, "reconnect"),
-                     (networkBanner.layer, "network"), (leaveHintBanner.layer, "leaveHint"),
-                     (captureHintBanner.layer, "captureHint")]
-        let role = roles.first { $0.0 === layer }?.1 ?? "unnamed"
+        let role = layer === statsOverlay.layer ? "stats" : "unnamed"
         result.append("\(path):\(role)/\(String(describing: type(of: layer)))"
             + "{opacity=\(layer.opacity),hidden=\(layer.isHidden),animated=\(Self.rendererHasAnimations(layer)),"
             + "pOpacity=\(presented.opacity),pHidden=\(presented.isHidden)}")

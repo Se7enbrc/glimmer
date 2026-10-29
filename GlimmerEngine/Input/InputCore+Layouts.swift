@@ -138,15 +138,16 @@ extension InputCore {
             removeLayout(slot: slot)
         }
         current[slot] = (Int32(bitPattern: sample.buttons), sample.gamepadAnalog)
-        let wasLatched = state.gesture.latched != nil
+        let previousSuppression = state.gesture.suppressing
         let action = state.gesture.update(sample, at: now)
         let suppression = state.gesture.suppressing
-        if !wasLatched, suppression != nil {
+        if previousSuppression != suppression, suppression != nil {
             let sameButtons = sample.buttons == gameSample.buttons && sample.analog[0] == gameSample.analog[0]
                 && sample.analog[1] == gameSample.analog[1]
             // A system remap has no compiled plan; release its held outputs conservatively.
             state.systemSuppression = sameButtons ? suppression : ControllerPhysicalChord(sample: gameSample)
         }
+        if suppression == nil { state.systemSuppression = nil }
         let filtered = suppression?.removing(from: sample) ?? sample
         let system = state.systemSuppression?.removing(from: gameSample) ?? gameSample
         let consumes = suppression != nil || action != nil
@@ -162,10 +163,7 @@ extension InputCore {
             }
         }
         scheduleLayoutHold(state, slot: slot, at: now)
-        if let action {
-            state.systemSuppression = nil
-            if releases.pending.isEmpty { onControllerShortcut?(action) }
-        }
+        if let action, releases.pending.isEmpty { onControllerShortcut?(action) }
         if !activityPublished, needsReconciliation { activityPublished = true; onActivity?() }
         return consumes ? .chord : (isMouse ? .mouse : .forwarded)
     }

@@ -1,20 +1,23 @@
 # Controller and touch input
 
 The first video frame goes straight into play. Touch game controls appear when
-no supported physical controller is connected. Connecting a controller releases
-and hides touch controls before hardware input begins by default; removing the
-last one restores touch play. With hardware connected, touch remains a mouse.
-Opening the stream menu releases PC input. Resume returns input to the PC;
-connecting a controller never dismisses an explicitly opened menu. Disconnect
-quits the game on the PC unless Leave games running when you disconnect is on.
+no game controller, keyboard or mouse is connected. Connecting one releases and
+hides touch controls before hardware input begins by default; removing the last
+one restores touch play. With hardware connected, touch remains a mouse, and the
+stream controls stay reachable: tap the top of the picture or **…**, press
+Control-/, or hold a controller's Menu button. Opening the stream menu releases
+PC input. Resume returns input to the PC; connecting a controller never
+dismisses an explicitly opened menu. Disconnect quits the game on the PC unless
+Leave games running when you disconnect is on.
 
 ## Touch game controls
 
 For another player without a controller, open the stream's **…** menu and choose
-**Show touch controls**, then **Resume**. This item appears only while a
-physical controller is connected. **Hide touch controls** restores mouse-only
-touch. The choice lasts for this stream, including controller reconnects, and
-resets when the stream ends. It does not change Settings or the saved layout.
+**Show touch controls**, then **Resume**. This item appears only while a game
+controller, keyboard or mouse is connected. **Hide touch controls** restores
+mouse-only touch. The choice lasts for this stream, including controller
+reconnects, and resets when the stream ends. It does not change Settings or the
+saved layout.
 
 Use the fixed sticks, directional pad, face and shoulder buttons, triggers,
 stick clicks, Options and Menu. Press a trigger fully, then drag inward to
@@ -34,20 +37,26 @@ keeps its normal appearance. Select a control to reveal its separate Size row.
 Done remembers it with this app's layout; Cancel discards it and Reset layout
 restores the default. The range is 10% to 60%, with 20% selected initially.
 
-The controls follow Light and Dark appearance with quiet translucent fills over
-video. Held controls become clearer until you release them. They do not animate
-or poll while idle. Increase Contrast and Reduce Transparency change their
+The controls follow the brightness of the picture with quiet translucent fills.
+Held controls become clearer until you release them. The shared stats sampler
+checks at most four times a second while overlays are visible, and changes ink
+only after brightness crosses its hysteresis thresholds. Controls do not animate
+or redraw while idle. Increase Contrast and Reduce Transparency change their
 native appearance. VoiceOver offers Hold and Release, stick directions and
 Center, and adjustable trigger values. The editor supports Dynamic Type and
 arrow-key moves.
 
 ## Controller mouse mode
 
-Hold Menu alone for a second and release to open stream controls. Choose Use
-mouse mode or Use gamepad mode, then close the menu to return to play. The
-choice applies to the controller that opened the menu. Control-/ also opens
-controls from a keyboard; touch or click the picture's top strip to reveal the
-menu button.
+Tap **…** to open the stream menu. If it is hidden, tap the top of the picture
+to reveal it, or tap with three fingers to open it directly. With a controller,
+hold Menu alone for a second and release. Choose **Use mouse mode** or **Use
+gamepad mode**, then **Resume** to return to play. The choice applies to the
+controller that opened the menu.
+
+With a keyboard connected, Control-/ opens the stream menu, ⌃Z shows stream
+stats and ⌃Q disconnects. The last two shortcuts can be changed in Settings →
+Input. Touch and controller actions remain available without a keyboard.
 
 In Settings → Input, choose **Mouse stick** before starting a stream. Right is
 the default: the right stick moves the pointer, R2 left-clicks, R1 right-clicks,

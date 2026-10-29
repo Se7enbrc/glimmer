@@ -74,7 +74,11 @@ struct ControllerMouseSettingsView: View {
                 }
             } header: { Text("Mouse controls").foregroundStyle(.secondary) }
             Section {
+                #if os(iOS)
+                Text("Hold the mouse-mode toggle for 2 seconds to open stream controls, then choose a mode.")
+                #else
                 Text("Hold the mouse-mode toggle for a second and release to switch between the game and the mouse.")
+                #endif
                 Text("Bindings use physical controls in every game. A control already in use must be changed first.")
             }.controllerSettingsFootnote().foregroundStyle(.secondary)
             if let failure = failure ?? model.loadError { Section { Text(failure).foregroundStyle(.red) } }

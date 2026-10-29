@@ -23,9 +23,15 @@ final class ControllerLayoutReader: @unchecked Sendable {
 
     init?(_ controller: GCController) {
         guard let input = controller.input.unmapped else { return nil }
+        #if DEBUG
+        let snapshot = controller as? JourneySnapshotController
+        guard snapshot != nil || !input.buttons.isEmpty || !input.dpads.isEmpty else { return nil }
+        let discovery = snapshot.map(Self.journeyDiscovery) ?? Self.discover(input)
+        #else
         guard !input.buttons.isEmpty || !input.dpads.isEmpty else { return nil }
-        self.input = input
         let discovery = Self.discover(input)
+        #endif
+        self.input = input
         buttons = discovery.buttons
         extraButtons = discovery.extraButtons
         triggers = discovery.triggers
@@ -102,11 +108,7 @@ final class ControllerLayoutReader: @unchecked Sendable {
     }
 
     func shortcutElements(_ configuration: ControllerLayoutConfiguration) -> Set<ObjectIdentifier> {
-        Set(Self.shortcutNames(configuration, extras: extras).compactMap { name in
-            if let button = input.buttons[name] { return ObjectIdentifier(button) }
-            if let dpad = input.dpads[name] { return ObjectIdentifier(dpad) }
-            return nil
-        })
+        Set(Self.shortcutNames(configuration, extras: extras).compactMap { input.buttons[$0].map(ObjectIdentifier.init) })
     }
 
     static func shortcutNames(_ configuration: ControllerLayoutConfiguration, extras: [String]) -> Set<String> {
@@ -114,21 +116,19 @@ final class ControllerLayoutReader: @unchecked Sendable {
         let buttons = configuration.stop.buttons | configuration.stats.buttons | mouse.buttons
         let triggers = configuration.stop.triggers | configuration.stats.triggers | mouse.triggers
         let extraMask = configuration.stop.extras | configuration.stats.extras | mouse.extras
-        var names = Set(standardButtons.filter { buttons & $0.1.rawValue != 0 }.map(\.0))
+        // The system profile already delivers sticks, stick presses and the D-pad; a stick press aliases its stick.
+        let delivered = ControllerMappedButton.leftStick.rawValue | ControllerMappedButton.rightStick.rawValue
+        var names = Set(standardButtons.filter { buttons & ~delivered & $0.1.rawValue != 0 }.map(\.0))
         for (index, name) in [GCInputLeftTrigger, GCInputRightTrigger].enumerated() where triggers & (1 << index) != 0 {
             names.insert(name)
         }
         for (index, name) in extras.enumerated() where extraMask[index / 64] & (1 << (index % 64)) != 0 {
             names.insert(name)
         }
-        let directions: UInt32 = ControllerMappedButton.up.rawValue | ControllerMappedButton.down.rawValue
-            | ControllerMappedButton.left.rawValue | ControllerMappedButton.right.rawValue
-        if buttons & directions != 0 { names.insert(GCInputDirectionPad) }
-        // System-profile callbacks already sample physical sticks; custom layouts observe every physical element.
         return names
     }
 
-    private struct Discovery {
+    struct Discovery {
         var buttons: [(any GCPressedStateInput, UInt32)] = []
         var extraButtons: [any GCPressedStateInput] = []
         var triggers: [(any GCLinearInput, Int)] = []
@@ -219,27 +219,53 @@ enum ControllerStreamHandlers {
     static func install(controller: GCController, input: GCControllerLiveInput, queue: DispatchQueue,
                         mapsGameInput: Bool, shortcutElements: Set<ObjectIdentifier>,
                         read: @escaping @Sendable () -> ControllerMappingSample,
+                        now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
                         receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
         controller.extendedGamepad?.valueChangedHandler = nil
         input.elementValueDidChangeHandler = nil
+        ControllerButtonRoutes.set(controller, nil)
         controller.handlerQueue = queue
         input.queue = queue
         let timestamp = Mutex<TimeInterval>(0)
-        let deliver: @Sendable (TimeInterval) -> Void = { value in
+        let delivered = Mutex<ControllerMappingSample?>(nil)
+        let deliver: @Sendable (TimeInterval, Bool) -> Void = { value, onlyChanges in
+            let sample = read()
+            let changed = delivered.withLock { last in
+                defer { last = sample }
+                return last != sample
+            }
+            guard changed || !onlyChanges else { return }
             let now = timestamp.withLock { last in
                 last = max(last, value)
                 return last
             }
-            receive(read(), now)
+            receive(sample, now)
+        }
+        // A button route repeats what the profile already delivered unless the controller used only that route.
+        ControllerButtonRoutes.set(controller) { @Sendable _, _, _ in
+            deliver(now(), true)
         }
         if mapsGameInput || !shortcutElements.isEmpty {
             input.elementValueDidChangeHandler = { @Sendable input, element in
                 guard mapsGameInput || shortcutElements.contains(ObjectIdentifier(element)) else { return }
-                deliver(ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency))
+                deliver(now() - max(0, input.lastEventLatency), false)
             }
         }
         if !mapsGameInput {
-            controller.extendedGamepad?.valueChangedHandler = { @Sendable pad, _ in deliver(pad.lastEventTimestamp) }
+            // Live reads use the hold timer's uptime clock, not a profile-specific event clock.
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable _, _ in deliver(now(), false) }
         }
+    }
+}
+
+// Some controllers report gesture-capable buttons only through the button's own handler.
+enum ControllerButtonRoutes {
+    static func buttons(_ controller: GCController) -> [GCControllerButtonInput] {
+        guard let pad = controller.extendedGamepad else { return [] }
+        return [pad.buttonMenu, pad.buttonOptions, pad.buttonHome].compactMap { $0 }
+    }
+
+    static func set(_ controller: GCController, _ handler: GCControllerButtonValueChangedHandler?) {
+        for button in buttons(controller) { button.pressedChangedHandler = handler }
     }
 }

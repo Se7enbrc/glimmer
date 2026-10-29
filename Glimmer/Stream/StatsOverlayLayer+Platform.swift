@@ -20,6 +20,60 @@ typealias StatsInsets = UIEdgeInsets
 #endif
 
 extension StatsOverlayLayer {
+    /// iPhone and iPad grow the HUD with the window; the Mac keeps 2026.10.7's fixed size at any window size.
+    static func viewportScale(in size: CGSize) -> CGFloat {
+        #if os(macOS)
+        1
+        #else
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return 1 }
+        return min(1.6, max(1, sqrt(min(size.width, size.height) / 440)))
+        #endif
+    }
+
+    var resolvedLabelFont: StatsFont {
+        #if os(macOS)
+        Self.labelFont
+        #else
+        UIFont.preferredFont(forTextStyle: .caption2, compatibleWith: hudTraits)
+        #endif
+    }
+
+    var resolvedDetailFont: StatsFont {
+        #if os(macOS)
+        Self.detailFont
+        #else
+        UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(
+            forTextStyle: .footnote, compatibleWith: hudTraits).pointSize, weight: .medium)
+        #endif
+    }
+
+    func resolvedValueFont(bold: Bool) -> StatsFont {
+        #if os(macOS)
+        Self.platformValueFont(bold: bold)
+        #else
+        UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(
+            forTextStyle: .title3, compatibleWith: hudTraits).pointSize,
+            weight: bold ? .bold : .semibold)
+        #endif
+    }
+
+    #if os(iOS)
+    // The HUD stops growing at the largest standard size so accessibility sizes cannot bury the picture.
+    private var hudTraits: UITraitCollection? {
+        guard let traits = displayView?.traitCollection,
+              traits.preferredContentSizeCategory > .extraExtraExtraLarge else { return displayView?.traitCollection }
+        return traits.modifyingTraits { $0.preferredContentSizeCategory = .extraExtraExtraLarge }
+    }
+    #endif
+
+    var resolvedTextScale: CGFloat {
+        #if os(macOS)
+        1
+        #else
+        resolvedLabelFont.pointSize / 11
+        #endif
+    }
+
     static var platformLabelFont: StatsFont {
         #if os(macOS)
         NSFont.preferredFont(forTextStyle: .caption2, options: [:])
@@ -134,6 +188,15 @@ extension StatsOverlayLayer {
     }
 
     #if os(iOS)
+    /// A window smaller than its screen keeps the iPad's window controls in a top corner; overlays clear them.
+    static func overlayInsets(for view: UIView) -> UIEdgeInsets {
+        guard let window = view.window, let scene = window.windowScene,
+              window.bounds.size != scene.screen.bounds.size else {
+            return view.safeAreaInsets
+        }
+        return view.edgeInsets(for: .safeArea(cornerAdaptation: .vertical))
+    }
+
     func updateAccessibleRows(_ rows: [StatsRow], cap: String) {
         guard let view = displayView else { return }
         let value = isVisible

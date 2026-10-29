@@ -4,6 +4,8 @@ included:
   - Glimmer
   - GlimmerEngine
   - GlimmerTests
+  - GlimmerUITests
+  - JourneySupport
   - EnginePackageTests
   - helper
   - LoginHelper

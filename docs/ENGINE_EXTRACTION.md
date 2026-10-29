@@ -720,7 +720,7 @@ heading.
 | `StatsOverlayLayer+Rows.swift`             | A     | NSWindow / NSView / AppKit layer presentation; Mac shell.                                                             | 7     |
 | `StatsOverlayLayer+Traces.swift`           | A     | NSWindow / NSView / AppKit layer presentation; Mac shell.                                                             | 7     |
 | `StatsOverlayLayer.swift`                  | A     | NSWindow / NSView / AppKit layer presentation; Mac shell.                                                             | 7     |
-| `StreamBannerLayer.swift`                  | A     | NSWindow / NSView / AppKit layer presentation; Mac shell.                                                             | 7     |
+| `StreamBanner.swift`                       | A     | NSWindow / NSView / AppKit layer presentation; Mac shell.                                                             | 7     |
 | `StreamBridgeContext.swift`                | W     | StreamSession / InputForwarder weak references; session bridge stays app-side until slice 9.                          | 4/9   |
 | `StreamHistory.swift`                      | A     | StreamHistoryFeed feeds menu-bar UI at 4 Hz; pure shell history, no unavailable API.                                  | 9     |
 | `StreamInputView+Text.swift`               | A     | NSWindow / NSView / AppKit layer presentation; Mac shell.                                                             | 7     |

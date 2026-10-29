@@ -3,6 +3,7 @@
 
 import Foundation
 import GlimmerEngine
+import os
 import Testing
 @testable import Glimmer
 
@@ -19,6 +20,29 @@ struct ControllerLayoutRoutingTests {
     private func configuration(_ target: ControllerMappedButton) throws -> ControllerLayoutConfiguration {
         try .init(layout: .init(bindings: [.init(.button(.a), .button(target))]), shortcuts: nil,
                   available: [.button(.a), .button(.menu), .button(.options)])
+    }
+
+    @Test func legacyResyncDoesNotOverrideLaterPhysicalCenterButtons() throws {
+        let (core, backend) = rig()
+        let actions = OSAllocatedUnfairLock(initialState: [ControllerShortcutAction]())
+        core.onControllerShortcut = { action in actions.withLock { $0.append(action) } }
+        core.mouseQueue.suspend()
+        defer { core.mouseQueue.resume() }
+        let configuration = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil,
+            available: Set(ControllerMappedButton.allCases.map { .button($0) }))
+        core.configureLayout(configuration, slot: 0, held: .init(), at: 0)
+        let time = ProcessInfo.processInfo.systemUptime
+        // Focus resync can use the legacy profile before the physical-input callback arrives.
+        core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: time)
+        let held = StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG | StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG
+        core.receive(slot: 0, buttons: held, analog: InputCore.neutral, capturedAt: time + 0.1,
+                     physicalSample: .init(buttons: held, analog: InputCore.neutral))
+        let state = try #require(core.layouts?.states[0])
+        #expect(state.last.buttons == UInt32(bitPattern: held))
+        core.advanceLayoutHold(state, slot: 0, at: time + 0.6)
+        #expect(state.gesture.latched == .stop)
+        #expect(actions.withLock { $0 } == [.stop])
+        #expect(backend.calls.last?.buttons == 0)
     }
 
     @Test(arguments: [false, true])

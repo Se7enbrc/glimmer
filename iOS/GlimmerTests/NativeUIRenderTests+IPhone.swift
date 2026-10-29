@@ -208,8 +208,12 @@ extension NativeUIRenderTests {
         await model.waitUntilStopped()
         try await record(StreamControls(model: model, close: {}), name: "ended-status-layout", size: nil,
                          dark: true, textSize: .accessibility5, inspect: { view in
+            // The card is sized to its rows when they fit and scrolls only when they don't.
             let scrolls = inventoryScrollViews(in: view)
-            #expect(!scrolls.isEmpty, "The complete ended message must remain reachable at maximum text size.")
+            let card = try #require(model.overlayAppearance.menuFrame)
+            let screen = try #require(view.window).bounds
+            #expect(!scrolls.isEmpty || screen.contains(card),
+                    "The complete ended message must remain reachable at maximum text size.")
             #expect(scrolls.allSatisfy { $0.bounds.height > 0 })
         })
     }

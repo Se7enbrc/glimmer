@@ -88,7 +88,7 @@ struct ControllerMouseRenderTests {
             ControllerLayoutEditor(model: model, device: device, scope: .allGames)
         }, name: "layout-editor-\(style)", dark: dark)
         try await record(NavigationStack {
-            Form { ControllerShortcutSection(model: model, device: device) }.controllerSettingsForm()
+            Form { ControllerShortcutSection(model: model, device: device) { _ in } }.controllerSettingsForm()
                 .navigationTitle("Glimmer controls")
         }, name: "layout-shortcuts-\(style)", dark: dark)
         try await record(ControllerBindingRecorder(model: model, device: device, target: .shortcut(.stats)),

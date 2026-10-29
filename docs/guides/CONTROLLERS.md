@@ -52,7 +52,8 @@ open the stream menu and choose “Controller layouts”.
 ## Keep Glimmer's controls available
 
 Stop streaming and Stats use remappable physical-button shortcuts on Mac, iPhone
-and iPad. Hold the complete shortcut for about half a second, then release.
+and iPad. Hold the complete shortcut for about half a second. It acts once and
+waits for every button to release before it can act again.
 
 | Action             | Default                                  |
 | ------------------ | ---------------------------------------- |
@@ -64,8 +65,10 @@ and iPad. Hold the complete shortcut for about half a second, then release.
 3. Hold at least three buttons, then release to record the shortcut.
 
 Saved shortcuts remain independent of game button mappings. Ordinary presses
-reach the PC immediately. Use the stream menu to open controller layouts;
-keyboard Stop and the touch menu remain available.
+reach the PC immediately, including Start. Once the complete shortcut is down,
+Glimmer captures it. A Start press made before the other buttons can already
+have paused the game. Use the stream menu to open controller layouts; keyboard
+Stop and the touch menu remain available.
 
 ## Reset settings
 
@@ -92,8 +95,10 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 
 ## Use the controller as a mouse
 
-Hold the mouse-mode toggle for a second, then release to switch modes. The
-default is Menu (Options or Start on some controllers).
+On Mac, hold the mouse-mode toggle for a second, then release to switch modes.
+The default is Menu (Options or Start on some controllers). On iPhone and iPad,
+hold Menu for two seconds, then release to open stream controls; choose “Use
+mouse mode” there. A short press still reaches the game immediately.
 
 Settings › Input › Controller mouse offers the same presets on Mac, iPhone and
 iPad:
@@ -117,7 +122,8 @@ scrolls with two. A two-finger click right-clicks; a one-finger click clicks.
 
 On-screen controls appear when no controller is connected. Use “Show controls”
 or tap with three fingers to open the stream menu. Choose “Resume” to play
-again. With VoiceOver, choose the video's “Show controls” action.
+again, tap outside the menu, or press Circle/B on the controller. With
+VoiceOver, choose the video's “Show controls” action.
 
 Connecting a controller hides the touch gamepad. To add a touch player during
 that stream, open the menu, choose “Show touch controls”, then “Resume”. “Hide
@@ -144,7 +150,7 @@ for touch controls, enlarge it or connect a controller.
 
 {% hint style="warning" %}
 
-Save first. Hold your Stop shortcut, then release, to stop streaming.
+Save first. Hold your Stop shortcut for about half a second to stop streaming.
 Disconnecting quits the PC app by default. To keep it running, enable “Leave
 games running when you disconnect” in Settings › General before streaming.
 

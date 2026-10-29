@@ -82,7 +82,7 @@ final class StatsOverlayRefresh {
     /// The pill updates every tick, HUD or not; the HUD's enrichment, row set and
     /// thresholds are read only while it's shown, so a Settings flip lands next tick.
     func tick(
-        dec: VideoDecoder, overlay: StatsOverlayLayer, banner: StreamBannerLayer, input: InputForwarder?,
+        dec: VideoDecoder, overlay: StatsOverlayLayer, banner: StreamBanner, input: InputForwarder?,
         rows: @MainActor () -> Set<StatsRow.Kind>, thresholds: @MainActor () -> StatsThresholds,
         visible: Bool = true
     ) {

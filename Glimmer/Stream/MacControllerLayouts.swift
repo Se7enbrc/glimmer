@@ -198,6 +198,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
             for state in forwarder.attachedControllers.values {
                 state.controller?.extendedGamepad?.valueChangedHandler = nil
                 state.controller?.input.unmapped?.elementValueDidChangeHandler = nil
+                if let controller = state.controller { ControllerButtonRoutes.set(controller, nil) }
             }
             for state in forwarder.attachedControllers.values { state.restoreSystemState() }
         } else {

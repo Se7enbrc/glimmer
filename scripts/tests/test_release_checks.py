@@ -65,6 +65,16 @@ class RequiredChecksTests(FixtureTestCase):
                                   WORKFLOW, SHA, 2)
         self.assertEqual(CHECKS.latest_run([run()], WORKFLOW, SHA, 2)["id"], 1)
 
+    def test_acceptance_history_never_replaces_exact_commit_verification(self):
+        workflow = ".github/workflows/verify.yml"
+        verified = run(path=workflow, display_title="Verify")
+        for status in ("in_progress", "completed"):
+            acceptance = run(path=workflow, id=2, display_title="Release acceptance", status=status,
+                             updated_at="2026-10-10T20:00:00Z")
+            self.assertEqual(CHECKS.latest_run([verified, acceptance], workflow, SHA, 2)["id"], 1)
+            with self.assertRaises(ValueError):
+                CHECKS.latest_run([acceptance], workflow, SHA, 2)
+
     def test_spoofed_name_or_wrong_source_cannot_authorize(self):
         for changes in ({"path": ".github/workflows/fake.yml"}, {"workflow_id": 99},
                         {"head_sha": "c" * 40}, {"head_repository": {"full_name": "fork/glimmer"}},
@@ -136,9 +146,10 @@ class RequiredChecksTests(FixtureTestCase):
                 return [{"workflow_runs": [run(workflow_id=2 if workflow == WORKFLOW else 3, path=workflow,
                                               run_attempt=2, run_started_at="2026-10-09T21:00:00Z")]}]
             if "/jobs?" in path:
-                return [{"jobs": [*jobs.values(), {"name": "macOS", "head_sha": SHA,
-                                                  "status": "completed", "conclusion": "success",
-                                                  "run_id": 1, "run_attempt": 2, "head_branch": None}]}]
+                return [{"jobs": [*jobs.values(), *[{"name": name, "head_sha": SHA,
+                                                    "status": "completed", "conclusion": "success",
+                                                    "run_id": 1, "run_attempt": 2, "head_branch": None}
+                                                   for name in ("macOS",)]]}]
             if "analyses?" in path:
                 return [data]
             alert_queries.append(path)
@@ -206,7 +217,15 @@ class RequiredChecksTests(FixtureTestCase):
         with self.assertRaisesRegex(ValueError, "missing checks"):
             CHECKS.latest_run([run(head_sha=MERGE)], WORKFLOW, SHA, 2)
         with self.assertRaisesRegex(ValueError, "unexpected check trigger"):
-            CHECKS.latest_run([run(event="schedule")], WORKFLOW, SHA, 2)
+            CHECKS.latest_run([run(event="repository_dispatch")], WORKFLOW, SHA, 2)
+
+    def test_scheduled_validation_is_eligible_only_on_the_exact_commit(self):
+        scheduled = run(event="schedule", head_branch="main")
+        self.assertEqual(CHECKS.latest_run([scheduled], WORKFLOW, SHA, 2), scheduled)
+        with self.assertRaisesRegex(ValueError, "missing checks"):
+            CHECKS.latest_run([{**scheduled, "head_sha": MERGE}], WORKFLOW, SHA, 2)
+        with self.assertRaisesRegex(ValueError, "missing checks"):
+            CHECKS.latest_run([scheduled], WORKFLOW, SHA, 2, candidate=True)
 
     def test_languages_must_agree_on_one_commit(self):
         data = analyses()
@@ -231,7 +250,10 @@ class RequiredChecksTests(FixtureTestCase):
         with patch.object(sys, "argv", ["x", SHA]), patch.object(CHECKS, "check", side_effect=ValueError("red")), \
                 contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
             CHECKS.main()
-        self.assertEqual((caught.exception.code, err.getvalue()), (1, "ERR: red\n"))
+        self.assertEqual(caught.exception.code, 1)
+        self.assertTrue(err.getvalue().endswith("ERR: red\n"))
+        self.assertIn("Starting: required checks", err.getvalue())
+        self.assertIn("Ended: required checks", err.getvalue())
         out = io.StringIO()
         with patch.object(sys, "argv", ["x", SHA]), \
                 patch.object(CHECKS, "check", return_value={"sha": SHA, "runs": []}) as check, \

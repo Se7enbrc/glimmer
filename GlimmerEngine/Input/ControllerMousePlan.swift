@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import Foundation
+
 public struct ControllerMousePlan: Sendable {
     let pointer: Int?
     let scroll: Int?
@@ -59,13 +61,38 @@ public struct ControllerMousePlan: Sendable {
         return result
     }
 
-    func motion(_ analog: GamepadAnalog) -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
-        func delta(_ index: Int?) -> SIMD2<Int16> {
+    func sticks(_ analog: GamepadAnalog) -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
+        func stick(_ index: Int?) -> SIMD2<Int16> {
             guard let index else { return .zero }
-            let right = index == 4
-            return SIMD2(InputCore.controllerMouseDelta(right ? analog.rightStickX : analog.leftStickX),
-                         InputCore.controllerMouseDelta(right ? analog.rightStickY : analog.leftStickY))
+            return index == 4 ? SIMD2(analog.rightStickX, analog.rightStickY) : SIMD2(analog.leftStickX, analog.leftStickY)
         }
-        return (delta(pointer), delta(scroll))
+        return (stick(pointer), stick(scroll))
+    }
+}
+
+package struct ControllerMouseMotion {
+    private var remainder = SIMD2<Double>.zero
+
+    package init() {}
+
+    package static func velocity(_ stick: SIMD2<Int16>) -> SIMD2<Double> {
+        let vector = SIMD2(Double(stick.x) / 32767, Double(stick.y) / 32767)
+        let length = hypot(vector.x, vector.y)
+        guard length > 0.15 else { return .zero }
+        let travel = (min(1, length) - 0.15) / 0.85
+        return vector / length * (1240 * travel * travel)
+    }
+
+    package mutating func step(_ stick: SIMD2<Int16>, seconds: Double) -> SIMD2<Int16> {
+        let velocity = Self.velocity(stick)
+        guard velocity != .zero, seconds.isFinite, seconds > 0 else {
+            remainder = .zero
+            return .zero
+        }
+        // Bound stalls so returning from a delayed tick cannot fling the pointer.
+        remainder += velocity * min(seconds, 0.05)
+        let delta = SIMD2(Int16(remainder.x.rounded(.towardZero)), Int16(remainder.y.rounded(.towardZero)))
+        remainder -= SIMD2(Double(delta.x), Double(delta.y))
+        return delta
     }
 }

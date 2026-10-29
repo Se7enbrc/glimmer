@@ -69,7 +69,8 @@ jobs:
 
   analyze:
     needs: changes
-    if: always() && github.event.action != 'closed'
+    # Failed scope decisions still fail the check; superseded scans release their runner.
+    if: ${{ !cancelled() && github.event.action != 'closed' }}
     name: Analyze (${{ matrix.language }})
     runs-on:
       ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true' &&

@@ -22,7 +22,8 @@ TEST_FLAGS ?=
 BUILD_FLAGS ?=
 DERIVED ?= $(CURDIR)/build/$(IOS_FLAVOUR)/DerivedData
 PROJECT := Glimmer.xcodeproj
-XCODE = xcodebuild -project "$(PROJECT)" -scheme Glimmer-iOS -configuration "$(CONFIG)" \
+SCHEME ?= Glimmer-iOS
+XCODE = xcodebuild -project "$(PROJECT)" -scheme "$(SCHEME)" -configuration "$(CONFIG)" \
 	-derivedDataPath "$(DERIVED)" CODE_SIGNING_ALLOWED=NO \
 	GLIMMER_BUILD_FLAVOUR=$(IOS_FLAVOUR) \
 	SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(SWIFT_CONDITIONS)" \
@@ -50,10 +51,9 @@ test:
 test-build:
 	$(XCODE) -destination '$(TEST_DESTINATION)' -showBuildTimingSummary $(TEST_FLAGS) build-for-testing
 
+# Keep the scheme's coverage context while reusing build-for-testing products.
 test-run:
-	@set -- "$(DERIVED)"/Build/Products/*.xctestrun; \
-	  test "$$#" -eq 1 && test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
-	  xcodebuild test-without-building -xctestrun "$$1" -destination '$(TEST_DESTINATION)' \
+	$(XCODE) test-without-building -destination '$(TEST_DESTINATION)' \
 	  -parallel-testing-enabled NO $(TEST_FLAGS)
 
 check:

@@ -2,7 +2,69 @@
 
 ## 2026.10.8 - Unreleased
 
-- Controller sticks no longer send duplicate input while streaming.
+- Complete controller shortcuts are captured before they reach the PC, and their
+  hold timers use the same clock as incoming controller events.
+
+- Hold the controller's Menu button for 2 seconds to open stream controls on
+  iPhone and iPad. Tap outside or press Circle or B to return to the game.
+
+- Mac stream notices disappear before the closing animation begins.
+
+- Controller remapping sheets keep their settings open while you choose or
+  record a shortcut on iPhone and iPad.
+
+- Performance telemetry keeps its channel lookup objects alive, fixing a crash
+  while sampling on macOS 15.
+
+- Controller shortcuts keep recognizing Menu and Options after stream input
+  switches from a focus refresh to live controller reports.
+
+- Controller navigation and Back keep responding while a Mac context menu is
+  open, even after you release every button.
+
+- The first controller direction reliably focuses a game in the Mac launcher.
+
+- Controller settings on Mac use native pickers, so mouse presets and the
+  diagram's control selector open reliably.
+
+- Controller Stop and Stats shortcuts respond after a short hold on Mac, iPhone
+  and iPad, without waiting for release. Holding Menu on iPhone and iPad opens
+  stream controls without interfering with those shortcuts.
+
+- Controller sticks no longer send duplicate input while streaming, including on
+  controllers whose stick press shares the stick's element.
+
+- The controller mouse pointer moves smoothly at display rate on Mac, iPhone and
+  iPad, at the same top speed as before.
+
+- Scrolling with a stick in controller mouse mode sends whole wheel notches, so
+  games no longer switch weapons on every small stick movement.
+
+- Holding a controller shortcut no longer switches the controller into mouse
+  mode. Once a shortcut's buttons are pressed together, Menu's hold action waits
+  until every button is released; a lone Menu hold still works.
+
+- Turning controller mouse mode on or off shows the same short notice, with a
+  mouse or controller symbol, on Mac, iPhone and iPad, and VoiceOver announces
+  it. Every notice over a Mac stream now uses the same glass capsule as iPhone
+  and iPad, with a system material on macOS 15.
+
+- While a controller is a mouse, a small mouse badge stays in a clear corner of
+  the stream on Mac, iPhone and iPad, away from the stats, the touch controls
+  and other notices, and leaves when the controller returns to the game.
+
+- On iPhone and iPad, holding Menu opens the stream controls, and choosing mouse
+  or gamepad mode there returns straight to the game. Controllers that report
+  Menu only on its own button now stop the stream with the Stop shortcut too.
+
+- iPhone and iPad stream controls stay within thumb reach, with Help that
+  explains the touch menu and on-screen controller, and an always-visible
+  Disconnect action. Controls adapt to the picture's brightness. Done and Cancel
+  stay reachable when editing touch controls, and notices leave the touch menu
+  visible.
+
+- Stream stats scale with the window on Mac, iPhone and iPad, including larger
+  text on iPhone and iPad. Stats stay clear of the touch gamepad.
 
 - Controllers avoid mouse calculations while mouse mode is off.
 
@@ -38,7 +100,8 @@
   stream controls releases the pointer, and Glimmer's shortcuts stay local.
 
 - Controller layouts and mouse controls now use matching rows and labeled
-  controller diagrams on Mac, iPhone and iPad.
+  controller diagrams on Mac, iPhone and iPad. Mac settings use system text
+  sizes and row spacing.
 
 - Controller mouse buttons have changed on Mac: the right stick moves the
   pointer, R2 clicks and R1 right-clicks. Choose Left-handed or remap any mouse

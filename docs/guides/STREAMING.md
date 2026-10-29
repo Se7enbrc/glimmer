@@ -124,7 +124,7 @@ displays; it does not include 4K at 120 Hz.
 {% hint style="info" %}
 
 ⌃Z (Control-Z) shows stream stats on Mac and with a hardware keyboard on iPhone
-and iPad. On iPhone and iPad, you can also choose Show Stream Stats from the
+and iPad. On iPhone and iPad, you can also choose “Show stream stats” from the
 stream menu. Settings › Quality chooses the initial visibility and overlay
 detail. Change the shortcut in Settings › Input.
 

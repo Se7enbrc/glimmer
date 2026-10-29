@@ -24,9 +24,13 @@ class TouchGamepadView: UIView {
             } else if element.isStick || element == .dpad {
                 control = TouchAxisControl(element)
             } else { control = TouchButton(element) }
+            control.accessibilityIdentifier = "touch-control-\(element.rawValue)"
+            (control as? UIButton)?.isPointerInteractionEnabled = true
             controls[element] = control
             addSubview(control)
         }
+        menuButton.accessibilityIdentifier = "stream-controls-show"
+        menuButton.isPointerInteractionEnabled = true
         addSubview(menuButton)
         registerForTraitChanges(
             [UITraitAccessibilityContrast.self, UITraitUserInterfaceStyle.self]

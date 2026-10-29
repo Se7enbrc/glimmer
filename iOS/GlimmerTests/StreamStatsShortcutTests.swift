@@ -12,6 +12,23 @@ struct StreamStatsShortcutTests {
         try #require(UserDefaults(suiteName: "stats-shortcuts-\(UUID().uuidString)"))
     }
 
+    @Test func controlQAndControlZDispatchStopAndStatsDuringAStream() async throws {
+        for (key, action) in [("q", StreamShortcuts.Action.quit), ("z", .stats)] {
+            let fixture = PlaybackFixture()
+            fixture.controllerConnected = true
+            let model = fixture.model()
+            model.start(surface: StreamSurface())
+            model.receive(fixture.update(.firstFrame))
+            #expect(model.shortcuts.match(input: key, modifiers: .control) == action)
+            #expect(model.shortcuts.handle(input: key, modifiers: .control, perform: model.performShortcut))
+            if action == .quit { await model.waitUntilStopped(); #expect(model.phase.isEnded) } else {
+                #expect(model.statsShown)
+                model.stop()
+                await model.waitUntilStopped()
+            }
+        }
+    }
+
     @Test func freshDefaultsStayAbsentAndExplicitChoicesSurviveReset() throws {
         let defaults = try defaults()
         let shortcuts = StreamShortcuts(defaults: defaults)

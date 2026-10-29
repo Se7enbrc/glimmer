@@ -97,6 +97,7 @@ extension StreamWindow {
     public func close() {
         guard !didClose else { return }
         didClose = true
+        for notice in notices { notice.removeWithStream() }
         window.ignoresMouseEvents = true
         setCursorHidden(false)
         removeCloseObservers()
@@ -195,6 +196,8 @@ extension StreamWindow {
             ctx.allowsImplicitAnimation = true
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             win.animator().alphaValue = 0.0
+            // Notices are separate windows, so they fade with the stream explicitly.
+            for notice in self.notices { notice.noticeWindow?.animator().alphaValue = 0 }
         }, completionHandler: {
             MainActor.assumeIsolated { self.finishClose() }
         })
@@ -215,6 +218,7 @@ extension StreamWindow {
 
     /// Neither the last frame nor the window may disappear while AppKit still owns its Space.
     private func finishClose() {
+        for notice in notices { notice.removeWithStream() }
         window.orderOut(nil)
         window.close()
         displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true) { }

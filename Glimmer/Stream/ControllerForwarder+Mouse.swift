@@ -20,8 +20,16 @@ extension InputForwarder {
     }
 
     func controllerMouseModeChanged(slot: UInt8, enabled: Bool) {
+        publishControllerMouseActive()
         guard isReady, controllerMouseStates[slot]?.isMouse == enabled else { return }
-        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot))
+        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot), enabled)
+    }
+
+    func publishControllerMouseActive() {
+        let active = controllerMouseStates.values.contains(where: \.isMouse)
+        guard active != controllerMouseActive else { return }
+        controllerMouseActive = active
+        onControllerMouseActiveChanged?(active)
     }
 
     func controllerMouseMessage(enabled: Bool, slot: UInt8) -> String {
@@ -43,8 +51,11 @@ extension InputForwarder {
         inputCore.withLock { inputCore.updatePhysicalMouseButton(button, pressed: pressed) }
     }
 
-    static func controllerMouseDelta(_ axis: Int16) -> Int16 { InputCore.controllerMouseDelta(axis) }
     func pollControllerMouse() { inputCore.pollControllerMouse() }
     func suspendControllerMouse() { inputCore.suspendControllerMouse() }
-    func resetControllerMouse(slot: UInt8? = nil) { inputCore.resetControllerMouse(slot: slot) }
+    // Every detach path resets its slot here, so the corner badge hears about a departed mouse.
+    func resetControllerMouse(slot: UInt8? = nil) {
+        inputCore.resetControllerMouse(slot: slot)
+        publishControllerMouseActive()
+    }
 }

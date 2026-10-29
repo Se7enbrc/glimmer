@@ -331,7 +331,7 @@ final class IOReportSampler: @unchecked Sendable {
         }
         let elapsedSeconds = Double(nowNs - previousNs) / 1_000_000_000.0
         var power = EnergyPower(elapsedSeconds: elapsedSeconds)
-        for channel in reportChannels(in: delta) {
+        for channel in Self.reportChannels(in: delta) {
             guard let name = channelName(channel)?.takeUnretainedValue() as String?,
                   isPackageEnergyRail(name) else { continue }
             let value = Double(simpleValue(channel, 0))
@@ -377,7 +377,7 @@ final class IOReportSampler: @unchecked Sendable {
         }
         var sum = 0.0
         var folded = 0
-        for channel in reportChannels(in: delta) {
+        for channel in Self.reportChannels(in: delta) {
             guard let active = activeResidency(of: channel) else { continue }
             sum += active
             folded += 1
@@ -388,15 +388,11 @@ final class IOReportSampler: @unchecked Sendable {
 
     // MARK: - Parsing
 
-    /// The delta's channel dictionaries (empty on any unexpected shape).
-    private func reportChannels(in delta: CFDictionary) -> [CFDictionary] {
-        let arrayPointer = CFDictionaryGetValue(
-            delta, Unmanaged.passUnretained("IOReportChannels" as CFString).toOpaque())
-        guard let arrayPointer else { return [] }
-        let array = unsafeBitCast(arrayPointer, to: CFArray.self)
-        return (0..<CFArrayGetCount(array)).map {
-            unsafeBitCast(CFArrayGetValueAtIndex(array, $0), to: CFDictionary.self)
-        }
+    /// Keep Foundation objects retained through lookup; an unmanaged temporary key can
+    /// be released before CFDictionaryGetValue uses it in optimized builds on macOS 15.
+    static func reportChannels(in delta: CFDictionary) -> [CFDictionary] {
+        guard let channels = (delta as NSDictionary)["IOReportChannels"] as? [NSDictionary] else { return [] }
+        return channels.map { $0 as CFDictionary }
     }
 
     /// Fold the delta's per-channel state buckets into E- vs P-cluster active
@@ -408,7 +404,7 @@ final class IOReportSampler: @unchecked Sendable {
     private func parseClusters(delta: CFDictionary) -> ClusterResidencySnapshot? {
         var eSum = 0.0, eCount = 0
         var pSum = 0.0, pCount = 0
-        for channel in reportChannels(in: delta) {
+        for channel in Self.reportChannels(in: delta) {
             guard let name = channelName(channel)?.takeUnretainedValue() as String?,
                   let active = activeResidency(of: channel) else { continue }
             // Channel names: ECPU/ECPM/ECPM_IDLE (efficiency), PCPU/PCPM/PCPU1/...

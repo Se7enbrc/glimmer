@@ -117,6 +117,11 @@ enum LauncherNavigation {
     }
 }
 
+struct LauncherControllerFocusReady: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
 struct LauncherControlFocus: ViewModifier {
     let focus: FocusState<LauncherFocus?>.Binding
     let target: LauncherFocus
@@ -127,12 +132,11 @@ struct LauncherControlFocus: ViewModifier {
 
     func body(content: Content) -> some View {
         Group {
-            if LauncherNavigation.needsControllerFocus(keyboardNavigation: keyboardNavigation,
-                                                       controllerNavigating: model.launcherControllerNavigating) {
-                // Replace the control's focus target, so accessibility never sees two stops.
-                // Edit focus also works with Keyboard navigation off; activation stays on the control.
+            if !keyboardNavigation {
+                // Keep the focus target mounted when controller navigation starts; replacing it loses the first focus.
+                // Replace the native stop to avoid duplicates. Edit focus also works with Keyboard navigation off.
                 content.focusable(false)
-                    .focusable(interactions: .edit)
+                    .focusable(model.launcherControllerNavigating, interactions: .edit)
                     .focused(focus, equals: target)
                     .onKeyPress(.space) {
                         guard let activate, LauncherNavigation.handlesSpace(
@@ -148,6 +152,7 @@ struct LauncherControlFocus: ViewModifier {
                 content.focused(focus, equals: target)
             }
         }
+        .preference(key: LauncherControllerFocusReady.self, value: model.launcherControllerNavigating)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             keyboardNavigation = NSApp.isFullKeyboardAccessEnabled
         }

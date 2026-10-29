@@ -61,8 +61,12 @@ def expected_sources(root):
     expected = {name: {str(path.relative_to(ios)) for path in (ios / name).rglob("*.swift")}
                 for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
     expected["Glimmer"].update(f"../Glimmer/Stream/{name}.swift" for name in (
-        "StatsOverlayLayer", "StatsOverlayLayer+Rows", "StatsOverlayLayer+Traces", "StatsOverlayLayer+Platform"
+        "StatsOverlayLayer", "StatsOverlayLayer+Rows", "StatsOverlayLayer+Traces", "StatsOverlayLayer+Platform",
+        "StreamNoticeView"
     ))
+    expected["Glimmer"].update("../" + str(path.relative_to(root))
+                               for path in (root / "Glimmer/Journeys/Shared").glob("*.swift"))
+    expected["GlimmerUITests"].add("../JourneySupport/JourneyInputAssertions.swift")
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
     expected["Glimmer"].update("../Glimmer/" + name for name in (
         "SettingsResetSection.swift", "GlimmerIntents.swift", "RunningTileBadge.swift", "TakeoverDialogCopy.swift"
@@ -76,14 +80,18 @@ def expected_sources(root):
                                    "ControllerMouseParityTests.swift",
                                    "StreamInputMouseModeTests.swift", "ControllerMouseRenderTests.swift",
                                    "ControllerDiagramTests.swift", "SettingsResetTests.swift",
-                                   "ControllerShortcutRenderTests.swift"])
+                                   "ControllerShortcutRenderTests.swift", "ControllerStopChordTests.swift",
+                                   "ControllerChordHoldConflictTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
-                                   "ControllerLayoutEscapeTests.swift", "ControllerShortcutTests.swift"])
+                                   "ControllerLayoutEscapeTests.swift", "ControllerShortcutTests.swift",
+                                   "FramePacerTickThreadTests.swift"])
     # These transport fakes and session tests also compile in the Mac test target.
     shared = ("BitrateActuatorTests.swift", "FakeSunshine.swift", "InputRecordingBackend.swift",
               "BandwidthPolicyTests.swift", "BandwidthActuatorTests.swift",
-              "OpusDecoderTests.swift", "SurroundToneData.swift", "VideoDepacketizerRecoveryTests.swift")
+              "OpusDecoderTests.swift", "SurroundToneData.swift", "VideoDepacketizerRecoveryTests.swift",
+              "CleanRoomDifferentialTests.swift", "CleanRoomProbe.swift", "CleanRoomProbe+Audio.swift",
+              "CleanRoomProbe+Video.swift")
     for name in shared:
         if not (root / "GlimmerTests" / name).is_file():
             raise ValueError(f"Missing shared test source: {name}")

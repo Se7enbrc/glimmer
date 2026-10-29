@@ -166,7 +166,7 @@ private struct GlimmerSettingsPage: View {
             Toggle(isOn: $touchMouseEnabled) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Touch mouse")
-                    Text("Move and click with touch, even with a controller connected.")
+                    Text("Drag to move the pointer. Tap to click, even with a controller connected.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }

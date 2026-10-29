@@ -6,6 +6,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -18,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class SequoiaWarningTests(FixtureTestCase):
     def test_build_for_testing_receives_warning_policy_and_preserves_failure(self):
         source = (ROOT / ".github/workflows/verify.yml").read_text()
-        job = source.split("  verify:\n", 1)[1].split("  ios:\n", 1)[0]
+        job = source.split("  verify:\n", 1)[1].split("  ios-core:\n", 1)[0]
         prepare = job.split("      - name: Prepare verification\n", 1)[1]
         prepare = prepare.split("        run: |\n", 1)[1].split("      - name:", 1)[0]
         config = prepare[prepare.index('          XCODE_XCCONFIG_FILE='):]
@@ -27,10 +28,18 @@ class SequoiaWarningTests(FixtureTestCase):
         shell = textwrap.dedent(config) + 'export XCODE_XCCONFIG_FILE\n' + textwrap.dedent(build)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            (scripts / "ci-local.py").write_text((ROOT / "scripts/ci-local.py").read_text())
+            (root / "python3").symlink_to(sys.executable)
+            xcodebuild = root / "xcodebuild"
+            xcodebuild.write_text('#!/bin/bash\n[ "$1" = -version ] || exit 99\nprintf "Xcode 26.6\\nBuild version fixture\\n"\n')
+            xcodebuild.chmod(0o755)
             make = root / "make"
             make.write_text('''#!/bin/bash
 [ "$1" = test-build ] || exit 99
 cat "${XCODE_XCCONFIG_FILE:-missing}" > "$RUNNER_TEMP/observed.xcconfig"
+printf 'fixture compiler failed\\n' >&2
 exit 65
 ''')
             make.chmod(0o755)
@@ -42,4 +51,7 @@ exit 65
             config = (root / "observed.xcconfig").read_text()
             self.assertIn("SWIFT_TREAT_WARNINGS_AS_ERRORS = YES", config)
             self.assertIn("GCC_TREAT_WARNINGS_AS_ERRORS = YES", config)
+            self.assertIn("SWIFT_SUPPRESS_WARNINGS = NO", config)
+            self.assertIn("fixture compiler failed", (root / "build/logs/test-build.log").read_text())
+            self.assertIn("fixture compiler failed", result.stdout)
             self.assertFalse((root / "sequoia-tests.tgz").exists())

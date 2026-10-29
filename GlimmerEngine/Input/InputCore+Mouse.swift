@@ -5,6 +5,7 @@ import Foundation
 
 package struct ControllerMouseState {
     package static let holdSeconds = 0.75
+    package static let menuHoldSeconds = 2.0
     package var isMouse = false
     package var buttons: Int32 = 0
     package var analog = InputCore.neutral
@@ -12,38 +13,89 @@ package struct ControllerMouseState {
     package var touchpad = ControllerTouchpadMouseState()
     package var clickMask: UInt8 = 0
     package var extras = SIMD2<UInt64>.zero
+    package var pointerMotion = ControllerMouseMotion()
+    package var scrollMotion = ControllerMouseMotion()
+    package var sampledAt: TimeInterval?
+    private var scrollNotches = ScrollQuantizer()
+    /// The scroll stick's chosen axis; it changes only when the other clearly dominates.
+    private var scrollVertical: Bool?
     private var startDownAt: TimeInterval?
     private var blocked = false
     private var holdComplete = false
+    private var spent = false
 
     package init(isMouse: Bool = false) { self.isMouse = isMouse }
 
+    // Starting needs a clear push (20% travel) so a stick drifting just past the 15% dead zone stays idle;
+    // once gliding, the pointer keeps moving until the stick is back inside the dead zone.
     @inline(__always)
-    package func isMoving(_ motion: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>)) -> Bool {
+    package func isMoving(_ sticks: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>),
+                          starting: Bool = false) -> Bool {
         guard isMouse else { return false }
-        let motion = motion()
-        return motion.pointer != .zero || motion.scroll != .zero
+        let sticks = sticks()
+        let floor = starting ? 0.2 : 0
+        return [sticks.pointer, sticks.scroll].contains { stick in
+            ControllerMouseMotion.velocity(stick) != .zero
+                && hypot(Double(stick.x), Double(stick.y)) / 32767 > floor
+        }
     }
 
-    // A hold changes modes only on release; another button or a system chord spends the hold.
+    // Idle sticks drop their residual so a new deflection never starts with a stale step.
+    package mutating func resetIdleMotion(_ sticks: (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>)) {
+        let pointerIdle = !isMouse || ControllerMouseMotion.velocity(sticks.pointer) == .zero
+        let scrollIdle = !isMouse || ControllerMouseMotion.velocity(sticks.scroll) == .zero
+        if pointerIdle { pointerMotion = ControllerMouseMotion() }
+        if scrollIdle { scrollMotion = ControllerMouseMotion(); scrollNotches.reset(); scrollVertical = nil }
+        if pointerIdle && scrollIdle { sampledAt = nil }
+    }
+
+    package mutating func sampleMotion(_ sticks: (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>), now: TimeInterval)
+        -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
+        let seconds = sampledAt.map { now - $0 } ?? InputCore.controllerMousePollInterval
+        sampledAt = now
+        let scroll = scrollMotion.step(dominantScrollAxis(sticks.scroll), seconds: seconds)
+        // Games count wheel messages, so a stick scrolls in whole notches like a wheel.
+        let notches = SIMD2(Int16(clamping: scrollNotches.consumeHorizontal(Int(scroll.x), precise: true)),
+                            Int16(clamping: scrollNotches.consumeVertical(Int(scroll.y), precise: true)))
+        return (pointerMotion.step(sticks.pointer, seconds: seconds), notches)
+    }
+
+    // A wheel has one axis: a vertical push with a natural lean must not also scroll sideways, and the
+    // chosen axis holds until the other leads by 25%, so it doesn't flip near the diagonal.
+    private mutating func dominantScrollAxis(_ stick: SIMD2<Int16>) -> SIMD2<Int16> {
+        let x = abs(Double(stick.x))
+        let y = abs(Double(stick.y))
+        if scrollVertical == nil || y > x * 1.25 { scrollVertical = y >= x }
+        if x > y * 1.25 { scrollVertical = false }
+        return scrollVertical == true ? SIMD2(0, stick.y) : SIMD2(stick.x, 0)
+    }
+
+    // A hold changes modes only on release; another button spends it. A chord spends holds until every control
+    // is released, so its buttons never become a lone hold when suppression or a reset hides the others.
     package mutating func update(buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
                                  now: TimeInterval, toggleOnHold: Bool = true,
+                                 holdSeconds: TimeInterval = Self.holdSeconds,
                                  toggleChord: ControllerPhysicalChord = ControllerMousePlan().toggle,
                                  extras: SIMD2<UInt64> = .zero) -> Bool {
         let sample = ControllerMappingSample(buttons: buttons, analog: analog, extras: extras)
         let wasDown = startDownAt != nil
         let isDown = toggleChord.held(in: sample)
-        if isDown && !wasDown { startDownAt = now; blocked = false; holdComplete = false }
+        if isDown && !wasDown { startDownAt = now; blocked = spent; holdComplete = false }
         let otherButtons = sample.buttons & ~toggleChord.buttons != 0 || sample.extras & ~toggleChord.extras != .zero
         let otherTriggers = (sample.analog[0] >= 128 && toggleChord.triggers & 1 == 0)
             || (sample.analog[1] >= 128 && toggleChord.triggers & 2 == 0)
         if chordHeld || otherButtons || otherTriggers { blocked = true }
-        if startDownAt.map({ now - $0 > Self.holdSeconds }) == true { holdComplete = true }
+        if startDownAt.map({ now - $0 > holdSeconds }) == true { holdComplete = true }
         if !isDown && !holdComplete { blocked = true }
         let released = toggleChord.released(in: sample)
         let toggle = wasDown && released && !blocked
             && holdComplete
         if released { startDownAt = nil }
+        if chordHeld {
+            spent = true
+        } else if sample.buttons == 0 && sample.extras == .zero && sample.analog[0] < 128 && sample.analog[1] < 128 {
+            spent = false
+        }
         self.buttons = buttons
         self.extras = extras
         self.analog = chordHeld ? InputCore.neutral : analog
@@ -53,7 +105,8 @@ package struct ControllerMouseState {
 }
 
 extension InputCore {
-    package static let controllerMousePollInterval = 0.05
+    // Velocity steps at display rate; a 50 ms cadence reads as a 20 Hz pointer.
+    package static let controllerMousePollInterval = 1.0 / 120
 
     package func mousePlan(slot: UInt8) -> ControllerMousePlan {
         layouts?.states[Int(slot)]?.mouse ?? controllerMousePlan
@@ -69,12 +122,15 @@ extension InputCore {
         let plan = mousePlan(slot: slot)
         let opensControls = controllerMenuOpensControls && notifyMode
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now,
-                                   toggleOnHold: !opensControls, toggleChord: plan.toggle, extras: extras)
+                                   toggleOnHold: !opensControls,
+                                   holdSeconds: opensControls ? ControllerMouseState.menuHoldSeconds : ControllerMouseState.holdSeconds,
+                                   toggleChord: plan.toggle, extras: extras)
         if toggled && opensControls {
             controllerMouseStates[slot] = state
             onControllerMenu?(slot)
             return state.isMouse
         }
+        if state.isMouse || toggled { state.resetIdleMotion(plan.sticks(state.analog)) }
         controllerMouseStates[slot] = state
         if toggled || chordHeld {
             mouseTimings[slot] = nil
@@ -152,8 +208,9 @@ extension InputCore {
     }
 
     package func updateControllerMousePolling() {
+        let starting = controllerMouseTimer == nil
         let moving = controllerMouseStates.contains { slot, state in
-            state.isMoving(mousePlan(slot: slot).motion(state.analog))
+            state.isMoving(mousePlan(slot: slot).sticks(state.analog), starting: starting)
         }
         guard snapshot.ready, snapshot.focused, moving else {
             mousePollingGeneration &+= 1
@@ -173,15 +230,8 @@ extension InputCore {
     }
 
     package static func controllerMouseMoving(_ analog: GamepadAnalog) -> Bool {
-        controllerMouseDelta(analog.leftStickX) != 0 || controllerMouseDelta(analog.leftStickY) != 0
-            || controllerMouseDelta(analog.rightStickX) != 0 || controllerMouseDelta(analog.rightStickY) != 0
-    }
-
-    // The cubic curve and 50 ms cadence follow Moonlight; mapping selects which stick scrolls.
-    package static func controllerMouseDelta(_ axis: Int16) -> Int16 {
-        let scaled = Double(axis) / 32766 * 4
-        let curved = scaled * scaled * scaled
-        return abs(curved) > 2 ? Int16(curved - (curved > 0 ? 2 : -2)) : 0
+        ControllerMouseMotion.velocity(SIMD2(analog.leftStickX, analog.leftStickY)) != .zero
+            || ControllerMouseMotion.velocity(SIMD2(analog.rightStickX, analog.rightStickY)) != .zero
     }
 
     package func pollControllerMouse(generation: UInt64? = nil,
@@ -191,12 +241,13 @@ extension InputCore {
         guard snapshot.ready, snapshot.focused, snapshot.controllersAnnounced, flushReleases() else { return }
         // Updating sampled state must not copy a dictionary retained by its iterator on each tick.
         for slot in 0..<UInt8(Enet.maxGamepads) {
-            guard let state = controllerMouseStates[slot], state.isMouse else { continue }
+            guard var state = controllerMouseStates[slot], state.isMouse else { continue }
             if let timing = mouseTimings.removeValue(forKey: slot) {
                 InputTimingContext.begin(samples: timing)
             }
             defer { InputTimingContext.end() }
-            let delta = mousePlan(slot: slot).motion(state.analog)
+            let delta = state.sampleMotion(mousePlan(slot: slot).sticks(state.analog), now: now)
+            controllerMouseStates[slot] = state
             if delta.pointer != .zero {
                 record("LiSendMouseMoveEvent(controller)",
                        backend?.sendMouseMove(dx: delta.pointer.x, dy: -delta.pointer.y) ?? -2)

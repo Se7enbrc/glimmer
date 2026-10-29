@@ -15,6 +15,7 @@ struct ControllerLayoutAssignment: View {
     let scope: ControllerLayoutScope
     let control: ControllerLayoutControl
     let layout: ControllerLayout
+    @State private var editingID = UUID()
     @State private var destination = ControllerLayoutDestination.disabled
     @State private var saving = false
     @State private var failure: String?
@@ -57,7 +58,12 @@ struct ControllerLayoutAssignment: View {
                 }
             }
         }
-        .onAppear { destination = layout.bindings.first { $0.source == control.id }?.destination ?? .disabled }
+        .onAppear {
+            ControllerLayoutEditing.begin(editingID)
+            model.beginObserving()
+            destination = layout.bindings.first { $0.source == control.id }?.destination ?? .disabled
+        }
+        .onDisappear { model.endObserving(); ControllerLayoutEditing.end(editingID) }
         .interactiveDismissDisabled(saving)
         .controllerLayoutNavigation()
         #if os(macOS)
@@ -99,6 +105,7 @@ struct ControllerLayoutCaptureSheet: View {
     let scope: ControllerLayoutScope
     let layout: ControllerLayout
     @State var capture: ControllerLayoutCapture
+    @State private var editingID = UUID()
     @State private var failure: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -129,8 +136,16 @@ struct ControllerLayoutCaptureSheet: View {
                 }
             }
         }
-        .onAppear { capture.start { dismiss() } }
-        .onDisappear { capture.stop() }
+        .onAppear {
+            ControllerLayoutEditing.begin(editingID)
+            model.beginObserving()
+            capture.start { dismiss() }
+        }
+        .onDisappear {
+            capture.stop()
+            model.endObserving()
+            ControllerLayoutEditing.end(editingID)
+        }
         .onChange(of: capture.finished) { _, finished in if finished { capture.stop() } }
         .onChange(of: capture.message) { _, message in AccessibilityNotification.Announcement(message).post() }
         .onChange(of: scenePhase) { _, phase in

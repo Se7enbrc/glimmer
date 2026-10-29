@@ -3,6 +3,7 @@
 
 import AVFoundation
 import GlimmerEngine
+import SwiftUI
 import Testing
 import UIKit
 @testable import Glimmer
@@ -74,10 +75,16 @@ struct StreamSessionTests {
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
         #expect(model.controllerMouseActive && model.inputFocused && !model.controlsVisible)
         #expect(model.controllerModeMessage == "Controller is now a mouse.")
+        #expect(model.controllerModeSymbol == ControllerMouseMapping.modeSymbol(enabled: true))
+        #expect(!model.showsMouseBadge)
+        try await Task.sleep(for: .seconds(2.2))
+        #expect(model.showsMouseBadge && model.controllerModeMessage == nil)
         model.receive(fixture.update(.input(.controllersActive(false))))
         #expect(model.controllerMouseActive)
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: false))))
         #expect(!model.controllerMouseActive && model.controllerModeMessage == "Controller is back in the game.")
+        #expect(model.controllerModeSymbol == ControllerMouseMapping.modeSymbol(enabled: false))
+        #expect(!model.showsMouseBadge)
         model.stop()
         await model.waitUntilStopped()
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
@@ -92,7 +99,10 @@ struct StreamSessionTests {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
         window.addSubview(surface)
         defer { surface.removeFromSuperview() }
-        let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface) { quiesces += 1 }
+        var pacingStarts = 0
+        let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface,
+                                               startPacing: { _, _, _ in pacingStarts += 1 },
+                                               quiesce: { quiesces += 1 })
         let expected = try testLaunch().profile.resolve(surface: surface)
         #expect(playback.format == expected)
         await playback.stop()
@@ -107,6 +117,8 @@ struct StreamSessionTests {
         }
         #expect(stopped == 1)
         await #expect(throws: CancellationError.self) { try await playback.start() }
+        #expect(pacingStarts == 0)
+        #expect(quiesces == 1)
     }
 
     @Test func unavailableDisplayEndsBeforeMediaOrIdleTimerChanges() {
@@ -534,4 +546,35 @@ func testWindowScene() async throws -> UIWindowScene {
         if let scene = application() { return scene }
     }
     throw CancellationError()
+}
+
+// Renders the real mode notice in a Simulator window over bright and dark frames, in both appearances.
+@MainActor
+struct StreamNoticeCaptureTests {
+    @Test(arguments: [false, true])
+    func noticeRendersOverLightAndDarkPictures(dark: Bool) throws {
+        let colors: [Color] = dark
+            ? [Color(red: 0.05, green: 0.06, blue: 0.12), Color(red: 0.18, green: 0.12, blue: 0.22)]
+            : [Color(red: 0.62, green: 0.82, blue: 0.98), Color(red: 0.98, green: 0.93, blue: 0.80)]
+        let root = ZStack {
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
+            StreamNoticeView(text: "Controller is now a mouse.",
+                             symbol: ControllerMouseMapping.modeSymbol(enabled: true))
+        }
+        .environment(\.colorScheme, dark ? .dark : .light)
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 393, height: 160)
+        window.overrideUserInterfaceStyle = dark ? .dark : .light
+        window.rootViewController = UIHostingController(rootView: root)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        window.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let data = try #require(image.pngData())
+        #expect(data.count > 1_000)
+        Attachment.record(data, named: "ios-mode-indicator-\(dark ? "dark" : "light").png")
+    }
 }

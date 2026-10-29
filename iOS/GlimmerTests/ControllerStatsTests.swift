@@ -4,11 +4,201 @@
 import GlimmerEngine
 import Testing
 import UIKit
+import SwiftUI
 @testable import Glimmer
 
 @MainActor
 @Suite(.serialized)
 struct ControllerStatsTests {
+    @Test func touchHelpNeverRequiresAnAbsentKeyboard() {
+        #expect(StreamControlsHelp.menuHint.contains("three fingers"))
+        #expect(!StreamControlsHelp.menuHint.contains("Control-"))
+        #expect(StreamControlsHelp.gamepadHint.contains("Edit controls…"))
+        #expect(StreamControlsHelp.keyboardHint(connected: false, stats: "⌃Z", stop: "⌃Q") == nil)
+        let hint = StreamControlsHelp.keyboardHint(connected: true, stats: "⌃Z", stop: "⌃Q")
+        #expect(hint?.contains("⌃Z") == true && hint?.contains("⌃Q") == true)
+    }
+
+    @Test func chromeSharesMacHysteresisAndIgnoresInvalidSamples() {
+        let appearance = StreamOverlayAppearance()
+        #expect(appearance.colorScheme == nil)
+        appearance.update(luminance: .nan)
+        #expect(appearance.colorScheme == nil)
+        appearance.update(luminance: 0)
+        #expect(appearance.colorScheme == .dark)
+        appearance.update(luminance: pow(0.60, 2.4))
+        #expect(appearance.colorScheme == .dark)
+        appearance.update(luminance: pow(0.63, 2.4))
+        #expect(appearance.colorScheme == .light)
+        for value in [pow(0.5, 2.4), Double.infinity, -1] { appearance.update(luminance: value) }
+        #expect(appearance.colorScheme == .light)
+        appearance.update(luminance: pow(0.47, 2.4))
+        #expect(appearance.colorScheme == .dark)
+    }
+
+    @Test func chromeAloneSchedulesNoTimerAndFlipsOnlyOnPresentPathReadings() async {
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
+        var collections: [Bool] = []
+        var sampling: [Bool] = []
+        var reads = 0
+        var rect = CGRect.zero
+        nonisolated(unsafe) var report: (@Sendable (Double) -> Void)?
+        let stats = StreamStats(surface: surface, snapshot: { reads += 1; return .init() },
+            collection: { collections.append($0) }, videoSize: { CGSize(width: 1920, height: 1080) },
+            backdrop: { rect = $0; return 0.85 }, chromeSampling: { sampling.append($0) },
+            observeBackdrop: { report = $0 })
+        stats.setChromeVisible(true)
+        #expect(!stats.isRefreshing && !stats.overlay.isVisible && reads == 0 && collections.isEmpty)
+        #expect(sampling == [true] && rect.width == 1)
+        #expect(surface.overlayAppearance.colorScheme == nil)
+        report?(0.85)
+        for _ in 0..<20 where surface.overlayAppearance.colorScheme == nil { await Task.yield() }
+        #expect(surface.overlayAppearance.colorScheme == .light)
+        stats.setVisible(true)
+        #expect(stats.isRefreshing && reads == 1 && collections == [true])
+        stats.setVisible(false)
+        #expect(!stats.isRefreshing && reads == 1 && rect.width == 1)
+        stats.setChromeVisible(false)
+        #expect(!stats.isRefreshing && sampling == [true, false] && rect == .zero)
+    }
+
+    @Test func chromeInkHopsOnlyWhenTheHysteresisFlips() {
+        let ink = ChromeInk()
+        #expect(ink.flips(0.01))
+        #expect(!ink.flips(0.02) && !ink.flips(pow(0.60, 2.4)))
+        #expect(ink.flips(pow(0.63, 2.4)))
+        #expect(!ink.flips(pow(0.5, 2.4)) && !ink.flips(.nan))
+        #expect(ink.flips(pow(0.47, 2.4)))
+    }
+
+    @Test func chromeSamplesOnlyTheVisiblePictureAfterAspectFill() {
+        let video = CGSize(width: 1920, height: 1080)
+        let wide = StreamStats.chromeSampleRect(view: CGSize(width: 800, height: 400), video: video)
+        #expect(wide.width == 1 && wide.height < 1 && wide.minY > 0)
+        let narrow = StreamStats.chromeSampleRect(view: CGSize(width: 320, height: 600), video: video)
+        #expect(narrow.width < 1 && narrow.height == 1 && narrow.minX > 0)
+        #expect(StreamStats.chromeSampleRect(view: .zero, video: video) == .zero)
+    }
+
+    @Test func statsGrowWithTheWindowAndHonorItsTextSize() throws {
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 667, height: 375))
+        let overlay = StatsOverlayLayer()
+        overlay.displayView = surface
+        overlay.attach(to: surface.layer)
+        overlay.update(snapshot: .init(), enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
+        let phone = overlay.layer.frame.size
+        surface.bounds.size = CGSize(width: 1376, height: 1032)
+        overlay.layoutInHost(surface.layer)
+        #expect(overlay.layer.frame.width > phone.width)
+        #expect(overlay.layer.frame.height > phone.height)
+        surface.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+        surface.updateTraitsIfNeeded()
+        overlay.update(snapshot: .init(), enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
+        #expect(overlay.resolvedLabelFont.pointSize == Self.cappedCaption)
+        for size in [CGSize(width: 320, height: 600), CGSize(width: 667, height: 375),
+                     CGSize(width: 1920, height: 1080)] {
+            surface.bounds.size = size
+            overlay.update(snapshot: .init(), enabled: StatsOverlayDefaults.extendedRows, targetFps: 60)
+            #expect(surface.bounds.contains(overlay.layer.frame))
+        }
+    }
+
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 874, height: 402),
+                      CGSize(width: 1194, height: 834)], [false, true])
+    func touchStatsNeverCoverControls(size: CGSize, largest: Bool) {
+        let surface = StreamSurface(frame: CGRect(origin: .zero, size: size))
+        surface.layoutIfNeeded()
+        if largest {
+            surface.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+            surface.updateTraitsIfNeeded()
+        }
+        let controls = Array(TouchLayout().frames(in: surface.bounds).values)
+            + [TouchLayout.menuFrame(in: surface.bounds)]
+        let stats = StreamStats(surface: surface, snapshot: { .init() }, collection: { _ in },
+                                videoSize: { size }, backdrop: { _ in nil })
+        surface.overlayAppearance.touchObstacles = controls
+        stats.setVisible(true)
+        let frame = stats.overlay.layer.frame
+        #expect(surface.bounds.contains(frame))
+        #expect(controls.allSatisfy { !$0.intersects(frame) })
+        let scale = frame.width / stats.overlay.layer.bounds.width
+        if largest {
+            #expect(stats.overlay.resolvedLabelFont.pointSize == Self.cappedCaption)
+            #expect(stats.overlay.resolvedLabelFont.pointSize * scale >= 13)
+        } else {
+            #expect(stats.overlay.resolvedLabelFont.pointSize * scale >= 11)
+        }
+        let notice = CGRect(x: size.width / 2 - 100, y: 112, width: 200, height: 44)
+        surface.overlayAppearance.noticeFrame = notice
+        #expect(!stats.overlay.layer.frame.intersects(notice))
+        surface.overlayAppearance.noticeFrame = nil
+        surface.overlayAppearance.touchObstacles = []
+        #expect(stats.overlay.placementBounds == nil && !stats.overlay.compactRows)
+        stats.setVisible(false)
+    }
+
+    static let cappedCaption = UIFont.preferredFont(forTextStyle: .caption2, compatibleWith:
+        UITraitCollection(preferredContentSizeCategory: .extraExtraExtraLarge)).pointSize
+
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 874, height: 402),
+                      CGSize(width: 1194, height: 834)], [false, true])
+    func statsStayClearOfTheOpenMenu(size: CGSize, largest: Bool) {
+        let surface = StreamSurface(frame: CGRect(origin: .zero, size: size))
+        surface.layoutIfNeeded()
+        if largest {
+            surface.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+            surface.updateTraitsIfNeeded()
+        }
+        let stats = StreamStats(surface: surface, snapshot: { .init() }, collection: { _ in },
+                                videoSize: { size }, backdrop: { _ in nil })
+        let menu = CGRect(x: size.width - 12 - (largest ? 560 : 360), y: 12, width: largest ? 560 : 360,
+                          height: size.height - 24)
+        surface.overlayAppearance.menuFrame = menu
+        stats.setVisible(true)
+        let frame = stats.overlay.layer.frame
+        if stats.overlay.isVisible {
+            #expect(surface.bounds.contains(frame) && !frame.intersects(menu))
+            #expect(stats.overlay.resolvedLabelFont.pointSize * frame.width / stats.overlay.layer.bounds.width >= 9)
+        } else {
+            // Only a menu too wide to leave legible room may hide the stats.
+            #expect(largest && size.width < 900)
+        }
+        surface.overlayAppearance.menuFrame = nil
+        #expect(stats.overlay.isVisible && stats.overlay.placementBounds == nil)
+        stats.setVisible(false)
+    }
+
+    @Test func statsKeepTheirCornerWhileTouchControlsShow() {
+        let size = CGSize(width: 1194, height: 834)
+        let surface = StreamSurface(frame: CGRect(origin: .zero, size: size))
+        surface.layoutIfNeeded()
+        let stats = StreamStats(surface: surface, snapshot: { .init() }, collection: { _ in },
+                                videoSize: { size }, backdrop: { _ in nil })
+        stats.setVisible(true)
+        let free = stats.overlay.layer.frame
+        let controls = Array(TouchLayout().frames(in: surface.bounds).values)
+            + [TouchLayout.menuFrame(in: surface.bounds)]
+        surface.overlayAppearance.touchObstacles = controls
+        let touch = stats.overlay.layer.frame
+        #expect(controls.allSatisfy { !$0.intersects(touch) })
+        #expect(abs(touch.minX - free.minX) < 1 && abs(touch.minY - free.minY) < 1)
+        stats.setVisible(false)
+    }
+
+    @Test func editingTemporarilyHidesStatsWithoutChangingThePreference() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.toggleStats()
+        model.editingTouchControls = true
+        #expect(model.statsShown && fixture.statsHistory.last == false)
+        model.editingTouchControls = false
+        #expect(model.statsShown && fixture.statsHistory.last == true)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func shortcutAndMenuToggleTheSameOverlayOnlyDuringStreaming() async {
         let fixture = PlaybackFixture()
         let model = fixture.model()

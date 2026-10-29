@@ -18,14 +18,14 @@ struct ContinuationTests {
         var calls = 0
         menu.openMenu = { calls += 1; events.continuation.yield(()) }
         menu.start()
-        let handler = try #require(button.pressedChangedHandler)
+        let handler = try #require(button.valueChangedHandler)
         handler(button, 0, false)
         handler(button, 1, true)
         var iterator = events.stream.makeAsyncIterator()
         await iterator.next()
         #expect(calls == 1)
         menu.stop()
-        #expect(button.pressedChangedHandler == nil)
+        #expect(button.valueChangedHandler == nil)
         events.continuation.finish()
     }
 
@@ -34,16 +34,40 @@ struct ContinuationTests {
         let button = try #require(controller.extendedGamepad?.buttonMenu)
         let menu = LauncherMenuController(controllers: { [controller] })
         menu.update(active: true, streaming: false)
-        #expect(button.pressedChangedHandler != nil)
+        #expect(button.valueChangedHandler != nil)
         menu.update(active: true, streaming: true)
-        #expect(button.pressedChangedHandler == nil)
+        #expect(button.valueChangedHandler == nil)
         // Foreground and hotplug refreshes must obey the same ownership gate.
         menu.update(active: false, streaming: true)
         menu.update(active: true, streaming: true)
-        #expect(button.pressedChangedHandler == nil)
+        #expect(button.valueChangedHandler == nil)
         menu.update(active: true, streaming: false)
+        #expect(button.valueChangedHandler != nil)
+        menu.stop()
+    }
+
+    // The stream's Menu route and the launcher's Menu action never clear each other, in either order.
+    @Test(arguments: [false, true])
+    func launcherAndStreamMenuRoutesNeverClearEachOther(streamFirst: Bool) throws {
+        let controller = GCController.withExtendedGamepad()
+        let button = try #require(controller.extendedGamepad?.buttonMenu)
+        let menu = LauncherMenuController(controllers: { [controller] })
+        let install = {
+            ControllerStreamHandlers.install(controller: controller, input: controller.input,
+                queue: DispatchQueue(label: "menu-route-order"), mapsGameInput: false, shortcutElements: [],
+                read: { .init() }, receive: { _, _ in })
+        }
+        if streamFirst { install(); menu.update(active: true, streaming: false) } else {
+            menu.update(active: true, streaming: false)
+            install()
+        }
+        menu.update(active: true, streaming: true)
+        #expect(button.pressedChangedHandler != nil, "The stream still hears a button-only Menu")
+        menu.update(active: true, streaming: false)
+        #expect(button.valueChangedHandler != nil, "The launcher gets its Menu back after the stream")
         #expect(button.pressedChangedHandler != nil)
         menu.stop()
+        ControllerButtonRoutes.set(controller, nil)
     }
 
     @Test func runningTileResumesDirectlyAndQuitMenuKeepsItsNamedApproval() async throws {

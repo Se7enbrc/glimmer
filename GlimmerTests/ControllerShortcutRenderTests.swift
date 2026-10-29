@@ -34,7 +34,7 @@ struct ControllerShortcutRenderTests {
         try await renderer.record(NavigationStack {
             Form {
                 Section { ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls) { _ in } }
-                ControllerShortcutSection(model: model, device: device)
+                ControllerShortcutSection(model: model, device: device) { _ in }
             }.controllerSettingsForm().navigationTitle(device.name)
         }, name: "chords-summary-\(style)", dark: dark)
         let capture = ControllerLayoutCapture(input: input, recordingChord: true)

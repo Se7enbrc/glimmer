@@ -66,8 +66,8 @@ struct StreamStatsRenderTests {
         overlay.setVisible(true)
         overlay.layer.removeAllAnimations()
         let frame = overlay.layer.frame
-        #expect(frame.minX >= viewport.safe.left + 16)
-        #expect(frame.minY >= viewport.safe.top + 16)
+        #expect(abs(frame.minX - viewport.safe.left - 16) < 0.000001)
+        #expect(abs(frame.minY - viewport.safe.top - 16) < 0.000001)
         #expect(frame.maxY <= surface.bounds.height - viewport.safe.bottom)
         try record(surface, name: "\(name)-after")
         #expect(surface.accessibilityValue?.contains("59.9 FPS") == true)

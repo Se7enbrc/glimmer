@@ -2,11 +2,43 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
-import GlimmerEngine
+@testable import GlimmerEngine
 import Testing
 
 struct ControllerShortcutTests {
     private let available = Set(ControllerMappedButton.allCases.map { ControllerLayoutSource.button($0) })
+
+    @Test(arguments: ControllerShortcutAction.allCases)
+    func completeShortcutIsCapturedImmediatelyButAnAbandonedHoldDoesNotFire(action: ControllerShortcutAction) throws {
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
+        var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
+        let chord = action == .stop ? config.stop : config.stats
+        let full = ControllerMappingSample(buttons: chord.buttons)
+        let partial = ControllerMappingSample(buttons: chord.buttons & ~ControllerMappedButton.rightShoulder.rawValue)
+        #expect(gesture.update(partial, at: 10) == nil)
+        #expect(gesture.suppressing == nil)
+        #expect(gesture.update(full, at: 10.1) == nil)
+        #expect(gesture.suppressing?.removing(from: full).buttons == 0)
+        #expect(gesture.latched == nil)
+        #expect(gesture.update(partial, at: 10.2) == nil)
+        #expect(gesture.suppressing == nil)
+        #expect(gesture.deadline == nil)
+        #expect(gesture.update(.init(), at: 11) == nil)
+    }
+
+    @Test(arguments: [0.1, 0.75, 1, 1.999, 2, 2.001, 3])
+    func menuNeedsADeliberateHoldWhileMouseModeKeepsItsShorterHold(seconds: Double) {
+        for opensMenu in [false, true] {
+            var state = ControllerMouseState()
+            let duration = opensMenu ? ControllerMouseState.menuHoldSeconds : ControllerMouseState.holdSeconds
+            #expect(state.update(buttons: Int32(ControllerMappedButton.menu.rawValue), analog: InputCore.neutral,
+                chordHeld: false, now: 10, toggleOnHold: !opensMenu, holdSeconds: duration) == false)
+            let toggled = state.update(buttons: 0, analog: InputCore.neutral, chordHeld: false,
+                now: 10 + seconds, toggleOnHold: !opensMenu, holdSeconds: duration)
+            #expect(toggled == (seconds > (opensMenu ? 2 : 0.75)))
+            #expect(state.isMouse == (!opensMenu && seconds > 0.75))
+        }
+    }
 
     @Test func recordingsRequireThreePhysicalButtonsAndRejectBothConflictDirections() {
         var value = ControllerLayoutShortcuts()
@@ -109,21 +141,45 @@ struct ControllerShortcutTests {
         #expect(ControllerLayoutShortcuts.savedGlobal(in: defaults) == nil)
     }
 
-    @Test func holdSuppressesOnlyAfterThresholdAndFiresOnceAfterEveryButtonReleases() throws {
+    @Test func holdFiresAtThresholdAndSuppressesUntilEveryButtonReleases() throws {
         let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
         var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
         let full = ControllerMappingSample(buttons: config.stats.buttons)
         #expect(gesture.update(full, at: 10) == nil)
-        #expect(gesture.suppressing == nil)
+        #expect(gesture.suppressing?.removing(from: full).buttons == 0)
         #expect(gesture.update(full, at: 10.39) == nil)
-        #expect(gesture.suppressing == nil)
-        #expect(gesture.update(full, at: 10.4) == nil)
+        #expect(gesture.suppressing?.removing(from: full).buttons == 0)
+        #expect(gesture.update(full, at: 10.4) == .stats)
         #expect(gesture.suppressing?.removing(from: full).buttons == 0)
         #expect(gesture.update(.init(buttons: ControllerMappedButton.leftStick.rawValue), at: 10.5) == nil)
         #expect(gesture.suppressing != nil)
-        #expect(gesture.update(.init(), at: 10.6) == .stats)
+        #expect(gesture.update(.init(), at: 10.6) == nil)
         #expect(gesture.update(.init(), at: 10.7) == nil)
         #expect(gesture.suppressing == nil)
+    }
+
+    @Test func releaseThatCompletesTheHoldAlsoRearmsTheNextPress() throws {
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
+        var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
+        let full = ControllerMappingSample(buttons: config.stats.buttons)
+        #expect(gesture.update(full, at: 10) == nil)
+        #expect(gesture.update(.init(), at: 10.4) == .stats)
+        #expect(gesture.latched == nil)
+        #expect(gesture.update(full, at: 11) == nil)
+        #expect(gesture.deadline == 11.4)
+    }
+
+    @Test func timerOvertakingACapturedReportCannotRearmAHeldShortcut() throws {
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
+        var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
+        let full = ControllerMappingSample(buttons: config.stats.buttons)
+        #expect(gesture.update(full, at: 10) == nil)
+        #expect(gesture.update(full, at: 10.4) == .stats)
+        #expect(gesture.update(full, at: 10.399) == nil)
+        #expect(gesture.latched == .stats)
+        #expect(gesture.update(full, at: 10.5) == nil)
+        #expect(gesture.update(full, at: 11) == nil)
+        #expect(gesture.update(.init(), at: 11.1) == nil)
     }
 
     @Test func shortHoldsAndCancellationNeverFire() throws {

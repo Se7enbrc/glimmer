@@ -22,13 +22,13 @@ final class StreamMenuUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["Video from the PC"].exists)
     }
 
-    func testCloseMenuKeepsPlayingAndDisconnectEndsTheStream() {
+    func testResumeKeepsPlayingAndDisconnectEndsTheStream() {
         let app = launchStream()
         defer { app.terminate() }
         XCTAssertTrue(app.buttons["Show controls"].firstMatch.waitForNonExistence(timeout: 5))
         revealMenu(app)
         app.buttons["Show controls"].firstMatch.tap()
-        let close = app.buttons["Close menu"]
+        let close = app.buttons["Resume"]
         XCTAssertTrue(close.waitForExistence(timeout: 3))
         guard close.exists else { return }
         close.tap()
@@ -51,8 +51,8 @@ final class StreamMenuUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Show controls"].firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.otherElements["Video from the PC"].exists)
         app.typeKey("/", modifierFlags: .control)
-        XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 5))
-        app.buttons["Close menu"].tap()
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 5))
+        app.buttons["Resume"].tap()
         XCTAssertTrue(app.otherElements["Video from the PC"].exists)
         app.typeKey("q", modifierFlags: .control)
         XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 5))
@@ -66,13 +66,42 @@ final class StreamMenuUITests: XCTestCase {
         XCTAssertFalse(menu.waitForNonExistence(timeout: 3))
         XCTAssertTrue(menu.isHittable)
         menu.tap()
-        XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 3))
-        app.buttons["Close menu"].tap()
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 3))
+        app.buttons["Resume"].tap()
         XCTAssertTrue(menu.waitForExistence(timeout: 3))
         XCTAssertTrue(menu.isHittable)
         menu.tap()
         XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 3))
         app.buttons["Disconnect"].tap()
+        XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 5))
+    }
+
+    func testLargestTextKeepsResumeAndDisconnectReachable() throws {
+        try largestTextKeepsResumeAndDisconnectReachable(controllerConnected: false)
+    }
+
+    func testLargestTextWithControllerKeepsResumeAndDisconnectReachable() throws {
+        try largestTextKeepsResumeAndDisconnectReachable(controllerConnected: true)
+    }
+
+    private func largestTextKeepsResumeAndDisconnectReachable(controllerConnected: Bool) throws {
+        // The largest-text launcher outgrows a 4.7-inch screen before the stream starts; CI uses the 17 Pro.
+        let screen = XCUIApplication(bundleIdentifier: "com.apple.springboard").frame
+        try XCTSkipIf(max(screen.width, screen.height) < 800, "Largest text needs an iPhone 17 Pro-sized screen")
+        let app = launchStream(controllerConnected: controllerConnected, largestText: true)
+        defer { app.terminate() }
+        app.openStreamControls()
+        let disconnect = app.buttons["Disconnect"]
+        XCTAssertTrue(disconnect.waitForExistence(timeout: 5))
+        XCTAssertTrue(disconnect.isHittable)
+        XCTAssertTrue(app.buttons["Resume"].isHittable)
+        XCTAssertGreaterThanOrEqual(disconnect.frame.height, 44)
+        XCTAssertTrue(app.frame.contains(disconnect.frame))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "largest-text-menu-controller-\(controllerConnected)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        disconnect.tap()
         XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 5))
     }
 
@@ -84,8 +113,11 @@ final class StreamMenuUITests: XCTestCase {
     }
 
     private func launchStream(hardwareKeyboard: Bool = false,
-                              controllerConnected: Bool = true) -> XCUIApplication {
+                              controllerConnected: Bool = true, largestText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
+        if largestText {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
         app.launchEnvironment["GLIMMER_UI_TESTING"] = controllerConnected ? "stream-controller" : "stream"
         app.launch()
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -99,15 +131,15 @@ final class StreamMenuUITests: XCTestCase {
 
 extension XCUIApplication {
     func openStreamControls() {
-        if buttons["Close menu"].exists { return }
+        if buttons["Resume"].exists { return }
         let video = otherElements["Video from the PC"]
         XCTAssertTrue(video.waitForExistence(timeout: 10))
-        if buttons["Close menu"].exists { return }
+        if buttons["Resume"].exists { return }
         video.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
             .withOffset(CGVector(dx: 0, dy: 22)).tap()
         let menu = buttons["Show controls"].firstMatch
         XCTAssertTrue(menu.exists)
         menu.tap()
-        XCTAssertTrue(buttons["Close menu"].waitForExistence(timeout: 5))
+        XCTAssertTrue(buttons["Resume"].waitForExistence(timeout: 5))
     }
 }

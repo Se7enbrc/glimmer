@@ -98,6 +98,71 @@ build.
 | `make test COVERAGE=1`                    | Swift coverage in `build/coverage`.                           |
 | `make test-scripts COVERAGE=1`            | Release-tool coverage in `build/coverage`.                    |
 
+### Hosted verification and local reproduction
+
+Pull requests use three Apple workers in Verify: independent Mac and iOS
+build/core workers, then one that runs the same Mac products on macOS 15. CodeQL
+uses one additional Apple worker. There is no Apple job matrix competing for all
+five available runners. Portable checks and libFuzzer run on Linux.
+
+Pushes, PRs and the default manual dispatch run the core gate. Candidates need
+`macOS` and CodeQL on their exact commit; the Release workflow still runs its
+sanitizer checks. Security queries, complete extraction, coverage reports,
+production device builds, and macOS 15 validation remain required.
+
+Run comprehensive render/UI and journeys once per feature release, such as
+`2026.10.8`. Dispatch **Verify** with mode `acceptance` and that release key.
+This uses one Apple worker and does not rerun the core gate. To continue, supply
+the previous acceptance run ID in `resume_run`; pending and failed cases run,
+while passed cases retain their actual tested SHA. The owner reviews production
+changes and supplies affected `rerun` patterns, for example
+`iphone/*/*Rotation* mac/*/*Mouse*`. This historical acceptance record does not
+claim that every retained pass tested the latest SHA.
+
+To work on a focused area, supply `only` patterns such as `mac/*` or
+`iphone/*/*Rotation*` (`--only` locally). Only matching pending or affected
+cases run; unrelated pending cases stay in the ledger. A focused green run means
+its selected scope passed, and the summary still reports the whole release's
+remaining work. Use `rerun` as well to repeat selected cases that already
+passed.
+
+New or changed journey methods and their test helpers become pending
+automatically. Journey methods are batched by device and appearance, with one
+build per platform. Passing methods survive a failed batch. Render/UI is one
+separately resumable batch, selected by `ios/all/render`. There is no automatic
+nightly acceptance run. The `acceptance-ledger` artifact lasts 90 days; download
+its minimal JSON before expiry if the release remains open. Hosted screenshots
+and results last 14 days. Keep local desktop screenshots private: import only
+testcase JSON with `scripts/acceptance_ledger.py`, using a source note instead
+of inventing a SHA for an uncommitted working tree. A reviewed initial ledger
+can be committed at `docs/release-acceptance/2026.10.8.json`; a resumed artifact
+takes precedence.
+
+Run the same test shard with `make ci-local SHARD=mac`, `core`, `render`, or
+`journeys`, or `acceptance CI_TEST_FLAGS='--release 2026.10.8'`. The command
+requires Xcode 26.6 and its matching Simulator runtime; it fails explicitly when
+either is unavailable. Each simulator run uses a new owned device and deletes
+only that device. Core and render share one arm64 Simulator build in
+`iOS/build/ci/DerivedData`; use `CI_TEST_FLAGS=--run-only` to reuse it. Fresh
+builds replace only the runner's own scheme manifests, keeping manual build
+products separate. Journeys always run their full Mac/iPhone/iPad and light/dark
+matrix. Local simulator tooling can be selected explicitly through
+`GLIMMER_SIMCTL` for core/render; the selected Xcode and SDK never change
+implicitly.
+
+The shard logs, result bundles, coverage and failure summaries are under
+`build/logs`, `build/coverage`, and `iOS/build/ci`. Test failures appear with
+source locations when available. Normal runs use one attempt and require a
+positive passed-test count. Local diagnosis can use
+`CI_TEST_FLAGS='--run-only --diagnostic-retry'` to retry once; it always exits
+nonzero and cannot qualify a candidate. Recovered failures remain visible.
+Runtime limits produce a failure and preserve the log.
+
+The CodeQL compiler wrapper limits each concurrent platform build to one WMO
+thread on the three-core host. Compare traced build duration and complete
+extraction receipts against the previous 23.3-minute build before claiming a
+speedup; neither a local build nor fewer queued jobs proves faster extraction.
+
 `scripts/fuzz.sh` runs coverage-guided harnesses in a pinned Swift Linux
 container. It needs Docker; `FUZZ_SECONDS` controls each target and crashing
 inputs stay in `build/fuzz/`.
@@ -346,14 +411,15 @@ current `main`.
 
 Wait for the required checks on the exact commit under review.
 
-| Check                         | Scope                                                                                                                |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `macOS`                       | Parallel checks, Swift tests and ASan tests; docs-only PRs run checks alone. Every `main` commit runs the full gate. |
-| CodeQL                        | Required Swift, Python and Actions analysis; Swift uses Xcode 26.6, the other jobs Linux.                            |
-| Swift extraction              | Requires every tracked production Swift file; unsupported compilers or incomplete extraction fail.                   |
-| Documentation-only Swift skip | PRs with no traced build inputs can skip Swift analysis; release candidates still need exact-commit analysis.        |
-| Coverage                      | Per-component reports, no threshold.                                                                                 |
-| libFuzzer                     | 30 seconds per target in a separate job, outside the required `macOS` check.                                         |
+| Check                         | Scope                                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `macOS`                       | Checks, Mac/iOS core tests, production builds, macOS 15 and libFuzzer; docs-only PRs run checks alone.              |
+| CodeQL                        | Required Swift, Python and Actions analysis; Swift uses Xcode 26.6, the other jobs Linux.                           |
+| Swift extraction              | Requires every tracked production Swift file; unsupported compilers or incomplete extraction fail.                  |
+| Documentation-only Swift skip | PRs with no traced build inputs can skip Swift analysis; release candidates still need exact-commit analysis.       |
+| Coverage                      | Per-component reports, no threshold.                                                                                |
+| libFuzzer                     | 30 seconds per target in a Linux job required by `macOS`.                                                           |
+| Release acceptance            | Explicit resumable render/UI and journey history; owner-reviewed affected reruns, separate from the exact-SHA gate. |
 
 Outside-contributor workflows need maintainer approval. PRs receive no release
 credentials. Releases use a separate protected workflow. Main requires squash

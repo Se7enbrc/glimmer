@@ -22,6 +22,7 @@ struct ControllerBindingRecorder: View {
     let model: ControllerLayoutsModel
     let device: ControllerLayoutDevice
     let target: Target
+    @State private var editingID = UUID()
     @State private var sources: Set<ControllerLayoutSource> = []
     @State var capture: ControllerLayoutCapture?
     @State private var saving = false
@@ -67,12 +68,18 @@ struct ControllerBindingRecorder: View {
         }
         .interactiveDismissDisabled(saving)
         .onAppear {
+            ControllerLayoutEditing.begin(editingID)
+            model.beginObserving()
             switch target {
             case .mouse(let action): sources = model.mouse[action]
             case .shortcut(let action): sources = capture?.finished == true ? capture?.chord ?? [] : model.shortcuts(device)[action]
             }
         }
-        .onDisappear { capture?.stop() }
+        .onDisappear {
+            capture?.stop()
+            model.endObserving()
+            ControllerLayoutEditing.end(editingID)
+        }
         .onChange(of: capture?.finished) { _, finished in
             if finished == true, let capture { sources = capture.chord; capture.stop() }
         }

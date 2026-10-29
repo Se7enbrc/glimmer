@@ -11,6 +11,52 @@ import Testing
 
 @MainActor
 struct ControllerLayoutDeliveryTests {
+    @Test func menuDismissalUsesFreshBPressAndRestoresThePreviousOwner() throws {
+        let controller = GCController.withExtendedGamepad()
+        let button = try #require(controller.extendedGamepad?.buttonB)
+        let oldCalls = Mutex(0)
+        button.setValue(1)
+        button.pressedChangedHandler = { @Sendable _, _, _ in oldCalls.withLock { $0 += 1 } }
+        let previous = oldCalls.withLock { $0 }
+        let dismissal = ControllerMenuDismissal()
+        var dismissals = 0
+        dismissal.start(controllers: [controller]) { dismissals += 1 }
+        let callback = try #require(button.pressedChangedHandler)
+        callback(button, 1, true)
+        #expect(dismissals == 0)
+        callback(button, 0, false)
+        callback(button, 1, true)
+        callback(button, 1, true)
+        #expect(dismissals == 1)
+        dismissal.stop()
+        callback(button, 0, false)
+        callback(button, 1, true)
+        #expect(dismissals == 1)
+        button.pressedChangedHandler?(button, 0, false)
+        #expect(oldCalls.withLock { $0 } == previous + 1)
+    }
+
+    @Test func legacyCallbackUsesTheSameClockAsTheShortcutDeadline() throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let clock = Mutex<TimeInterval>(10)
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil,
+            available: Set(ControllerMappedButton.allCases.map { .button($0) }))
+        let gesture = Mutex(ControllerShortcutGesture(stop: config.stop, stats: config.stats))
+        ControllerStreamHandlers.install(controller: controller, input: controller.input, queue: .main,
+            mapsGameInput: false, shortcutElements: [], read: { .init(buttons: config.stop.buttons) },
+            now: { clock.withLock { $0 } },
+            receive: { sample, time in gesture.withLock { _ = $0.update(sample, at: time) } })
+        let handler = try #require(pad.valueChangedHandler)
+        handler(pad, pad.buttonMenu)
+        #expect(gesture.withLock { $0.deadline } == 10.4)
+        clock.withLock { $0 = 10.4 }
+        let result = gesture.withLock { $0.update(.init(buttons: config.stop.buttons), at: 10.4) }
+        #expect(result == .stop)
+        pad.valueChangedHandler = nil
+        ControllerButtonRoutes.set(controller, nil)
+    }
+
     @Test func controllerMouseStartsRightHandedWithoutFaceButtonClicks() {
         let core = InputCore()
         #expect(core.controllerMouseMapping == .rightStick)
@@ -44,7 +90,7 @@ struct ControllerLayoutDeliveryTests {
         #expect(zip(timestamps, timestamps.dropFirst()).allSatisfy { $0 <= $1 })
         #expect(controller.handlerQueue === queue)
         #expect(controller.input.queue === queue)
-        #expect(controller.extendedGamepad?.buttonMenu.pressedChangedHandler == nil)
+        #expect(controller.extendedGamepad?.buttonMenu.pressedChangedHandler != nil)
     }
 
     @Test(arguments: [false, true])
@@ -56,7 +102,7 @@ struct ControllerLayoutDeliveryTests {
             mapsGameInput: mapsGameInput, shortcutElements: [], read: { .init() }, receive: { _, _ in })
         #expect((pad.valueChangedHandler != nil) == !mapsGameInput)
         #expect((controller.input.elementValueDidChangeHandler != nil) == mapsGameInput)
-        #expect(pad.buttonMenu.pressedChangedHandler == nil)
+        #expect(pad.buttonMenu.pressedChangedHandler != nil)
         #expect(controller.handlerQueue === queue)
         #expect(controller.input.queue === queue)
     }
@@ -101,6 +147,35 @@ struct ControllerLayoutDeliveryTests {
             #expect(streams.withLock { $0 } == before + 2)
             #expect(captures.withLock { $0 } == captured + 1)
         }
+    }
+
+    // Some controllers report Menu only through the button handler; the stream must hear it exactly once.
+    @Test(arguments: [false, true])
+    func buttonOnlyRoutesReachTheStreamWithoutDuplicates(mapsGameInput: Bool) throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let queue = DispatchQueue(label: "controller-button-route-test")
+        let physical = Mutex(ControllerMappingSample())
+        let received = Mutex([ControllerMappingSample]())
+        ControllerStreamHandlers.install(controller: controller, input: controller.input, queue: queue,
+            mapsGameInput: mapsGameInput, shortcutElements: [], read: { physical.withLock { $0 } },
+            receive: { sample, _ in received.withLock { $0.append(sample) } })
+        let menu = try #require(pad.buttonMenu.pressedChangedHandler)
+        let options = try #require(pad.buttonOptions?.pressedChangedHandler)
+        physical.withLock { $0.buttons = ControllerMappedButton.menu.rawValue }
+        queue.sync { menu(pad.buttonMenu, 1, true) }
+        queue.sync { menu(pad.buttonMenu, 1, true) }
+        physical.withLock { $0.buttons |= ControllerMappedButton.options.rawValue }
+        if let profile = pad.valueChangedHandler { queue.sync { profile(pad, pad.buttonA) } }
+        queue.sync { options(pad.buttonMenu, 1, true) }
+        let buttons = received.withLock { $0.map(\.buttons) }
+        let both = ControllerMappedButton.menu.rawValue | ControllerMappedButton.options.rawValue
+        #expect(buttons == [ControllerMappedButton.menu.rawValue, both])
+        let lease = ControllerLayoutInputLease(controller: controller, input: controller.input, queue: queue,
+            read: { .init() }, receive: { _, _ in })
+        #expect(pad.buttonMenu.pressedChangedHandler == nil)
+        lease.stop()
+        #expect(pad.buttonMenu.pressedChangedHandler != nil)
     }
 
     @Test func physicalOnlyCaptureRestoresPriorHandlersAndQueues() throws {
@@ -241,7 +316,8 @@ private enum StickCallbackDelivery {
         let aliases: Set<String>
         let localizedName: String? = nil
         let sfSymbolsName: String? = nil
-        init(_ name: String) { aliases = [name] }
+        // Real pads expose each stick press as an alias of the stick element itself.
+        init(_ name: String) { aliases = [name, name + " Button"] }
     }
 
     static func send(input: GCControllerLiveInput, stick: any GCPhysicalInputElement,

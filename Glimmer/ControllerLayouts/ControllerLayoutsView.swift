@@ -56,6 +56,7 @@ struct ControllerLayoutEditor: View {
     @State var scope: ControllerLayoutScope
     @State private var editingID = UUID()
     @State private var selected: ControllerLayoutControl?
+    @State private var shortcut: ControllerShortcutAction?
     @State private var capturing = false
     @State private var resetting = false
     @State private var standardReset = false
@@ -122,6 +123,10 @@ struct ControllerLayoutEditor: View {
         .sheet(isPresented: $capturing) {
             captureSheet
         }
+        // A lazy Form section cannot own a sheet that must survive its disappearance.
+        .sheet(item: $shortcut) { action in
+            ControllerBindingRecorder(model: model, device: device, target: .shortcut(action))
+        }
         .confirmationDialog(scope == .allGames ? "Use system layout?" : "Use All games?",
                             isPresented: $resetting, titleVisibility: .visible) {
             Button(scope == .allGames ? "Use system layout" : "Use All games", role: .destructive) {
@@ -174,7 +179,7 @@ struct ControllerLayoutEditor: View {
     }
 
     private var shortcutsSection: some View {
-        ControllerShortcutSection(model: model, device: device)
+        ControllerShortcutSection(model: model, device: device) { shortcut = $0 }
     }
 
     private func destination(_ source: ControllerLayoutSource) -> ControllerLayoutDestination {

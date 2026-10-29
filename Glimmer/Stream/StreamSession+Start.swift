@@ -41,11 +41,21 @@ extension StreamSession {
             customControllerChordProvider: customControllerChordProvider, onBackgroundedChanged: onBackgroundedChanged,
             onMiniPlayerChanged: onMiniPlayerChanged, onCancelConnect: onCancelConnect)
         guard let stream = try await start(server: server, request: config.request, appID: appID,
-            makeSampler: { MacStreamPath.makeSampler(host: server.address, port: UInt16(server.httpsPort)) },
+            makeSampler: {
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_DIRECTORY"] != nil {
+                    return RttSampler(host: "pc.invalid", port: 0, maxAttempts: 0)
+                }
+                #endif
+                return MacStreamPath.makeSampler(host: server.address, port: UInt16(server.httpsPort))
+            },
             prepare: { [self] negotiated in
                 let setup = buildStreamSubsystems(options)
                 setup.1.controllerLayouts = MacControllerLayouts(forwarder: setup.1,
                     scope: .game(pcID: server.uniqueId, appID: UInt32(clamping: appID)))
+                #if DEBUG
+                JourneyMacPC.active?.prepare(setup)
+                #endif
                 setup.2.setNegotiatedBitrateKbps(negotiated)
                 let prepared = Self.prepareMacMedia(setup, session: self,
                     statsRowsProvider: statsRowsProvider, statsThresholdsProvider: statsThresholdsProvider)

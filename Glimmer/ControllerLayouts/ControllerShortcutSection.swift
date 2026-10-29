@@ -7,13 +7,13 @@ import SwiftUI
 struct ControllerShortcutSection: View {
     let model: ControllerLayoutsModel
     let device: ControllerLayoutDevice
-    @State private var recording: ControllerShortcutAction?
+    let record: (ControllerShortcutAction) -> Void
 
     var body: some View {
         Section {
             ForEach(ControllerShortcutAction.allCases) { action in
                 ControllerSettingsRow(title: action.title, value: ControllerLayoutShortcutSummary.describe(
-                    model.shortcuts(device)[action], controls: device.controls)) { recording = action }
+                    model.shortcuts(device)[action], controls: device.controls)) { record(action) }
                 .disabled(!model.loaded)
                 .accessibilityHint("Records a controller shortcut for all games.")
             }
@@ -23,8 +23,5 @@ struct ControllerShortcutSection: View {
             }
             ControllerLayoutShortcutHelp()
         } header: { Text("Glimmer controls").foregroundStyle(.secondary) }
-        .sheet(item: $recording) { action in
-            ControllerBindingRecorder(model: model, device: device, target: .shortcut(action))
-        }
     }
 }

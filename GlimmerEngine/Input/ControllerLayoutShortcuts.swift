@@ -89,7 +89,7 @@ public struct ControllerLayoutShortcuts: Codable, Equatable, Sendable {
             warnings.append("This shortcut needs more than one button per thumb. Try shoulders or triggers instead.")
         }
         if pairs.contains(where: { $0.isSubset(of: chord) }) {
-            warnings.append("Some games use these buttons together. The PC sees them until the hold completes.")
+            warnings.append("Some games use these buttons together. Glimmer captures them when the full shortcut is pressed.")
         }
         return warnings.isEmpty ? nil : warnings.joined(separator: " ")
     }
@@ -130,7 +130,7 @@ public struct ControllerLayoutShortcuts: Codable, Equatable, Sendable {
     }
 }
 
-public struct ControllerPhysicalChord: Sendable {
+public struct ControllerPhysicalChord: Equatable, Sendable {
     public let buttons: UInt32
     public let triggers: UInt8
     public let extras: SIMD2<UInt64>
