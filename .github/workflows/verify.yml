@@ -260,7 +260,8 @@ jobs:
         if:
           needs.changes.outputs.build == 'true' && needs.changes.outputs.apple
           == 'true'
-        timeout-minutes: 5
+        # Cold device plus Simulator builds have taken nearly five minutes.
+        timeout-minutes: 8
         run: |
           xcodebuild -version
           for destination in 'generic/platform=iOS' 'generic/platform=iOS Simulator'; do
