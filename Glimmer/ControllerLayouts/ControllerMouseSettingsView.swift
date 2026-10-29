@@ -75,7 +75,7 @@ struct ControllerMouseSettingsView: View {
             } header: { Text("Mouse controls").foregroundStyle(.secondary) }
             Section {
                 #if os(iOS)
-                Text("Hold the mouse-mode toggle for 2.5 seconds to open stream controls, then choose a mode.")
+                Text("Hold the mouse-mode toggle for 2 seconds to open stream controls, then choose a mode.")
                 #else
                 Text("Hold the mouse-mode toggle for a second and release to switch between the game and the mouse.")
                 #endif

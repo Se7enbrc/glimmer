@@ -5,7 +5,7 @@ import Foundation
 
 package struct ControllerMouseState {
     package static let holdSeconds = 0.75
-    package static let menuHoldSeconds = 2.5
+    package static let menuHoldSeconds = 2.0
     package var isMouse = false
     package var buttons: Int32 = 0
     package var analog = InputCore.neutral

@@ -42,7 +42,7 @@ extension ControllerJourneyUITests {
         app.buttons["launcher-app-1"].firstMatch.tap()
         XCTAssertTrue(waitForReceipt("rendered"))
         // Menu hold opens the stream controls on iPhone and iPad; mouse mode is one of their actions.
-        try press("menu", duration: 2700)
+        try press("menu", duration: 2200)
         let useMouse = app.buttons["Use mouse mode"]
         XCTAssertTrue(useMouse.waitForExistence(timeout: 5))
         useMouse.tap()
@@ -63,7 +63,7 @@ extension ControllerJourneyUITests {
             try press("rt")
             XCTAssertFalse(receipts().dropFirst(index).contains { $0["pcMouseButton"] == 1 })
         }
-        try press("menu", duration: 2700)
+        try press("menu", duration: 2200)
         let useGamepad = app.buttons["Use gamepad mode"]
         XCTAssertTrue(useGamepad.waitForExistence(timeout: 5))
         useGamepad.tap()
@@ -80,7 +80,7 @@ extension ControllerJourneyUITests {
         try play(app)
         try controller(connect: true, profile: "xbox")
         for action in ["stream-touch-toggle", "stream-stats-toggle", "stream-controller-mode"] {
-            try press("menu", duration: 2700)
+            try press("menu", duration: 2200)
             let button = app.buttons[action]
             XCTAssertTrue(button.waitForExistence(timeout: 5), action)
             button.tap()
@@ -91,7 +91,7 @@ extension ControllerJourneyUITests {
         let others = app.buttons.allElementsBoundByIndex.filter { $0.label != "Mouse mode on" && $0.isHittable }
         XCTAssertFalse(others.isEmpty)
         for other in others { XCTAssertFalse(other.frame.intersects(badge.frame), other.label) }
-        try press("menu", duration: 2700)
+        try press("menu", duration: 2200)
         app.buttons["Use gamepad mode"].tap()
         XCTAssertTrue(app.staticTexts["Controller is back in the game."].waitForExistence(timeout: 2))
         XCTAssertFalse(badge.exists, "Leaving mouse mode removes the glyph")

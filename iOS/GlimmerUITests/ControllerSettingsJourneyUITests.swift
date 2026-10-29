@@ -11,7 +11,7 @@ extension ControllerJourneyUITests {
         let index = receipts().count
         try press("menu", duration: 1200)
         XCTAssertFalse(app.buttons["stream-resume"].exists, "Pausing must not open Glimmer's menu")
-        try press("menu", duration: 2700)
+        try press("menu", duration: 2200)
         record("controller-menu-hold")
         XCTAssertTrue(receipts().dropFirst(index).contains { $0["pcButtons"] == 0x10 })
         XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 5))
@@ -19,7 +19,7 @@ extension ControllerJourneyUITests {
         try controller(steps: [["element": "b", "value": 1, "route": "button", "milliseconds": 100],
                                ["element": "b", "value": 0, "route": "button"]])
         XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
-        try press("menu", duration: 2700)
+        try press("menu", duration: 2200)
         XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
         // Cover visible video outside the safe area, away from the camera cutout.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.15)).tap()

@@ -28,7 +28,7 @@ struct StreamControlsHelp: View {
                 Text("Change Stop streaming and Stats shortcuts in Controller layouts. "
                      + "Hold a shortcut, then release to use it.")
                 ControllerMouseDiagram(bindings: ControllerLayoutsModel.shared.mouse).tint(.primary)
-                Text("Hold the mouse-mode toggle for 2.5 seconds to open stream controls, then choose a mode.")
+                Text("Hold the mouse-mode toggle for 2 seconds to open stream controls, then choose a mode.")
             }
             if let hint = Self.keyboardHint(connected: keyboardConnected,
                                             stats: model.shortcuts.stats.displayString,

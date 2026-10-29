@@ -5,7 +5,7 @@
 - Complete controller shortcuts are captured before they reach the PC, and their
   hold timers use the same clock as incoming controller events.
 
-- Hold the controller's Menu button for 2.5 seconds to open stream controls on
+- Hold the controller's Menu button for 2 seconds to open stream controls on
   iPhone and iPad. Tap outside or press Circle or B to return to the game.
 
 - Mac stream notices disappear before the closing animation begins.

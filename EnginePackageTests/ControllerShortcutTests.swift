@@ -26,7 +26,7 @@ struct ControllerShortcutTests {
         #expect(gesture.update(.init(), at: 11) == nil)
     }
 
-    @Test(arguments: [0.1, 0.75, 1, 2.499, 2.5, 2.501, 3])
+    @Test(arguments: [0.1, 0.75, 1, 1.999, 2, 2.001, 3])
     func menuNeedsADeliberateHoldWhileMouseModeKeepsItsShorterHold(seconds: Double) {
         for opensMenu in [false, true] {
             var state = ControllerMouseState()
@@ -35,7 +35,7 @@ struct ControllerShortcutTests {
                 chordHeld: false, now: 10, toggleOnHold: !opensMenu, holdSeconds: duration) == false)
             let toggled = state.update(buttons: 0, analog: InputCore.neutral, chordHeld: false,
                 now: 10 + seconds, toggleOnHold: !opensMenu, holdSeconds: duration)
-            #expect(toggled == (seconds > (opensMenu ? 2.5 : 0.75)))
+            #expect(toggled == (seconds > (opensMenu ? 2 : 0.75)))
             #expect(state.isMouse == (!opensMenu && seconds > 0.75))
         }
     }
