@@ -44,8 +44,10 @@ connection to the PC. See
 
 {% hint style="info" %}
 
-Still stuck? [Collect local diagnostics](../PROFILING.md#opt-in-telemetry).
-[Review them before sharing](../PRIVACY.md); never attach keys, PINs or
+On Mac, [collect local diagnostics](../PROFILING.md#opt-in-telemetry). On iPhone
+and iPad, note the time and what happened; both beta and production builds use
+Apple's system logs and crash reports without custom recording.
+[Review reports before sharing](../PRIVACY.md); never attach keys, PINs or
 certificates.
 
 {% endhint %}
