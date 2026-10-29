@@ -291,9 +291,11 @@ struct IOSControllerCaptureTests {
         obsolete(pad, pad.buttonA)
         #expect(fixture.samples.count == before)
         let current = try #require(pad.valueChangedHandler)
+        let callbackBegan = ProcessInfo.processInfo.systemUptime
         current(pad, pad.buttonA)
         #expect(fixture.samples.count == before + 1)
-        #expect(fixture.timestamps.last == pad.lastEventTimestamp)
+        let capturedAt = try #require(fixture.timestamps.last)
+        #expect(capturedAt >= callbackBegan && capturedAt <= ProcessInfo.processInfo.systemUptime)
         capture.stop()
         current(pad, pad.buttonA)
         #expect(fixture.samples.count == before + 1)
