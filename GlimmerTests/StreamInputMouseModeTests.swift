@@ -64,7 +64,7 @@ struct StreamInputMouseModeTests {
         #expect(!mouse.isMoving((.zero, .zero)))
     }
 
-    @Test(arguments: [0.1, 0.75, 1.2, 2.49])
+    @Test(arguments: [0.1, 0.75, 1.2, 1.999, 2.0])
     func pausingTheGameDoesNotOpenStreamControls(seconds: Double) throws {
         let rig = rig()
         defer { rig.input.stop() }
@@ -80,12 +80,12 @@ struct StreamInputMouseModeTests {
         defer { rig.input.stop() }
         rig.input.setControllerMenuOpensControls(true)
         let controller = try #require(rig.input.registerController(descriptor))
-        toggle(rig.input, controller, seconds: 2.501)
+        toggle(rig.input, controller, seconds: 2.001)
         #expect(rig.events.withLock { $0.contains(.controlsRequested(controller)) })
         #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == false)
         rig.input.setControllerMouseMode(true, for: controller)
         #expect(rig.events.withLock { $0.last } == .mouseMode(controller, enabled: true))
-        toggle(rig.input, controller, seconds: 2.501)
+        toggle(rig.input, controller, seconds: 2.001)
         #expect(rig.events.withLock { $0.last } == .controlsRequested(controller))
         #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == true)
         rig.input.setControllerMouseMode(false, for: controller)

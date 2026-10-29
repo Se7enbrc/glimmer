@@ -152,7 +152,7 @@ struct ControllerChordHoldConflictTests {
         #expect(!rig.isMouse && rig.menus.withLock { $0 } == 0)
         rig.wait(0.1)
         rig.set(.menu, true)
-        rig.wait(menuOpensControls ? 2.501 : 0.8)
+        rig.wait(menuOpensControls ? 2.001 : 0.8)
         rig.set(.menu, false)
         #expect(menuOpensControls ? rig.menus.withLock { $0 } == 1 : rig.isMouse)
     }
@@ -188,7 +188,7 @@ struct ControllerChordHoldConflictTests {
     func loneMenuHoldStillTogglesMouseModeOrOpensControls(menuOpensControls: Bool) throws {
         let rig = try Rig(menuOpensControls: menuOpensControls)
         rig.set(.menu, true)
-        rig.wait(menuOpensControls ? 2.501 : 0.8)
+        rig.wait(menuOpensControls ? 2.001 : 0.8)
         rig.set(.menu, false)
         #expect(menuOpensControls ? rig.menus.withLock { $0 } == 1 : rig.isMouse)
     }
