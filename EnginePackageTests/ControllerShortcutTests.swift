@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
-import GlimmerEngine
+@testable import GlimmerEngine
 import Testing
 
 struct ControllerShortcutTests {
