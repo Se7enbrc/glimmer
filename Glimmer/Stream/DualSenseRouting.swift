@@ -3,14 +3,25 @@
 
 import Foundation
 import GameController
+import GlimmerEngine
 
 /// Shared by the forwarder and diagnostics. Feedback threads only read the locked routes.
 final class DualSenseRouting: @unchecked Sendable {
     static let shared = DualSenseRouting()
     private let lock = NSLock()
-    private var binder = DualSenseBinder()
+    private var binder: DualSenseBinder
+    private let schedule: @Sendable (@escaping @Sendable () -> Void) -> Void
     private var faces: [ObjectIdentifier: Set<DualSenseFaceButton>] = [:]
+    private var inputTokens: [ObjectIdentifier: UUID] = [:]
     private var slots: [UInt8: ObjectIdentifier] = [:]
+
+    init(binder: DualSenseBinder = DualSenseBinder(),
+         schedule: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void = { work in
+             DispatchQueue.main.asyncAfter(deadline: .now() + 2 * DualSenseBinder.window + 0.001, execute: work)
+         }) {
+        self.binder = binder
+        self.schedule = schedule
+    }
 
     func device(for controller: ObjectIdentifier) -> DualSenseDeviceKey? {
         lock.lock(); defer { lock.unlock() }
@@ -26,6 +37,17 @@ final class DualSenseRouting: @unchecked Sendable {
     func controller(for device: DualSenseDeviceKey) -> ObjectIdentifier? {
         lock.lock(); defer { lock.unlock() }
         return binder.controller(for: device)
+    }
+
+    func inputRegistration(for device: DualSenseDeviceKey) -> (id: ObjectIdentifier, token: UUID)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let id = binder.controller(for: device), let token = inputTokens[id] else { return nil }
+        return (id, token)
+    }
+
+    func registerInputToken(_ token: UUID, controller: ObjectIdentifier) {
+        lock.lock(); defer { lock.unlock() }
+        inputTokens[controller] = token
     }
 
     @MainActor func syncControllers() {
@@ -53,6 +75,7 @@ final class DualSenseRouting: @unchecked Sendable {
 
     func unregister(slot: UInt8) {
         lock.lock(); defer { lock.unlock() }
+        if let id = slots[slot] { inputTokens[id] = nil }
         slots[slot] = nil
     }
 
@@ -99,19 +122,21 @@ final class DualSenseRouting: @unchecked Sendable {
         guard !devices.isEmpty else { return }
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                for device in devices { DualSenseHID.shared.onChange?(device) }
+                for device in devices { DualSenseHID.shared.notifyInputChange(device) }
             }
         }
     }
 
     func hid(device: DualSenseDeviceKey, pressed: Set<DualSenseFaceButton>, at time: TimeInterval) {
-        lock.withLock {
+        let needsResolution = lock.withLock {
+            guard !pressed.isEmpty, binder.controller(for: device) == nil else { return false }
             for button in pressed { binder.hid(deviceID: device, button: button, at: time) }
+            return true
         }
-        scheduleResolution()
+        if needsResolution { scheduleResolution() }
     }
 
-    @MainActor func gc(pad: GCExtendedGamepad) {
+    func gc(pad: GCExtendedGamepad) {
         guard pad is GCDualSenseGamepad, let controller = pad.controller else { return }
         let id = ObjectIdentifier(controller)
         let inputs: [(DualSenseFaceButton, Bool)] = [
@@ -120,9 +145,20 @@ final class DualSenseRouting: @unchecked Sendable {
         ]
         let held = Set(inputs.filter(\.1).map(\.0))
         let time = ProcessInfo.processInfo.systemUptime
+        gc(controller: id, held: held, at: time)
+    }
+
+    func gc(controller: ObjectIdentifier, buttons: UInt32, at time: TimeInterval) {
+        let masks: [(ControllerMappedButton, DualSenseFaceButton)] = [(.a, .cross), (.b, .circle), (.x, .square), (.y, .triangle)]
+        let held = Set(masks.compactMap { buttons & $0.0.rawValue != 0 ? $0.1 : nil })
+        gc(controller: controller, held: held, at: time)
+    }
+
+    private func gc(controller id: ObjectIdentifier, held: Set<DualSenseFaceButton>, at time: TimeInterval) {
         let changed = lock.withLock {
             let pressed = held.subtracting(faces[id] ?? [])
             faces[id] = held
+            guard binder.hidDevice(for: id) == nil else { return false }
             for button in pressed { binder.gc(controllerID: id, button: button, at: time) }
             return !pressed.isEmpty
         }
@@ -130,7 +166,7 @@ final class DualSenseRouting: @unchecked Sendable {
     }
 
     private func scheduleResolution() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2 * DualSenseBinder.window + 0.001) { [weak self] in
+        schedule { [weak self] in
             guard let self else { return }
             let matched = self.lock.withLock {
                 let before = self.boundRoutes

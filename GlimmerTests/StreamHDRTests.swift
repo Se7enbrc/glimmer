@@ -9,13 +9,30 @@
 //  tag promises HDR only on a display that can show it.
 //
 
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 
 struct StreamHDRTests {
+    private let settings = IsolatedDefaults()
 
     private let probed: VideoFormats = [.h264, .hevc, .hevcMain10, .hevcRext8_444, .hevcRext10_444,
                                         .av1, .av1Main10, .av1High8_444, .av1High10_444]
+
+    @MainActor @Test func launcherUsesRec709FullRegardlessOfTheHDROffer() {
+        let model = AppModel(defaults: settings.defaults)
+        let pc = Host(id: "colour-pc", name: "PC", customName: nil, localAddress: "192.0.2.10",
+                      manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
+                      appVersion: nil, macAddress: nil)
+        let config = model.nativeStreamConfig(for: pc)
+        #expect(config.colorSpace == .rec709 && config.colorRange == .full)
+        for hdr in [false, true] {
+            var request = config
+            request.videoFormats = AppModel.videoFormats(probed, hdr: hdr)
+            #expect((request.colorSpace.cValue << 1) | request.colorRange.cValue == 3)
+            #expect(request.videoFormats.contains(.hevcMain10) == hdr)
+        }
+    }
 
     @Test func hdrOnOffersEverythingProbed() {
         #expect(AppModel.videoFormats(probed, hdr: true) == probed)

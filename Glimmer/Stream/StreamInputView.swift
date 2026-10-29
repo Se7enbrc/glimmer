@@ -29,6 +29,7 @@ protocol StreamInputViewDelegate: AnyObject {
     func streamViewPointerDidEnter(_ view: StreamInputView)
     func streamViewPointerDidExit(_ view: StreamInputView)
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool
+    func streamView(_ view: StreamInputView, commitText text: String)
     func streamViewPaste(_ view: StreamInputView)
 }
 
@@ -41,6 +42,28 @@ final class StreamInputView: NSView {
     weak var delegate: (any StreamInputViewDelegate)?
 
     private var trackingArea: NSTrackingArea?
+    var textInput = StreamTextInput()
+    var discardMarkedText: (StreamInputView) -> Void = { $0.inputContext?.discardMarkedText() }
+    var interpretTextEvent: (StreamInputView, NSEvent) -> Void = { $0.interpretKeyEvents([$1]) }
+
+    override func doCommand(by selector: Selector) {
+        // Editing commands outside composition still belong to the PC.
+        if textInput.wasComposing {
+            textInput.consumed = true
+            if selector == #selector(cancelOperation(_:)), hasMarkedText() { cancelComposition() }
+        }
+    }
+
+    var onResignFirstResponder: (() -> Void)?
+
+    override func resignFirstResponder() -> Bool {
+        if hasMarkedText() { cancelComposition() }
+        let resigned = super.resignFirstResponder()
+        if resigned { onResignFirstResponder?() }
+        return resigned
+    }
+
+    var onBecomeFirstResponder: (() -> Void)?
 
     /// The invisible image prevents a system reveal from drawing an arrow over
     /// captured input. Release and teardown must explicitly restore the arrow.
@@ -99,7 +122,10 @@ final class StreamInputView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
     override var isOpaque: Bool { true }
-    override func becomeFirstResponder() -> Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        onBecomeFirstResponder?()
+        return true
+    }
 
     /// Critical for the stream window: macOS only delivers mouseMoved to a
     /// view if its window has `acceptsMouseMovedEvents = true` AND the view

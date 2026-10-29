@@ -7,6 +7,7 @@
 //  Linear pointer scaling while a stream has focus, through the HID system's IOKit user client.
 //
 
+import GlimmerEngine
 import Foundation
 import IOKit
 import IOKit.hidsystem
@@ -24,7 +25,7 @@ enum MouseAccelerationControl {
     private static let legacyPendingRestoreKey = "mouseAccelPendingRestore"
     nonisolated(unsafe) private static var loggedAPIUnavailable = false
 
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledDefaultsKey) }
+    static var isEnabled: Bool { PersistentStorage.defaults.bool(forKey: enabledDefaultsKey) }
 
     /// Turn linear scaling on (no velocity curve, Tracking Speed kept). Returns
     /// the user's prior flag to hand back on disengage, or nil when there is
@@ -37,7 +38,7 @@ enum MouseAccelerationControl {
             }
             return nil
         }
-        let defaults = UserDefaults.standard
+        let defaults = PersistentStorage.defaults
         // An engagement is already live (a raced restore, a crashed session):
         // the sentinel holds the user's real flag, the read-back is ours.
         if defaults.object(forKey: pendingRestoreKey) != nil {
@@ -65,13 +66,13 @@ enum MouseAccelerationControl {
     /// took, so a refused restore is retried at the next launch.
     static func restore(_ prior: Bool) {
         guard setParameter(kIOHIDUseLinearScalingMouseAccelerationKey, NSNumber(value: prior)) else { return }
-        UserDefaults.standard.removeObject(forKey: pendingRestoreKey)
+        PersistentStorage.defaults.removeObject(forKey: pendingRestoreKey)
     }
 
     /// Launch-time crash recovery for a session that died while engaged. Also
     /// heals the pointer of a build that wrote HIDMouseAcceleration = -1.
     static func restoreOrphanedOverride() {
-        let defaults = UserDefaults.standard
+        let defaults = PersistentStorage.defaults
         if defaults.object(forKey: pendingRestoreKey) != nil {
             let prior = defaults.bool(forKey: pendingRestoreKey)
             if setParameter(kIOHIDUseLinearScalingMouseAccelerationKey, NSNumber(value: prior)) {

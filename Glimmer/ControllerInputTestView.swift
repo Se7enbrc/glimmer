@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ControllerInputTestView.swift
-//
-//  The Troubleshooting controller input test: a live 30 Hz view of every
-//  connected controller's buttons, sticks, triggers, and touchpad. Split out
-//  of TroubleshootingPane.swift to keep each file focused.
-//
-
+import GlimmerEngine
 import AppKit
 import GameController
 import SwiftUI
@@ -22,7 +15,7 @@ final class ControllerMonitor {
     /// for "does GameController deliver input to us in this context at all?"
     @ObservationIgnored private(set) var gcEventCount = 0
     private var observers: [NSObjectProtocol] = []
-    private var engaged: [ObjectIdentifier: GCController] = [:]
+    private var engaged: [ObjectIdentifier: (controller: GCController, queue: DispatchQueue)] = [:]
     private var hidRetained = false
     private let backgroundEventsID = UUID()
     private var started = false
@@ -31,8 +24,8 @@ final class ControllerMonitor {
     init(isStreaming: @escaping () -> Bool) { self.isStreaming = isStreaming }
 
     func start() {
-        guard !started else { return }
         started = true
+        guard !isStreaming(), observers.isEmpty else { return }
         HIDGamepadManager.shared.retain()
         GCController.startWirelessControllerDiscovery {}
         // Receive controller input even though the Settings window - not a
@@ -50,9 +43,8 @@ final class ControllerMonitor {
     }
 
     func streamingChanged(controllers: [GCController] = GCController.controllers()) {
-        // The stream replaces these single-owner handlers and clears them before isStreaming turns false.
-        engaged.removeAll()
-        engageHID()
+        if isStreaming() { suspend(); return }
+        start()
         engage(controllers: controllers)
     }
 
@@ -70,40 +62,50 @@ final class ControllerMonitor {
         DualSenseRouting.shared.syncControllers()
         let live = Set(controllers.map(ObjectIdentifier.init))
         for id in engaged.keys where !live.contains(id) {
-            engaged[id]?.extendedGamepad?.valueChangedHandler = nil
+            engaged[id]?.controller.extendedGamepad?.valueChangedHandler = nil
             engaged[id] = nil
         }
         for controller in controllers {
             let id = ObjectIdentifier(controller)
             guard engaged[id] == nil else { continue }
-            controller.extendedGamepad?.valueChangedHandler = { [weak self] pad, _ in
-                MainActor.assumeIsolated {
-                    DualSenseRouting.shared.gc(pad: pad)
-                    self?.gcEventCount &+= 1
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable [weak self] pad, _ in
+                DualSenseRouting.shared.gc(pad: pad)
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.recordEvent() }
+                } else {
+                    DispatchQueue.main.async { self?.recordEvent() }
                 }
             }
-            engaged[id] = controller
+            engaged[id] = (controller, controller.handlerQueue)
         }
         revision &+= 1
     }
 
+    private func recordEvent() {
+        guard started, !isStreaming() else { return }
+        gcEventCount &+= 1
+    }
+
     func stop() {
-        guard started else { return }
         started = false
-        HIDGamepadManager.shared.release()
-        ControllerBackgroundEvents.setEnabled(false, for: backgroundEventsID)
-        // A stream that started meanwhile owns these slots now; leave them to it.
-        if !isStreaming() {
-            for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
-            if hidRetained { DualSenseHID.shared.onChange = nil }
+        suspend()
+    }
+
+    private func suspend() {
+        // A stream changes the queue before installing its callback; never clear that new owner's slot.
+        for entry in engaged.values where entry.controller.handlerQueue === entry.queue {
+            entry.controller.extendedGamepad?.valueChangedHandler = nil
         }
         engaged.removeAll()
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers.removeAll()
-        ControllerDiscovery.stopIfIdle(isStreaming: isStreaming()) {
-            GCController.stopWirelessControllerDiscovery()
+        if !observers.isEmpty {
+            HIDGamepadManager.shared.release()
+            ControllerBackgroundEvents.setEnabled(false, for: backgroundEventsID)
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers.removeAll()
+            ControllerDiscovery.stopIfIdle(isStreaming: isStreaming()) { GCController.stopWirelessControllerDiscovery() }
         }
         if hidRetained {
+            DualSenseHID.shared.onChange = nil
             DualSenseHID.shared.release()
             hidRetained = false
         }
@@ -151,7 +153,7 @@ struct ControllerInputTest: View {
                 emptyState
                     .id(revision)
             } else {
-                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: model.isStreaming)) { context in
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(hidPads) { pad in
                             HIDGamepadCard(pad: pad, tick: context.date)
@@ -165,6 +167,7 @@ struct ControllerInputTest: View {
             }
         }
         .onAppear {
+            model.launcherController.testingChanged(true)
             let monitor = ControllerMonitor(isStreaming: { model.isStreaming })
             monitor.start()
             self.monitor = monitor
@@ -172,6 +175,7 @@ struct ControllerInputTest: View {
         .onDisappear {
             monitor?.stop()
             monitor = nil
+            model.launcherController.testingChanged(false)
         }
         .onChange(of: model.isStreaming) { _, _ in monitor?.streamingChanged() }
     }

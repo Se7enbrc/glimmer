@@ -9,7 +9,7 @@ icon: user-shield
 
 Learn what Glimmer sends to your PC, what stays on your device and how to ask
 about information you share. This policy covers Glimmer for iPhone, iPad and
-Mac, and its GitHub Pages website. Updated October 24, 2026.
+Mac, and its GitHub Pages website. Updated October 26, 2026.
 
 ## Your PC connection
 
@@ -34,9 +34,15 @@ may cache app artwork received from the PC. No Glimmer account is required. The
 app contains no advertising or analytics service and does not track you across
 other apps or websites.
 
-Optional diagnostic recording saves performance and troubleshooting files on
-your device. Nothing uploads automatically. Production builds default to
-recording off; development and diagnostic builds can enable it by default.
+The iPhone and iPad app records no diagnostics of its own, in beta or
+production. It writes no session logs, performance files, frame traces or input
+captures. It ignores old recording preferences and leaves files from earlier
+betas untouched. Apple provides system logs and crash and performance reports
+through Console, sysdiagnose and Xcode Organizer, subject to Apple's sharing
+settings and TestFlight practices.
+
+Mac offers optional local recording. Nothing uploads automatically. Mac can save
+the following on your device:
 
 - In-app logs may show PC names, addresses and errors. Copied, system and
   session logs hide private fields and do not include keys, PINs or
@@ -48,18 +54,13 @@ recording off; development and diagnostic builds can enable it by default.
 - Audio diagnostics contain state and timing, not device names or identifiers.
 
 Glimmer does not capture microphones or read, store or export head-pose or
-spatial-audio profile data. On iPhone and iPad, live diagnostic metrics are
-available only on the device. On Mac, a separate opt-in can expose metrics to
-your local network. See
-[diagnostic details and limits](PROFILING.md#opt-in-telemetry).
+spatial-audio profile data. See
+[Mac diagnostic details and limits](PROFILING.md#opt-in-telemetry).
 
 ## Your choices
 
-On iPhone and iPad, turn off Record diagnostics in Settings → Diagnostics to
-stop recording future streams. Existing files remain until local cleanup or
-removal. Cleanup removes session logs older than 14 days and limits some
-performance files when it runs. A controller capability record can remain until
-app data is removed.
+On Mac, turn off telemetry in Settings → Diagnostics to stop future captures.
+Existing Mac logs follow the retention limits described in the diagnostic guide.
 
 Use Settings → PCs → Forget… on iPhone and iPad, or Unpair on Mac, to remove a
 saved PC and its local trust record. This does not remove the paired-device

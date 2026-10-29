@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+parent_config: ../.swiftlint-rules.yml
+
+included:
+  - Glimmer
+  - GlimmerTests
+  - GlimmerUITests
+
+excluded:
+  - build
+  - .build
+
+# Retain the iOS source's stricter limits.
+line_length:
+  warning: 120
+  error: 120
+  ignores_urls: true
+  ignores_comments: false
+  ignores_function_declarations: false
+
+function_body_length:
+  warning: 80
+  error: 80
+
+type_body_length:
+  warning: 600
+  error: 600
+
+file_length:
+  warning: 600
+  error: 600

@@ -10,11 +10,83 @@
 //
 
 import Foundation
+import Darwin
 import os
 import Testing
 @testable import Glimmer
 
 struct ResourceTelemetryTests {
+
+    @Test func reportChannelsRemainAliveAfterSampleDictionaryIsReleased() throws {
+        let channels: [CFDictionary] = autoreleasepool {
+            let channel = NSMutableDictionary(dictionary: ["name": "CPU telemetry test channel"])
+            let delta = NSMutableDictionary(dictionary: ["IOReportChannels": [channel]])
+            return IOReportSampler.reportChannels(in: delta as CFDictionary)
+        }
+        let channel = try #require(channels.first)
+        #expect(channels.count == 1)
+        #expect((channel as NSDictionary)["name"] as? String == "CPU telemetry test channel")
+    }
+
+    @Test func reportChannelsRejectUnexpectedSampleShapes() {
+        let samples: [NSDictionary] = [
+            [:], ["IOReportChannels": "not an array"], ["IOReportChannels": [1]],
+            ["IOReportChannels": [["name": "valid"], "invalid"]], ["IOReportChannels": []]
+        ]
+        for sample in samples {
+            #expect(IOReportSampler.reportChannels(in: sample as CFDictionary).isEmpty)
+        }
+    }
+
+    @Test func vmProbeKeepsFootprintDistinctFromResidentAndPreservesZeroCompression() throws {
+        var info = task_vm_info_data_t()
+        info.phys_footprint = 120
+        info.resident_size = 300
+        info.compressed = 0
+        info.internal = 80
+        info.reusable = 25
+        let count = MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size
+        let complete = ResourceTelemetry.memorySnapshot(info: info, count: count, result: KERN_SUCCESS)
+        #expect(complete.physFootprintBytes == 120 && complete.residentSizeBytes == 300)
+        #expect(complete.compressedBytes == 0 && complete.internalBytes == 80 && complete.reusableBytes == 25)
+        #expect(complete.memoryProbeStatus == "ok" && complete.memoryProbeResult == 0)
+
+        let offset = try #require(MemoryLayout<task_vm_info_data_t>.offset(of: \.phys_footprint))
+        let partial = ResourceTelemetry.memorySnapshot(info: info,
+            count: (offset + MemoryLayout<integer_t>.size) / MemoryLayout<integer_t>.size, result: KERN_SUCCESS)
+        #expect(partial.physFootprintBytes == nil && partial.residentSizeBytes == 300)
+        #expect(partial.memoryProbeStatus == "partial")
+        let failure = ResourceTelemetry.memorySnapshot(info: info, count: count, result: KERN_FAILURE)
+        #expect(failure.physFootprintBytes == nil && failure.residentSizeBytes == nil)
+        #expect(failure.compressedBytes == nil && failure.internalBytes == nil && failure.reusableBytes == nil)
+        #expect(failure.memoryProbeStatus == "failed" && failure.memoryProbeResult == Int(KERN_FAILURE))
+    }
+
+    @Test func gpuPowerUsesItsOwnRailAndChannelUnits() {
+        for (unit, value) in [("mJ", 1_380.0), ("uJ", 1_380_000.0), ("nJ", 1_380_000_000.0)] {
+            var power = EnergyPower(elapsedSeconds: 2)
+            let cpuAccepted = power.add(name: "CPU Energy", value: 6_000, unit: "mJ")
+            let gpuAccepted = power.add(name: "GPU Energy", value: value, unit: unit)
+            #expect(cpuAccepted && gpuAccepted)
+            #expect(power.gpu == 0.69)
+            #expect(power.package == 3.69)
+        }
+    }
+
+    @Test func missingInvalidAndIdleGpuRailsRemainDistinct() {
+        var power = EnergyPower(elapsedSeconds: 1)
+        #expect(power.gpu == nil && power.package == nil)
+        let unknownUnit = power.add(name: "GPU Energy", value: 10, unit: "unknown")
+        let counterReset = power.add(name: "GPU Energy", value: -1, unit: "nJ")
+        #expect(!unknownUnit && !counterReset && power.gpu == nil)
+        let cpuAccepted = power.add(name: "CPU Energy", value: 1_000, unit: "mJ")
+        #expect(cpuAccepted && power.gpu == nil)
+        let gpuAccepted = power.add(name: "GPU Energy", value: 0, unit: "nJ")
+        #expect(gpuAccepted && power.gpu == 0 && power.package == 1)
+        var invalidWindow = EnergyPower(elapsedSeconds: 0)
+        let invalidTime = invalidWindow.add(name: "GPU Energy", value: 100, unit: "mJ")
+        #expect(!invalidTime && invalidWindow.gpu == nil)
+    }
 
     /// Back-to-back samples often see no rail advance (about 1 in 5 did before
     /// the fix). Such a window must read as no sample, not a 0 W row.

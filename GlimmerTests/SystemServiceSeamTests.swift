@@ -4,6 +4,7 @@
 // Decisions behind system services, with the services stood in: wake notices,
 // Shortcuts streams, display defaults, quitting, paste and the PIN page.
 
+import GlimmerEngine
 import Foundation
 import Testing
 import UserNotifications
@@ -11,6 +12,7 @@ import UserNotifications
 
 @MainActor
 struct SystemServiceSeamTests {
+    private let settings = IsolatedDefaults()
 
     private func pc(id: String = "pc-1", customName: String? = nil, apps: [String] = ["Desktop", "Steam"]) -> Glimmer.Host {
         Glimmer.Host(id: id, name: "Den", customName: customName, localAddress: nil, manualAddress: nil,
@@ -22,7 +24,7 @@ struct SystemServiceSeamTests {
 
     @Test func aFailedWakeBehindAnotherAppIsReportedInANotice() async {
         var posted: [UNNotificationRequest] = []
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         await model.reportWake(.noAnswer, for: host, thenConnect: true, appActive: false,
                                notifier: WakeNotifier { posted.append($0) }, canPost: { true })
@@ -35,7 +37,7 @@ struct SystemServiceSeamTests {
 
     @Test func aFailedWakeInFrontShowsOnlyOnTheButton() async {
         var posted: [UNNotificationRequest] = []
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         await model.reportWake(.couldNotSend, for: pc(), thenConnect: true, appActive: true,
                                notifier: WakeNotifier { posted.append($0) }, canPost: { true })
         #expect(model.wakeFailureReason == .couldNotSend)
@@ -44,7 +46,7 @@ struct SystemServiceSeamTests {
 
     @Test func anAnswerBehindAnotherAppNotifiesInsteadOfStreaming() async {
         var posted: [UNNotificationRequest] = []
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         model.selectedHost = host
         await model.reportWake(.answered, for: host, thenConnect: true, appActive: false,
@@ -57,7 +59,7 @@ struct SystemServiceSeamTests {
 
     @Test func anAnswerForAnotherSelectionDoesNothing() async {
         var posted: [UNNotificationRequest] = []
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = pc(id: "other")
         await model.reportWake(.answered, for: pc(), thenConnect: true, appActive: false,
                                notifier: WakeNotifier { posted.append($0) }, canPost: { true })
@@ -84,7 +86,7 @@ struct SystemServiceSeamTests {
     }
 
     @Test func aNamedAppStreamsOnceTheRouteSettles() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         model.hosts = [host]
         model.selectedHost = host
@@ -94,7 +96,7 @@ struct SystemServiceSeamTests {
     }
 
     @Test func noAppNamedProbesThePCFirst() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         model.hosts = [host]
         model.selectedHost = host
@@ -104,8 +106,19 @@ struct SystemServiceSeamTests {
         #expect(host.apps.contains { $0.name == launches.first?.app })
     }
 
+    @Test func anotherAppOnTheLivePCUsesTheSharedReplacementChoice() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let host = pc(apps: ["Desktop", "Steam"])
+        model.hosts = [host]
+        model.selectedHost = host
+        model.lastLaunchAttempt = (host.apps[0], host)
+        model.isStreaming = true
+        let (_, launches) = try await stream(model, pc: PCEntity(host: host), app: "Steam")
+        #expect(launches.count == 1 && launches.first?.app == "Steam")
+    }
+
     @Test func anUnknownAppOrPCIsRefused() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         await #expect(throws: PCIntentError.notPaired) {
             _ = try await stream(model, pc: PCEntity(host: host), app: nil)
@@ -117,7 +130,7 @@ struct SystemServiceSeamTests {
     }
 
     @Test func aStreamThatStartsWhileTheRouteSettlesWins() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         model.hosts = [host]
         model.selectedHost = host
@@ -127,22 +140,71 @@ struct SystemServiceSeamTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func siriRelearnsPCNamesAfterLaunchAndOnRename() async {
-        let model = AppModel()
+    func siriTracksRepeatedRenamesAndPairingChangesWithoutUnchangedReloads() async {
+        let model = AppModel(defaults: settings.defaults)
         model.hosts = [pc()]
+        var names: [[String]] = []
         let (updates, signal) = AsyncStream<Void>.makeStream()
-        let tracking = GlimmerShortcuts.trackPCs(of: model, bootstrap: { _ in Task {} }, update: { signal.yield() })
-        defer { tracking.cancel() }
+        let tracking = GlimmerShortcuts.trackPCs(of: model, bootstrap: { _ in Task {} }, update: {
+            names.append(model.hosts.map(\.displayName))
+            signal.yield()
+        })
+        defer { tracking.cancel(); signal.finish() }
         var waiter = updates.makeAsyncIterator()
         #expect(await waiter.next() != nil)
-        model.hosts = [pc(customName: "Living Room")]
+        model.hosts = [pc(apps: ["Desktop"])]
+        await DispatchQueue.main.drainForTest()
+        #expect(names == [["Den"]])
+        for name in ["Living Room", "Bedroom"] {
+            model.hosts = [pc(customName: name)]
+            #expect(await waiter.next() != nil)
+            #expect(names.last == [name])
+        }
+        model.hosts.append(pc(id: "pc-2", customName: "Study"))
         #expect(await waiter.next() != nil)
+        model.hosts.append(pc(id: "pc-3", customName: "Office"))
+        #expect(await waiter.next() != nil)
+        model.hosts.reverse()
+        await DispatchQueue.main.drainForTest()
+        #expect(names.count == 5)
+        model.hosts.removeAll { $0.id == "pc-1" }
+        #expect(await waiter.next() != nil)
+        model.hosts.removeAll { $0.id == "pc-3" }
+        #expect(await waiter.next() != nil)
+        model.hosts = []
+        #expect(await waiter.next() != nil)
+        tracking.cancel()
+        await tracking.value
+        #expect(names == [["Den"], ["Living Room"], ["Bedroom"], ["Bedroom", "Study"],
+                         ["Bedroom", "Study", "Office"], ["Office", "Study"], ["Study"], []])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func cancelledPCTrackingStopsUpdatingShortcuts() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.hosts = [pc()]
+        var names: [[String]] = []
+        let (updates, signal) = AsyncStream<Void>.makeStream()
+        let tracking = GlimmerShortcuts.trackPCs(of: model, bootstrap: { _ in Task {} }, update: {
+            names.append(model.hosts.map(\.displayName))
+            signal.yield()
+        })
+        defer { tracking.cancel(); signal.finish() }
+        var waiter = updates.makeAsyncIterator()
+        #expect(await waiter.next() != nil)
+        tracking.cancel()
+        await tracking.value
+        model.hosts = [pc(customName: "Bedroom")]
+        model.hosts.append(pc(id: "pc-2", customName: "Study"))
+        model.hosts = []
+        await DispatchQueue.main.drainForTest()
+        #expect(names == [["Den"]])
     }
 
     // MARK: Display defaults
 
     @Test func presetsFollowTheDisplayItReports() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.displayProbe = { (3456, 2234, 120) }
         let native = model.effectiveValuesForPreset(.matchDisplay)
         #expect((native.width, native.height, native.fps) == (3456, 2234, 120))
@@ -180,8 +242,8 @@ struct SystemServiceSeamTests {
 
     @Test(.timeLimit(.minutes(1)))
     func quitWithASessionRepliesAfterItStops() async {
-        let model = AppModel()
-        model.nativeSession = StreamSession()
+        let model = AppModel(defaults: settings.defaults)
+        model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let delegate = AppDelegate()
         delegate.model = model
         let (events, record) = AsyncStream<String>.makeStream()
@@ -209,7 +271,7 @@ struct SystemServiceSeamTests {
 
     @Test func pinPageBracketsAnIPv6Address() {
         var opened: [String] = []
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.openSunshinePINPage(forHost: "fe80::1") { opened.append($0.absoluteString) }
         model.openSunshinePINPage(forHost: "192.168.1.20") { opened.append($0.absoluteString) }
         #expect(opened == ["https://[fe80::1]:47990/pin", "https://192.168.1.20:47990/pin"])

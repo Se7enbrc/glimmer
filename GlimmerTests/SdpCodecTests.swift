@@ -11,11 +11,13 @@
 //     exact header/attribute/tail framing, including the trailing-space quirks).
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct SdpCodecTests {
+    private let settings = IsolatedDefaults()
 
     // MARK: - RtspMessage.serialize known-answer
 
@@ -334,8 +336,8 @@ struct SdpCodecTests {
 
     @Test func decoderRefusesALayoutForAnotherChannelCount() {
         // A stereo layout on a 5.1 stream: opus would read six mapping entries from two.
-        let stereoLayout = RtspHandshakeResult.defaultOpusConfig
-        #expect(AudioDecoder().initialize(audioConfig: AudioConfig.surround51.cValue, opus: stereoLayout) == -1)
+        let stereoLayout = SdpScan.defaultOpusConfig
+        #expect(AudioDecoder(defaults: settings.defaults).initialize(audioConfig: AudioConfig.surround51.cValue, opus: stereoLayout) == -1)
     }
 
     /// Limelight.h's packed audio configuration read back, and /launch's surroundAudioInfo (mask over count).

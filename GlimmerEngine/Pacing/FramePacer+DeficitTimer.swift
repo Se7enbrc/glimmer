@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
+// The pacing queue owns the fallback timer and reconciles it against learned cadence.
+
+import CoreMedia
+import QuartzCore
+import os
+
+extension FramePacer {
+
+    // MARK: - The off-tick release timer (pacingQueue-confined)
+
+    /// Reconcile on pacingQueue so mode changes and timer beats share one timer owner.
+    func reconcileDeficitTimer() {
+        lock.lock()
+        let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running && displayBound
+        let interval = streamFrameIntervalSeconds
+        let generation = bindingGeneration
+        lock.unlock()
+        if let timer = tickDeficit.deficitTimer, tickDeficit.deficitTimerGeneration != generation {
+            timer.cancel()
+            tickDeficit.deficitTimer = nil
+            tickDeficit.deficitTimerGeneration = nil
+            tickDeficit.deficitTimerInterval = .nan
+        }
+        if want, tickDeficit.deficitTimer == nil {
+            let timer = DispatchSource.makeTimerSource(queue: pacingQueue)
+            scheduleDeficitTimer(timer, interval)
+            tickDeficit.deficitTimerInterval = interval
+            timer.setEventHandler { [weak self] in self?.deficitTimerFired(generation: generation) }
+            tickDeficit.deficitTimerGeneration = generation
+            tickDeficit.deficitTimer = timer
+            timer.resume()
+        } else if want, let timer = tickDeficit.deficitTimer,
+                  abs(tickDeficit.deficitTimerInterval - interval) > interval * 0.01 {
+            scheduleDeficitTimer(timer, interval)
+            tickDeficit.deficitTimerInterval = interval
+        } else if !want, let timer = tickDeficit.deficitTimer {
+            timer.cancel()
+            tickDeficit.deficitTimer = nil
+            tickDeficit.deficitTimerGeneration = nil
+            tickDeficit.deficitTimerInterval = .nan
+        }
+    }
+
+    /// One off-tick beat through the normal release pipeline (trim, backoff, due gate) on
+    /// `CACurrentMediaTime()`, the link's own timebase, then a governor repaint if nothing flowed.
+    /// A beat before the panel vsync a tick's frame scans out on skips its release.
+    func deficitTimerFired(generation expectedGeneration: UInt64? = nil) {
+        let mediaNow = CACurrentMediaTime()
+        lock.lock()
+        guard expectedGeneration == nil || expectedGeneration == bindingGeneration else {
+            lock.unlock(); return
+        }
+        let generation = bindingGeneration
+        let active = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive)
+            && running && !presentSuppressed
+        let interval = streamFrameIntervalSeconds
+        let tickOwnsVsync = Self.tickOwnsScanout(
+            now: mediaNow, scanout: tickDeficit.tickScanoutMediaTime)
+        lock.unlock()
+        guard active else { return }
+        if !tickOwnsVsync {
+            releaseDueFrame(targetTimestamp: mediaNow, vsyncInterval: interval, tickScanout: .nan,
+                            generation: generation)
+        }
+        maybeRepaintForGovernor(interval: interval, generation: generation)
+        // Keep the rate window rolling from here too: with ticks FULLY stopped
+        // and the watchdog mid-teardown there may be no other caller, and the
+        // disengage verdict must never depend on the thing that failed.
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock()
+        guard bindingGeneration == generation, running else { lock.unlock(); return }
+        let events = serviceTickDeficitLocked(now: now)
+        lock.unlock()
+        handleTickDeficitEvents(events)
+        reconcileDeficitTimer()
+    }
+
+    /// True when a real tick's released frame has not yet scanned out at `now`
+    /// (a beat there would present twice in one panel vsync). A lead past 1s is not trusted;
+    /// a backward clock change still requires the cadence reset used by link recovery.
+    static func tickOwnsScanout(now: CFTimeInterval, scanout: CFTimeInterval) -> Bool {
+        let lead = scanout - now
+        return lead > 0 && lead <= 1.0
+    }
+
+    /// Re-commit the most recently presented frame so the governor sees a live
+    /// layer even when the host also faded (the measured ordering evidence:
+    /// commits stopping is the suspected downclock trigger - one collapse
+    /// PRECEDED its host dip by ~1.5s). Only after ≥2 stream
+    /// intervals without a REAL release (a real release is itself a commit),
+    /// rate-limited to stream cadence, and never counted as a rendered frame -
+    /// the renders==received verification contract stays honest.
+    func maybeRepaintForGovernor(interval: Double, generation: UInt64? = nil) {
+        let now = CFAbsoluteTimeGetCurrent()
+        var repaint: CMSampleBuffer?
+        lock.lock()
+        guard running, generation == nil || generation == bindingGeneration else { lock.unlock(); return }
+        let sinceRelease = liveness.lastReleaseHostTime.isFinite
+            ? now - liveness.lastReleaseHostTime : .infinity
+        let sinceRepaint = tickDeficit.lastRepaintHostTime.isFinite
+            ? now - tickDeficit.lastRepaintHostTime : .infinity
+        if tickDeficit.deficitModeActive || tickDeficit.floorAssistActive, !presentSuppressed,
+           sinceRelease > interval * FramePacer.repaintAfterIdleIntervals,
+           sinceRepaint >= interval,
+           let sampleBuffer = tickDeficit.lastPresentedSampleBuffer {
+            tickDeficit.lastRepaintHostTime = now
+            tickDeficit.deficitRepaints &+= 1
+            repaint = sampleBuffer
+        }
+        lock.unlock()
+        guard let repaint else { return }
+        onDeficitRepaint?(repaint)
+    }
+}

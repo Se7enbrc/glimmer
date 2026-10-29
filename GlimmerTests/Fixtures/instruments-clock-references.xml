@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-FileCopyrightText: 2026 ugfugl.io -->
+<!-- Sanitized table shape: invented PID, session and times; no target environment or stacks. -->
+<trace-query-result>
+  <definitions><process id="process"><pid>17</pid></process>
+    <string id="session">0123456789abcdef</string><subsystem id="subsystem">io.ugfugl.Glimmer</subsystem>
+    <category id="category">PointsOfInterest</category></definitions>
+  <node>
+    <row><event-time id="time0">1000000000</event-time><process ref="process"/>
+      <signpost-name id="name0">GlimmerClockAnchorBegin</signpost-name>
+      <subsystem ref="subsystem"/><category ref="category"/>
+      <os-log-metadata id="message0" fmt="session=0123456789abcdef anchor_id=0 uptime_before_ns=2,000,000,000">
+        <narrative-text>session=</narrative-text><string ref="session"/>
+        <narrative-text> anchor_id=</narrative-text><uint64>0</uint64>
+        <narrative-text> uptime_before_ns=</narrative-text><uint64 fmt="2,000,000,000">2000000000</uint64>
+      </os-log-metadata>
+    </row>
+    <row><event-time id="time1">1000001000</event-time><process ref="process"/>
+      <signpost-name id="name1">GlimmerClockAnchorEnd</signpost-name>
+      <subsystem ref="subsystem"/><category ref="category"/>
+      <os-log-metadata id="message1" fmt="session=0123456789abcdef anchor_id=0 uptime_after_ns=2,000,000,000">
+        <narrative-text>session=</narrative-text><string ref="session"/>
+        <narrative-text> anchor_id=</narrative-text><uint64>0</uint64>
+        <narrative-text> uptime_after_ns=</narrative-text><uint64 fmt="2,000,000,000">2000000500</uint64>
+      </os-log-metadata>
+    </row>
+    <row><event-time id="time2">2000000000</event-time><process ref="process"/>
+      <signpost-name id="name2">GlimmerClockAnchorBegin</signpost-name>
+      <subsystem ref="subsystem"/><category ref="category"/>
+      <os-log-metadata id="message2" fmt="session=0123456789abcdef anchor_id=1 uptime_before_ns=2,000,000,000">
+        <narrative-text>session=</narrative-text><string ref="session"/>
+        <narrative-text> anchor_id=</narrative-text><uint64>1</uint64>
+        <narrative-text> uptime_before_ns=</narrative-text><uint64 fmt="2,000,000,000">3000000000</uint64>
+      </os-log-metadata>
+    </row>
+    <row><event-time id="time3">2000001000</event-time><process ref="process"/>
+      <signpost-name id="name3">GlimmerClockAnchorEnd</signpost-name>
+      <subsystem ref="subsystem"/><category ref="category"/>
+      <os-log-metadata id="message3" fmt="session=0123456789abcdef anchor_id=1 uptime_after_ns=2,000,000,000">
+        <narrative-text>session=</narrative-text><string ref="session"/>
+        <narrative-text> anchor_id=</narrative-text><uint64>1</uint64>
+        <narrative-text> uptime_after_ns=</narrative-text><uint64 fmt="2,000,000,000">3000000500</uint64>
+      </os-log-metadata>
+    </row>
+  </node>
+  <node>
+    <row><event-time ref="time0"/><process ref="process"/><signpost-name ref="name0"/>
+      <subsystem ref="subsystem"/><category ref="category"/><os-log-metadata ref="message0"/></row>
+    <row><event-time ref="time1"/><process ref="process"/><signpost-name ref="name1"/>
+      <subsystem ref="subsystem"/><category ref="category"/><os-log-metadata ref="message1"/></row>
+    <row><event-time ref="time2"/><process ref="process"/><signpost-name ref="name2"/>
+      <subsystem ref="subsystem"/><category ref="category"/><os-log-metadata ref="message2"/></row>
+    <row><event-time ref="time3"/><process ref="process"/><signpost-name ref="name3"/>
+      <subsystem ref="subsystem"/><category ref="category"/><os-log-metadata ref="message3"/></row>
+  </node>
+</trace-query-result>

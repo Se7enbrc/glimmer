@@ -1,186 +1,130 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  KeyboardScanMap.swift
-//
-//  Flat dispatch table: macOS Carbon kVK_* keyCode → Windows VK_* scancode.
-//
-//  NSEvent.keyCode is the macOS HID/Carbon scan code (kVK_*). These are
-//  positional values that map to physical key positions on a US ANSI keyboard.
-//  To get the host to react to "the key in the W position" regardless of the
-//  user's actual layout, we translate kVK_* to its corresponding Windows VK
-//  and let LiSendKeyboardEvent2's high-bit `0x8000` mark it as positional -
-//  the host then skips its layout-correction pass.
-//
-//  Reference: moonlight-qt/app/streaming/input/keyboard.cpp's
-//  SDL_SCANCODE → VK_ switch. macOS kVK_* values come from
-//  <Carbon/HIToolbox/Events.h>.
-//
-//  Returns nil for keys we don't know how to forward.
-//
-
+import GlimmerEngine
 import Carbon.HIToolbox
 
-/// One key as the host receives it: the Windows VK plus the keyboard-event
-/// flags. An integer literal is a plain VK with no flags.
-struct VKScanCode: Hashable {
-    /// SS_KBE_FLAG_NON_NORMALIZED: the VK is already in the PC's layout.
-    static let nonNormalized: Int8 = 0x01
-
-    let vk: Int16
-    var flags: Int8 = 0
-
-    /// The high bit asks the host to skip its layout-correction pass.
-    var wireCode: Int16 { Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)) }
-}
-
-extension VKScanCode: ExpressibleByIntegerLiteral {
-    init(integerLiteral vk: Int16) {
-        self.init(vk: vk)
-    }
-}
-
-// Flat positional map: Carbon kVK_* keyCode → Windows VK_* scancode. A data
-// table rather than a switch so the lookup is O(1) and reads as the pure
-// dispatch table it is (the switch form tripped cyclomatic-complexity /
-// function-length lints for what is, semantically, zero branching).
-private let carbonToVKScanCode: [Int: VKScanCode] = [
-    // Letters
-    kVK_ANSI_A: 0x41,
-    kVK_ANSI_B: 0x42,
-    kVK_ANSI_C: 0x43,
-    kVK_ANSI_D: 0x44,
-    kVK_ANSI_E: 0x45,
-    kVK_ANSI_F: 0x46,
-    kVK_ANSI_G: 0x47,
-    kVK_ANSI_H: 0x48,
-    kVK_ANSI_I: 0x49,
-    kVK_ANSI_J: 0x4A,
-    kVK_ANSI_K: 0x4B,
-    kVK_ANSI_L: 0x4C,
-    kVK_ANSI_M: 0x4D,
-    kVK_ANSI_N: 0x4E,
-    kVK_ANSI_O: 0x4F,
-    kVK_ANSI_P: 0x50,
-    kVK_ANSI_Q: 0x51,
-    kVK_ANSI_R: 0x52,
-    kVK_ANSI_S: 0x53,
-    kVK_ANSI_T: 0x54,
-    kVK_ANSI_U: 0x55,
-    kVK_ANSI_V: 0x56,
-    kVK_ANSI_W: 0x57,
-    kVK_ANSI_X: 0x58,
-    kVK_ANSI_Y: 0x59,
-    kVK_ANSI_Z: 0x5A,
-
-    // Top-row digits
-    kVK_ANSI_0: 0x30,
-    kVK_ANSI_1: 0x31,
-    kVK_ANSI_2: 0x32,
-    kVK_ANSI_3: 0x33,
-    kVK_ANSI_4: 0x34,
-    kVK_ANSI_5: 0x35,
-    kVK_ANSI_6: 0x36,
-    kVK_ANSI_7: 0x37,
-    kVK_ANSI_8: 0x38,
-    kVK_ANSI_9: 0x39,
-
-    // Function keys
-    kVK_F1: 0x70,
-    kVK_F2: 0x71,
-    kVK_F3: 0x72,
-    kVK_F4: 0x73,
-    kVK_F5: 0x74,
-    kVK_F6: 0x75,
-    kVK_F7: 0x76,
-    kVK_F8: 0x77,
-    kVK_F9: 0x78,
-    kVK_F10: 0x79,
-    kVK_F11: 0x7A,
-    kVK_F12: 0x7B,
-    kVK_F13: 0x2C,  // VK_SNAPSHOT: a PC keyboard's Print Screen reports F13
-    kVK_F14: 0x91,  // VK_SCROLL
-    kVK_F15: 0x13,  // VK_PAUSE
-    kVK_F16: 0x7F,
-    kVK_F17: 0x80,
-    kVK_F18: 0x81,
-    kVK_F19: 0x82,
-    kVK_F20: 0x83,
-
-    // Whitespace / control
-    kVK_Return: 0x0D,        // VK_RETURN
-    kVK_Tab: 0x09,           // VK_TAB
-    kVK_Space: 0x20,         // VK_SPACE
-    kVK_Delete: 0x08,        // VK_BACK
-    kVK_Escape: 0x1B,        // VK_ESCAPE
-    kVK_ForwardDelete: 0x2E, // VK_DELETE
-    kVK_Home: 0x24,          // VK_HOME
-    kVK_End: 0x23,           // VK_END
-    kVK_PageUp: 0x21,        // VK_PRIOR
-    kVK_PageDown: 0x22,      // VK_NEXT
-    kVK_LeftArrow: 0x25,     // VK_LEFT
-    kVK_RightArrow: 0x27,    // VK_RIGHT
-    kVK_DownArrow: 0x28,     // VK_DOWN
-    kVK_UpArrow: 0x26,       // VK_UP
-    kVK_Help: 0x2D,          // VK_INSERT: a PC keyboard's Insert reports Help
-    kVK_ContextualMenu: 0x5D, // VK_APPS
-
-    // Punctuation (US ANSI positional)
-    kVK_ANSI_Semicolon: 0xBA,    // VK_OEM_1
-    kVK_ANSI_Equal: 0xBB,        // VK_OEM_PLUS
-    kVK_ANSI_Comma: 0xBC,        // VK_OEM_COMMA
-    kVK_ANSI_Minus: 0xBD,        // VK_OEM_MINUS
-    kVK_ANSI_Period: 0xBE,       // VK_OEM_PERIOD
-    kVK_ANSI_Slash: 0xBF,        // VK_OEM_2
-    kVK_ANSI_Grave: 0xC0,        // VK_OEM_3 (`)
-    kVK_ANSI_LeftBracket: 0xDB,  // VK_OEM_4
-    kVK_ANSI_Backslash: 0xDC,    // VK_OEM_5
-    kVK_ANSI_RightBracket: 0xDD, // VK_OEM_6
-    kVK_ANSI_Quote: 0xDE,        // VK_OEM_7
-    kVK_ISO_Section: 0xE2,       // VK_OEM_102 (NON-US backslash)
-
-    // Numpad
-    kVK_ANSI_Keypad0: 0x60,  // VK_NUMPAD0
-    kVK_ANSI_Keypad1: 0x61,
-    kVK_ANSI_Keypad2: 0x62,
-    kVK_ANSI_Keypad3: 0x63,
-    kVK_ANSI_Keypad4: 0x64,
-    kVK_ANSI_Keypad5: 0x65,
-    kVK_ANSI_Keypad6: 0x66,
-    kVK_ANSI_Keypad7: 0x67,
-    kVK_ANSI_Keypad8: 0x68,
-    kVK_ANSI_Keypad9: 0x69,
-    kVK_ANSI_KeypadMultiply: 0x6A,
-    kVK_ANSI_KeypadPlus: 0x6B,
-    kVK_ANSI_KeypadMinus: 0x6D,
-    kVK_ANSI_KeypadDecimal: 0x6E,
-    kVK_ANSI_KeypadDivide: 0x6F,
-    kVK_ANSI_KeypadEnter: 0x0D,  // VK_RETURN
-    kVK_ANSI_KeypadEquals: 0xBB,
-    kVK_ANSI_KeypadClear: 0x90,  // VK_NUMLOCK (best match - Mac's "Clear" is NumLock's position)
-
-    // JIS: ¥ and ろ have no US position, so they go in the PC's own layout
-    kVK_JIS_Yen: VKScanCode(vk: 0xDC, flags: VKScanCode.nonNormalized),        // VK_OEM_5
-    kVK_JIS_Underscore: VKScanCode(vk: 0xE2, flags: VKScanCode.nonNormalized), // VK_OEM_102
-    kVK_JIS_KeypadComma: 0x6C, // VK_SEPARATOR
-    kVK_JIS_Eisu: 0x1D,        // VK_NONCONVERT
-    kVK_JIS_Kana: 0x1C,        // VK_CONVERT
-
-    // Misc
-    kVK_CapsLock: 0x14,  // VK_CAPITAL
-    kVK_Mute: 0xAD,
-    kVK_VolumeUp: 0xAF,
-    kVK_VolumeDown: 0xAE
+// Carbon identifies native positions; the engine owns their Windows key and wire flags.
+private let carbonToHID: [Int: UInt16] = [
+    kVK_ANSI_A: 4,
+    kVK_ANSI_B: 5,
+    kVK_ANSI_C: 6,
+    kVK_ANSI_D: 7,
+    kVK_ANSI_E: 8,
+    kVK_ANSI_F: 9,
+    kVK_ANSI_G: 10,
+    kVK_ANSI_H: 11,
+    kVK_ANSI_I: 12,
+    kVK_ANSI_J: 13,
+    kVK_ANSI_K: 14,
+    kVK_ANSI_L: 15,
+    kVK_ANSI_M: 16,
+    kVK_ANSI_N: 17,
+    kVK_ANSI_O: 18,
+    kVK_ANSI_P: 19,
+    kVK_ANSI_Q: 20,
+    kVK_ANSI_R: 21,
+    kVK_ANSI_S: 22,
+    kVK_ANSI_T: 23,
+    kVK_ANSI_U: 24,
+    kVK_ANSI_V: 25,
+    kVK_ANSI_W: 26,
+    kVK_ANSI_X: 27,
+    kVK_ANSI_Y: 28,
+    kVK_ANSI_Z: 29,
+    kVK_ANSI_0: 39,
+    kVK_ANSI_1: 30,
+    kVK_ANSI_2: 31,
+    kVK_ANSI_3: 32,
+    kVK_ANSI_4: 33,
+    kVK_ANSI_5: 34,
+    kVK_ANSI_6: 35,
+    kVK_ANSI_7: 36,
+    kVK_ANSI_8: 37,
+    kVK_ANSI_9: 38,
+    kVK_F1: 58,
+    kVK_F2: 59,
+    kVK_F3: 60,
+    kVK_F4: 61,
+    kVK_F5: 62,
+    kVK_F6: 63,
+    kVK_F7: 64,
+    kVK_F8: 65,
+    kVK_F9: 66,
+    kVK_F10: 67,
+    kVK_F11: 68,
+    kVK_F12: 69,
+    kVK_F13: 104,
+    kVK_F14: 105,
+    kVK_F15: 106,
+    kVK_F16: 107,
+    kVK_F17: 108,
+    kVK_F18: 109,
+    kVK_F19: 110,
+    kVK_F20: 111,
+    kVK_Return: 40,
+    kVK_Tab: 43,
+    kVK_Space: 44,
+    kVK_Delete: 42,
+    kVK_Escape: 41,
+    kVK_ForwardDelete: 76,
+    kVK_Home: 74,
+    kVK_End: 77,
+    kVK_PageUp: 75,
+    kVK_PageDown: 78,
+    kVK_LeftArrow: 80,
+    kVK_RightArrow: 79,
+    kVK_DownArrow: 81,
+    kVK_UpArrow: 82,
+    kVK_Help: 73,
+    kVK_ContextualMenu: 101,
+    kVK_ANSI_Semicolon: 51,
+    kVK_ANSI_Equal: 46,
+    kVK_ANSI_Comma: 54,
+    kVK_ANSI_Minus: 45,
+    kVK_ANSI_Period: 55,
+    kVK_ANSI_Slash: 56,
+    kVK_ANSI_Grave: 53,
+    kVK_ANSI_LeftBracket: 47,
+    kVK_ANSI_Backslash: 49,
+    kVK_ANSI_RightBracket: 48,
+    kVK_ANSI_Quote: 52,
+    kVK_ISO_Section: 100,
+    kVK_ANSI_Keypad0: 98,
+    kVK_ANSI_Keypad1: 89,
+    kVK_ANSI_Keypad2: 90,
+    kVK_ANSI_Keypad3: 91,
+    kVK_ANSI_Keypad4: 92,
+    kVK_ANSI_Keypad5: 93,
+    kVK_ANSI_Keypad6: 94,
+    kVK_ANSI_Keypad7: 95,
+    kVK_ANSI_Keypad8: 96,
+    kVK_ANSI_Keypad9: 97,
+    kVK_ANSI_KeypadMultiply: 85,
+    kVK_ANSI_KeypadPlus: 87,
+    kVK_ANSI_KeypadMinus: 86,
+    kVK_ANSI_KeypadDecimal: 99,
+    kVK_ANSI_KeypadDivide: 84,
+    kVK_ANSI_KeypadEnter: 88,
+    kVK_ANSI_KeypadEquals: 103,
+    kVK_ANSI_KeypadClear: 83,
+    kVK_JIS_Yen: 137,
+    kVK_JIS_Underscore: 135,
+    kVK_JIS_KeypadComma: 133,
+    kVK_JIS_Eisu: 145,
+    kVK_JIS_Kana: 144,
+    kVK_CapsLock: 57,
+    kVK_Mute: 127,
+    kVK_VolumeUp: 128,
+    kVK_VolumeDown: 129
 ]
 
-/// On an ISO keyboard macOS reports the key left of 1 as Section and the key
-/// right of left Shift as Grave, the reverse of their ANSI positions. Swap them
-/// back, as SDL and moonlight do, so each lands on the PC key in its place.
+/// Undo macOS's ISO Section/Grave swap before resolving the shared physical key.
 func vkScanCode(forCarbonKeyCode kc: Int,
                 isISOKeyboard: @autoclosure () -> Bool = isISOKeyboardLayout()) -> VKScanCode? {
     let swapsISOKeys = (kc == kVK_ISO_Section || kc == kVK_ANSI_Grave) && isISOKeyboard()
-    return carbonToVKScanCode[swapsISOKeys ? kVK_ISO_Section + kVK_ANSI_Grave - kc : kc]
+    guard let usage = carbonToHID[swapsISOKeys ? kVK_ISO_Section + kVK_ANSI_Grave - kc : kc] else { return nil }
+    return PhysicalKeyboardMap.key(forHIDUsage: usage)
 }
 
 /// The physical layout of the keyboard macOS last saw typing.

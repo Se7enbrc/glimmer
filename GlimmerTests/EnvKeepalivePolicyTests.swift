@@ -14,6 +14,7 @@
 //  directly; the instance wrapper only gathers the live inputs.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

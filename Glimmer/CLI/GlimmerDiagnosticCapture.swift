@@ -1,0 +1,402 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+import Foundation
+import Darwin
+
+/// Explicit CLI capture only: attaches to an existing PID without launching, installing or re-signing it.
+enum GlimmerDiagnosticCapture {
+    struct Command: Codable, Sendable {
+        let label: String
+        let executable: String
+        let arguments: [String]
+        let timeoutSeconds: Double
+        let stdout: URL
+        let stderr: URL
+        var maximumOutputBytes: Int64 = 1_048_576
+        var captureDirectory: URL?
+    }
+
+    struct CommandResult: Codable, Sendable {
+        let command: Command
+        let started: Date
+        let ended: Date
+        let exitCode: Int32?
+        let status: String
+        var detail: String?
+        var forcedTermination = false
+        var childExitObserved = true
+        var startedUptimeSeconds: Double?
+        var endedUptimeSeconds: Double?
+        var instrumentationPhase: String?
+        var succeeded: Bool { status == "completed" && exitCode == 0 && childExitObserved && !forcedTermination }
+    }
+
+    struct Coverage: Codable, Sendable {
+        var targetMatched = false
+        var startDate: String?
+        var endDate: String?
+        var durationSeconds: Double?
+        var schemas: [String] = []
+        var requestedProbesConfigured = false
+        var configuredSamplePeriodsMicroseconds: [Int] = []
+        var sampleRows: Int = 0
+        var targetSampleRows: Int = 0
+        var firstSampleNanos: UInt64?
+        var lastSampleNanos: UInt64?
+        var sampleXMLParsed = false
+        var schedulingRowsVerified = false
+        var schedulingRows = 0
+        var targetSchedulingRows = 0
+        var firstSchedulingNanos: UInt64?
+        var lastSchedulingNanos: UInt64?
+    }
+
+    struct Manifest: Codable, Sendable {
+        let pid: Int32
+        let requestedSeconds: Int
+        let started: Date
+        var ended: Date?
+        var startedUptimeSeconds = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        var endedUptimeSeconds: Double?
+        var status = "preflight"
+        var commands: [CommandResult] = []
+        var coverage: Coverage?
+        var clockAlignment: ClockAlignment?
+        var preflightClockAlignment: ClockAlignment?
+        var freeBytesBefore: Int64?
+        var visibleBytesAtEnd: Int64?
+        var missingEvidence: [String] = []
+        var limitations = [
+            "This command records one 30-second detailed window; continuous session telemetry is separate.",
+            "Footprint growth is not proof of leaked allocations; allocation stacks are not recorded here.",
+            "System Trace changes measurement overhead. GPU utilization and physical scanout are not established.",
+            "Observed row endpoints do not prove continuous stack or scheduling coverage.",
+            "The raw trace may retain target environment values; only the TOC sidecar is sanitized.",
+            "PID identity checks use ps start time at second precision, not a kernel process handle.",
+            "Output budgets are soft stop thresholds; Instruments services may buffer data outside the output directory.",
+            "Cancellation or budget termination can leave an unreadable trace. Such output is never verified.",
+            "Intrusive VM map inspection is excluded; resource telemetry supplies the stream memory trend.",
+            "The capture uptime interval includes parsing and all command overhead; exclude it from baseline scoring.",
+            "Command uptime intervals include attachment, finalization and export overhead.",
+            "Trace-relative clock anchors identify observed recording coverage within those conservative command intervals."
+        ]
+    }
+
+    enum CaptureError: Error { case invalidPID }
+
+    typealias Runner = @Sendable (Command) async -> CommandResult
+    static let recordingSeconds = 30
+    static let waitingSamplesTable = "table[@schema='time-profile'][@record-waiting-threads='1']"
+        + "[@needs-kernel-callstack='1'][@context-switch-sampling='1']"
+
+    static func run(pid: Int32, output: URL, recordingOptions: URL,
+                    runner: Runner = execute,
+                    spaceAvailable: @Sendable (URL) -> Int64? = freeBytes,
+                    progress: @Sendable (String) -> Void = { _ in }) async throws -> URL {
+        try Task.checkCancellation()
+        guard pid > 0, pid != ProcessInfo.processInfo.processIdentifier else {
+            throw CaptureError.invalidPID
+        }
+        var manifest = Manifest(pid: pid, requestedSeconds: recordingSeconds, started: Date())
+        guard !FileManager.default.fileExists(atPath: output.path) else { throw CocoaError(.fileWriteFileExists) }
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let manifestURL = output.appendingPathComponent("capture-manifest.json")
+        do {
+            try save(manifest, to: manifestURL)
+            let options = try prepareOptions(output, recordingOptions: recordingOptions)
+            return try await capture(manifest: &manifest, output: output, options: options,
+                                     runner: runner, spaceAvailable: spaceAvailable, progress: progress)
+        } catch {
+            manifest.status = "capture_io_failed"
+            _ = try? finish(&manifest, at: manifestURL)
+            throw error
+        }
+    }
+
+    private static func capture(manifest: inout Manifest, output: URL, options: URL,
+                                runner: Runner, spaceAvailable: @Sendable (URL) -> Int64?,
+                                progress: @Sendable (String) -> Void) async throws -> URL {
+        let files = FileManager.default
+        let pid = manifest.pid
+        let manifestURL = output.appendingPathComponent("capture-manifest.json")
+        manifest.freeBytesBefore = spaceAvailable(output)
+        guard let free = manifest.freeBytesBefore, free >= 30 * 1_073_741_824 else {
+            manifest.status = "insufficient_free_space"
+            return try finish(&manifest, at: manifestURL)
+        }
+        func invoke(_ label: String, _ executable: String, _ arguments: [String],
+                    timeout: Double = 30, maximum: Int64 = 1_048_576) async throws -> CommandResult {
+            let command = Command(label: label, executable: executable, arguments: arguments,
+                timeoutSeconds: timeout, stdout: output.appendingPathComponent(label + ".stdout"),
+                stderr: output.appendingPathComponent(label + ".stderr"),
+                maximumOutputBytes: maximum, captureDirectory: output)
+            let result = await runCommand(command, runner: runner)
+            manifest.commands.append(result)
+            try save(manifest, to: manifestURL)
+            return result
+        }
+        let identity = await captureIdentity(pid: pid, output: output, label: "target", runner: runner)
+        manifest.commands.append(identity)
+        guard identity.succeeded, let target = processIdentity(identity.command.stdout), target.pid == pid else {
+            manifest.status = "target_unavailable"
+            return try finish(&manifest, at: manifestURL)
+        }
+        let preflight = try await invoke("options", "/usr/bin/xcrun", ["xctrace", "record", "--template",
+            "System Trace", "--show-recording-options"])
+        guard preflight.succeeded, supportsRequestedOptions(at: preflight.command.stdout) else {
+            manifest.status = preflight.succeeded ? "options_unsupported" : failureStatus(preflight)
+            return try finish(&manifest, at: manifestURL)
+        }
+        guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-before", runner: runner) else {
+            manifest.status = "target_changed_before_recording"
+            return try finish(&manifest, at: manifestURL)
+        }
+        manifest.status = "clock_preflight"
+        try save(manifest, to: manifestURL)
+        guard try await preflightClock(manifest: &manifest, output: output, options: options, runner: runner) else {
+            manifest.status = "clock_preflight_failed"
+            return try finish(&manifest, at: manifestURL)
+        }
+        guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-after-preflight", runner: runner) else {
+            manifest.status = "target_changed_during_preflight"
+            return try finish(&manifest, at: manifestURL)
+        }
+        manifest.status = "recording"
+        try save(manifest, to: manifestURL)
+        let trace = output.appendingPathComponent("system.trace")
+        progress("Clock check passed. Starting one 30-second detailed recording now.")
+        let recording = try await invoke("record", "/usr/bin/xcrun", ["xctrace", "record", "--template",
+            "System Trace", "--attach", String(pid), "--time-limit", "30s", "--recording-options", options.path,
+            "--output", trace.path], timeout: Double(recordingSeconds + 180))
+        guard recording.succeeded else {
+            manifest.status = failureStatus(recording)
+            return try finish(&manifest, at: manifestURL)
+        }
+        manifest.status = "exporting"
+        try save(manifest, to: manifestURL)
+        progress("Recording finished; exporting and validating the captured evidence.")
+        guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-after", runner: runner) else {
+            manifest.status = "target_changed_during_recording"
+            return try finish(&manifest, at: manifestURL)
+        }
+        let toc = try await invoke("toc", "/usr/bin/xcrun", ["xctrace", "export", "--input", trace.path, "--toc"],
+                                   timeout: 120, maximum: 4_194_304)
+        guard toc.succeeded, let coverage = inspectTOC(toc.command.stdout, pid: pid) else {
+            try? files.removeItem(at: toc.command.stdout)
+            manifest.status = "toc_unverified"
+            return try finish(&manifest, at: manifestURL)
+        }
+        manifest.coverage = coverage
+        return try await exportSamples(manifest: &manifest, manifestURL: manifestURL, output: output,
+                                       trace: trace, runner: runner, spaceAvailable: spaceAvailable)
+    }
+
+    private static func prepareOptions(_ output: URL, recordingOptions: URL) throws -> URL {
+        let options = output.appendingPathComponent("recording-options.json")
+        guard let data = boundedRead(recordingOptions, maximum: 1_048_576) else { throw CocoaError(.fileReadTooLarge) }
+        try privateWrite(data, to: options)
+        return options
+    }
+
+    struct ProcessIdentity: Equatable {
+        let pid: Int32
+        let start: String
+        let executable: String
+    }
+
+    static func processIdentity(_ url: URL) -> ProcessIdentity? {
+        guard let data = boundedRead(url, maximum: 65_536), let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let fields = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(maxSplits: 6, whereSeparator: \.isWhitespace)
+        guard fields.count == 7, let pid = Int32(fields[0]),
+              fields[6].hasSuffix("/Contents/MacOS/Glimmer") else { return nil }
+        return ProcessIdentity(pid: pid, start: fields[1...5].joined(separator: " "), executable: String(fields[6]))
+    }
+
+    private static func revalidateIdentity(_ target: ProcessIdentity, manifest: inout Manifest,
+                                           output: URL, label: String, runner: Runner) async -> Bool {
+        let result = await captureIdentity(pid: target.pid, output: output, label: label, runner: runner)
+        manifest.commands.append(result)
+        return result.succeeded && processIdentity(result.command.stdout) == target
+    }
+
+    private static func captureIdentity(pid: Int32, output: URL, label: String,
+                                        runner: Runner) async -> CommandResult {
+        await runCommand(Command(label: label, executable: "/bin/ps",
+            arguments: ["-p", String(pid), "-o", "pid=,lstart=,comm="], timeoutSeconds: 10,
+            stdout: output.appendingPathComponent(label + ".stdout"),
+            stderr: output.appendingPathComponent(label + ".stderr"),
+            maximumOutputBytes: 65_536, captureDirectory: output), runner: runner)
+    }
+
+    private static func exportSamples(manifest: inout Manifest, manifestURL: URL, output: URL,
+                                      trace: URL, runner: Runner,
+                                      spaceAvailable: @Sendable (URL) -> Int64?) async throws -> URL {
+        guard manifest.coverage?.targetMatched == true,
+              manifest.coverage?.requestedProbesConfigured == true else {
+            manifest.status = "target_or_probes_unverified"
+            return try finish(&manifest, at: manifestURL)
+        }
+        guard let free = spaceAvailable(output), free >= 8 * 1_073_741_824 else {
+            manifest.status = "export_insufficient_free_space"
+            return try finish(&manifest, at: manifestURL)
+        }
+        for schema in ["time-profile", "thread-state"] {
+            if Task.isCancelled { return try finish(&manifest, at: manifestURL) }
+            guard manifest.coverage?.schemas.contains(schema) == true else { continue }
+            let table = schema == "time-profile" ? Self.waitingSamplesTable : "table[@schema='thread-state']"
+            let command = Command(label: schema, executable: "/usr/bin/xcrun", arguments: ["xctrace", "export",
+                "--input", trace.path, "--xpath", "/trace-toc/run[@number='1']/data/" + table],
+                timeoutSeconds: 600, stdout: output.appendingPathComponent(schema + ".xml"),
+                stderr: output.appendingPathComponent(schema + ".stderr"),
+                maximumOutputBytes: (schema == "thread-state" ? 2 : 1) * 1_073_741_824,
+                captureDirectory: output)
+            let result = await runCommand(command, runner: runner)
+            manifest.commands.append(result)
+            guard result.succeeded else {
+                manifest.status = failureStatus(result)
+                return try finish(&manifest, at: manifestURL)
+            }
+            guard let samples = inspectSamples(command.stdout, pid: manifest.pid) else {
+                manifest.status = schema + "_xml_unverified"
+                return try finish(&manifest, at: manifestURL)
+            }
+            updateCoverage(&manifest, samples: samples, scheduling: schema == "thread-state")
+            try save(manifest, to: manifestURL)
+        }
+        if Task.isCancelled { return try finish(&manifest, at: manifestURL) }
+        try await exportClock(manifest: &manifest, output: output, trace: trace, runner: runner)
+        let coverage = manifest.coverage
+        let samplesCover = coversRequestedWindow(first: coverage?.firstSampleNanos, last: coverage?.lastSampleNanos)
+        let scheduleCovers = coversRequestedWindow(first: coverage?.firstSchedulingNanos,
+                                                   last: coverage?.lastSchedulingNanos)
+        if coverage?.sampleXMLParsed == true, coverage?.schedulingRowsVerified == true,
+           samplesCover, scheduleCovers {
+            manifest.status = clockCoversRequestedWindow(manifest.clockAlignment)
+                ? "observed_rows_with_bounded_clock_anchors" : "clock_alignment_unverified"
+        } else {
+            manifest.status = "row_coverage_unverified"
+        }
+        return try finish(&manifest, at: manifestURL)
+    }
+
+    private static func updateCoverage(_ manifest: inout Manifest, samples: SampleSummary, scheduling: Bool) {
+        if scheduling {
+            manifest.coverage?.schedulingRows = samples.rows
+            manifest.coverage?.targetSchedulingRows = samples.targetRows
+            manifest.coverage?.firstSchedulingNanos = samples.first
+            manifest.coverage?.lastSchedulingNanos = samples.last
+            manifest.coverage?.schedulingRowsVerified = samples.targetRows > 0
+        } else {
+            manifest.coverage?.sampleRows = samples.rows
+            manifest.coverage?.targetSampleRows = samples.targetRows
+            manifest.coverage?.firstSampleNanos = samples.first
+            manifest.coverage?.lastSampleNanos = samples.last
+            manifest.coverage?.sampleXMLParsed = samples.targetRows > 0
+        }
+    }
+
+    private static func coversRequestedWindow(first: UInt64?, last: UInt64?) -> Bool {
+        guard let first, let last else { return false }
+        return first < 3_000_000_000 && last >= UInt64(recordingSeconds - 3) * 1_000_000_000
+    }
+
+    static func freeBytes(at url: URL) -> Int64? {
+        (try? FileManager.default.attributesOfFileSystem(forPath: url.path)[.systemFreeSize] as? NSNumber)?.int64Value
+    }
+
+    private static func finish(_ manifest: inout Manifest, at url: URL) throws -> URL {
+        if manifest.status != "capture_io_failed", let failed = manifest.commands.first(where: { !$0.succeeded }) {
+            manifest.status = failureStatus(failed)
+        }
+        if Task.isCancelled { manifest.status = "cancelled" }
+        manifest.ended = Date()
+        manifest.visibleBytesAtEnd = captureBytes(url.deletingLastPathComponent())
+        manifest.missingEvidence = missingEvidence(manifest)
+        if manifest.status == "observed_rows_with_bounded_clock_anchors" {
+            if manifest.visibleBytesAtEnd == nil { manifest.status = "capture_size_unverified" }
+            if (manifest.visibleBytesAtEnd ?? 0) > 8 * 1_073_741_824 { manifest.status = "capture_size_limit" }
+            if !manifest.missingEvidence.isEmpty || !manifest.commands.allSatisfy(\.succeeded) {
+                manifest.status = "capture_incomplete"
+            }
+        }
+        manifest.endedUptimeSeconds = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        try save(manifest, to: url)
+        return url
+    }
+
+    private static func clockCoversRequestedWindow(_ alignment: ClockAlignment?) -> Bool {
+        guard let alignment, alignment.status == "bounded_clock_verified", alignment.sessions.count == 1 else { return false }
+        return coversRequestedWindow(first: alignment.firstTraceNanos, last: alignment.lastTraceNanos)
+    }
+
+    private static func missingEvidence(_ manifest: Manifest) -> [String] {
+        let coverage = manifest.coverage
+        let requirements: [(Bool, String)] = [
+            (manifest.commands.contains { $0.command.label == "record" && $0.succeeded } && coverage?.targetMatched == true,
+                "Readable finalized detailed recording."),
+            (coverage?.targetMatched == true, "Recorded target identity."),
+            (coverage?.requestedProbesConfigured == true, "Requested waiting-thread and kernel-stack probes."),
+            (coverage?.sampleXMLParsed == true && coversRequestedWindow(first: coverage?.firstSampleNanos,
+                last: coverage?.lastSampleNanos), "Target stack rows spanning the requested window."),
+            (coverage?.schedulingRowsVerified == true && coversRequestedWindow(first: coverage?.firstSchedulingNanos,
+                last: coverage?.lastSchedulingNanos), "Target scheduling rows spanning the requested window."),
+            (clockCoversRequestedWindow(manifest.clockAlignment), "Clock anchors spanning the requested window.")
+        ]
+        return requirements.filter { !$0.0 }.map(\.1)
+    }
+
+    private static func save(_ manifest: Manifest, to url: URL) throws {
+        var snapshot = manifest
+        snapshot.missingEvidence = missingEvidence(manifest)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try privateWrite(encoder.encode(snapshot), to: url)
+    }
+
+    static func supportsRequestedOptions(at url: URL) -> Bool {
+        guard let data = boundedRead(url, maximum: 1_048_576),
+              let options = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let profiler = options["Time Profiler"] as? [String: Any] else { return false }
+        return ["contextSwitchSampling", "recordWaitingThreads", "recordKernelStacks"].allSatisfy { profiler[$0] is Bool }
+    }
+
+    private static func failureStatus(_ result: CommandResult) -> String {
+        guard result.status == "completed" else { return result.status }
+        let file = try? FileHandle(forReadingFrom: result.command.stderr)
+        defer { try? file?.close() }
+        let data = (try? file?.read(upToCount: 65_536)) ?? Data()
+        let text = String(bytes: data, encoding: .utf8)?.lowercased() ?? ""
+        if ["permission", "not authorized", "not permitted", "failed to attach"].contains(where: text.contains) {
+            return "permission_or_attachment_failed"
+        }
+        return "capture_failed"
+    }
+
+    static func inspectTOC(_ url: URL, pid: Int32) -> Coverage? {
+        guard let data = boundedRead(url, maximum: 4_194_304),
+              let document = try? XMLDocument(data: data, options: []) else { return nil }
+        var coverage = Coverage()
+        func text(_ path: String) -> String? { try? document.nodes(forXPath: path).first?.stringValue }
+        coverage.targetMatched = text("/trace-toc/run[1]/info/target/process/@pid") == String(pid)
+        coverage.startDate = text("/trace-toc/run[1]/info/summary/start-date")
+        coverage.endDate = text("/trace-toc/run[1]/info/summary/end-date")
+        coverage.durationSeconds = text("/trace-toc/run[1]/info/summary/duration").flatMap(Double.init)
+        coverage.schemas = (try? document.nodes(forXPath: "/trace-toc/run[1]/data/table/@schema")
+            .compactMap(\.stringValue)) ?? []
+        coverage.requestedProbesConfigured = ((try? document.nodes(
+            forXPath: "/trace-toc/run[1]/data/" + waitingSamplesTable).count) ?? 0) > 0
+        coverage.configuredSamplePeriodsMicroseconds = (try? document.nodes(
+            forXPath: "/trace-toc/run[1]/data/table[@schema='time-sample'][@all-thread-states='YES']/@sample-rate-micro-seconds")
+            .compactMap { $0.stringValue.flatMap(Int.init) }) ?? []
+        // TOC may carry the target's environment; keep it out of the easy-to-share XML sidecar.
+        for node in (try? document.nodes(forXPath: "//environment")) ?? [] { node.detach() }
+        do { try privateWrite(document.xmlData(options: [.nodePrettyPrint]), to: url) } catch { return nil }
+        return coverage
+    }
+}

@@ -8,13 +8,14 @@
 //  cushion memory and the frame trace file, each on a scratch suite and temp directory.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct IdentityPersistenceTests {
 
-    /// A manager whose keychain service matches nothing, so no real item is read or deleted.
+    /// Each manager owns only its fixture files and named preferences.
     private func manager(_ store: IsolatedStore, qt: String? = nil) -> IdentityManager {
         IdentityManager(defaultsSuite: store.domain, supportBase: store.directory,
                         moonlightQtSuite: qt ?? "io.ugfugl.Glimmer.tests.persistence-qt-none")
@@ -27,6 +28,59 @@ struct IdentityPersistenceTests {
     private func mode(_ url: URL) throws -> Int {
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         return try #require(attrs[.posixPermissions] as? Int) & 0o777
+    }
+
+    @Test(arguments: [false, true])
+    func interruptedFirstPublicationCanRetry(migrating: Bool) async throws {
+        let store = try IsolatedStore("id-interrupted-first")
+        defer { store.remove() }
+        let pair = try await manager(store).generateKeyPairAndCert()
+        let staging = store.directory.appendingPathComponent("Glimmer/.identity-staging")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        try Data(pair.certPEM.utf8).write(to: staging.appendingPathComponent("client-cert.pem"))
+        if migrating {
+            store.defaults.set(pair.certPEM, forKey: IdentityKey.certificate)
+            store.defaults.set(pair.keyPEM, forKey: IdentityKey.privateKey)
+            store.defaults.set("MIGRATED", forKey: IdentityKey.uniqueID)
+        }
+        let retry = manager(store)
+        let certificate = try await retry.clientCertPEM()
+        let key = try await retry.clientKeyPEM()
+        _ = try PEM.identity(certPEM: certificate, keyPEM: key)
+        let uniqueID = try await retry.uniqueID()
+        if migrating {
+            #expect(certificate == pair.certPEM && key == pair.keyPEM && uniqueID == "MIGRATED")
+        }
+        #expect(!FileManager.default.fileExists(atPath: staging.path))
+        let next = manager(store)
+        #expect(try await next.clientCertPEM() == certificate)
+        #expect(try await next.uniqueID() == uniqueID)
+    }
+
+    @Test func filesSurviveMissingMigrationFlagAndConflictingDefaults() async throws {
+        let store = try IsolatedStore("id-missing-flag")
+        defer { store.remove() }
+        let first = manager(store)
+        let cert = try await first.clientCertPEM()
+        let key = try await first.clientKeyPEM()
+        let uid = try await first.uniqueID()
+        store.defaults.removeObject(forKey: IdentityManager.fileStorageFlag)
+        store.defaults.set("stale-id", forKey: IdentityKey.uniqueID)
+        let second = manager(store)
+        #expect(try await second.clientCertPEM() == cert)
+        #expect(try await second.clientKeyPEM() == key)
+        #expect(try await second.uniqueID() == uid)
+    }
+
+    @Test func fileStoreCannotReplaceExistingIdentity() async throws {
+        let store = try IsolatedStore("id-no-replacement")
+        defer { store.remove() }
+        let cert = try await manager(store).clientCertPEM()
+        #expect(throws: (any Error).self) {
+            try FileIdentityStore.write(Data("replacement".utf8), account: IdentityManager.accountCert,
+                                        base: store.directory)
+        }
+        #expect(try await manager(store).clientCertPEM() == cert)
     }
 
     @Test func aFreshInstallGeneratesAndKeepsOneIdentity() async throws {
@@ -46,7 +100,7 @@ struct IdentityPersistenceTests {
     @Test func plaintextDefaultsMoveToFilesAndAreWiped() async throws {
         let store = try IsolatedStore("id-plaintext")
         defer { store.remove() }
-        let pair = try await IdentityManager.shared.generateKeyPairAndCert()
+        let pair = try await manager(store).generateKeyPairAndCert()
         store.defaults.set(pair.certPEM, forKey: IdentityKey.certificate)
         store.defaults.set(pair.keyPEM, forKey: IdentityKey.privateKey)
         store.defaults.set("OLDUID", forKey: IdentityKey.uniqueID)
@@ -63,7 +117,7 @@ struct IdentityPersistenceTests {
         let store = try IsolatedStore("id-qt")
         let qt = try IsolatedStore("id-qt-source")
         defer { store.remove(); qt.remove() }
-        let pair = try await IdentityManager.shared.generateKeyPairAndCert()
+        let pair = try await manager(store).generateKeyPairAndCert()
         qt.defaults.set(Data(pair.certPEM.utf8), forKey: "certificate")
         qt.defaults.set(Data(pair.keyPEM.utf8), forKey: "key")
         qt.defaults.set("QTUID", forKey: "uniqueid")
@@ -72,16 +126,6 @@ struct IdentityPersistenceTests {
         #expect(try await loaded.uniqueID() == "QTUID")
         #expect(qt.defaults.data(forKey: "key") != nil)
         #expect(qt.defaults.string(forKey: "uniqueid") == "QTUID")
-    }
-
-    @Test func aMissingUniqueIDFileIsSynthesisedAndStaysStable() async throws {
-        let store = try IsolatedStore("id-uid")
-        defer { store.remove() }
-        _ = try await manager(store).uniqueID()
-        try FileManager.default.removeItem(at: identityFile(store, "client-uniqueid.txt"))
-        let repaired = try await manager(store).uniqueID()
-        #expect(repaired.count == 32)
-        #expect(try await manager(store).uniqueID() == repaired)
     }
 
     @Test func aWipedFileStoreWithTheFlagSetRegenerates() async throws {
@@ -94,14 +138,35 @@ struct IdentityPersistenceTests {
         #expect(FileManager.default.fileExists(atPath: identityFile(store, "client-cert.pem").path))
     }
 
-    @Test func aCorruptCertificateFileSurfacesInsteadOfRegenerating() async throws {
-        let store = try IsolatedStore("id-corrupt")
-        defer { store.remove() }
+    @Test(arguments: ["client-cert.pem", "client-key.pem", "client-uniqueid.txt", "corrupt", "mismatch"])
+    func incompleteIdentityPreservesSurvivingMaterial(damage: String) async throws {
+        let store = try IsolatedStore("id-partial")
+        let qt = try IsolatedStore("id-conflicting-migration")
+        defer { store.remove(); qt.remove() }
         _ = try await manager(store).uniqueID()
-        try Data("not a pem".utf8).write(to: identityFile(store, "client-cert.pem"))
-        await #expect(throws: (any Error).self) { try await manager(store).uniqueID() }
-        let kept = try String(contentsOf: identityFile(store, "client-cert.pem"), encoding: .utf8)
-        #expect(kept == "not a pem")
+        try PinnedCertStore.store(pem: "ESTABLISHED-PIN", forHostID: "PC",
+                                 defaults: store.defaults, base: store.directory)
+        let conflicting = try await manager(qt).generateKeyPairAndCert()
+        qt.defaults.set(conflicting.certPEM, forKey: IdentityKey.certificate)
+        qt.defaults.set(conflicting.keyPEM, forKey: IdentityKey.privateKey)
+        qt.defaults.set("CONFLICTING-ID", forKey: IdentityKey.uniqueID)
+        if damage == "corrupt" || damage == "mismatch" {
+            let bytes = damage == "corrupt" ? Data("not a pem".utf8) : Data(conflicting.certPEM.utf8)
+            try bytes.write(to: identityFile(store, "client-cert.pem"))
+        } else {
+            try FileManager.default.removeItem(at: identityFile(store, damage))
+        }
+        let names = ["client-cert.pem", "client-key.pem", "client-uniqueid.txt"].filter { $0 != damage }
+        let original = try names.map { try Data(contentsOf: identityFile(store, $0)) }
+        await #expect(throws: (any Error).self) {
+            _ = try await manager(store, qt: qt.domain).uniqueID()
+        }
+        #expect(try names.map { try Data(contentsOf: identityFile(store, $0)) } == original)
+        if names.count == 2 {
+            #expect(!FileManager.default.fileExists(atPath: identityFile(store, damage).path))
+        }
+        #expect(PinnedCertStore.load(forHostID: "PC", defaults: store.defaults,
+                                    base: store.directory) == "ESTABLISHED-PIN")
     }
 
     @Test func theFileStoreRefusesUnknownAccountsAndDeletesIdempotently() throws {
@@ -170,14 +235,29 @@ struct PinnedCertPersistenceTests {
         #expect(try String(contentsOf: pin(store, "AAA"), encoding: .utf8) == "LEGACY")
     }
 
+    @Test func unavailableMacPathRetainsLegacyAuthenticationAndRejectsUnpair() throws {
+        let store = try IsolatedStore("pin-unavailable-path")
+        defer { store.remove() }
+        store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
+        let unavailable: (URL?) throws -> URL = { _ in throw CocoaError(.fileReadNoPermission) }
+        #expect(PinnedCertStore.load(forHostID: "AAA", defaults: store.defaults,
+                                    base: store.directory, resolveBase: unavailable) == "LEGACY")
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
+        #expect(throws: CocoaError(.fileReadNoPermission)) {
+            try PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults,
+                                       base: store.directory, resolveBase: unavailable)
+        }
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
+    }
+
     @Test func deletingWipesBothStoresAndAHostIDCannotEscapeTheDirectory() throws {
         let store = try IsolatedStore("pin-delete")
         defer { store.remove() }
         try PinnedCertStore.store(pem: "PEM-A", forHostID: "../../evil", defaults: store.defaults, base: store.directory)
         #expect(FileManager.default.fileExists(atPath: pin(store, ".._.._evil").path))
         store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
-        PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults, base: store.directory)
-        PinnedCertStore.delete(forHostID: "../../evil", defaults: store.defaults, base: store.directory)
+        try PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults, base: store.directory)
+        try PinnedCertStore.delete(forHostID: "../../evil", defaults: store.defaults, base: store.directory)
         #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
         #expect(PinnedCertStore.load(forHostID: "../../evil", defaults: store.defaults, base: store.directory) == nil)
     }
@@ -334,7 +414,8 @@ struct CushionMemoryPersistenceTests {
     @Test func aSeedWithNoMemoryStartsColdFromTheBase() throws {
         let store = try IsolatedStore("cushion-seed")
         defer { store.remove() }
-        let seed = AudioDecoder.loadCushionSeed(defaults: store.defaults)
+        let seed = AudioDecoder.loadCushionSeed(
+            environment: AudioEnvironment(host: "den", link: "unknown", jitterMs: 0), defaults: store.defaults)
         #expect(!seed.fromMemory)
         #expect(seed.floorMs == 0)
         #expect(seed.targetMs >= AudioDecoder.playoutCushionBaseMs)
@@ -344,7 +425,49 @@ struct CushionMemoryPersistenceTests {
 struct FrameTraceFilePersistenceTests {
 
     private func traceFiles(_ dir: URL) throws -> [String] {
-        try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+        try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { !$0.hasSuffix("-manifest.json") }.sorted()
+    }
+
+    private func traceRows(_ text: String) throws -> [[String: Any]] {
+        try text.split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+    }
+
+    @Test func failedWritesAreCountedAndCannotProduceACompleteCapture() throws {
+        let store = try IsolatedStore("trace-write-failure")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory, sessionId: "failure", write: { _, _ in
+            throw CocoaError(.fileWriteUnknown)
+        })
+        writer.start(isoStamp: "failure")
+        writer.append("{}")
+        writer.stop()
+        #expect(writer.status.acceptedRecords == 1)
+        #expect(writer.status.unwrittenRecords == 1)
+        #expect(writer.status.writtenRecords == 0)
+        #expect(writer.status.writeFailures == 1)
+        #expect(!writer.status.complete)
+        let data = try Data(contentsOf: store.directory.appendingPathComponent("telemetry-frames-failure-manifest.json"))
+        let row = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(row["closed"] as? Bool == true)
+        #expect(row["complete"] as? Bool == false)
+        #expect(row["first_unwritten_sequence"] as? Int == 1)
+    }
+
+    @Test func retentionPreservesTheFirstSegmentAndReportsRemovedSequences() throws {
+        let store = try IsolatedStore("trace-retention")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory, maxFileBytes: 1, maxRetainedSegments: 2)
+        writer.start(isoStamp: "retention")
+        for _ in 0..<3 { writer.append("{}"); writer.flush() }
+        writer.stop()
+        #expect(writer.status.segments.map(\.index) == [0, 3])
+        #expect(writer.status.prunedRecords == 2)
+        #expect(writer.status.firstPrunedSequence == 2)
+        #expect(writer.status.lastPrunedSequence == 3)
+        #expect(!writer.status.complete)
+        #expect(try traceFiles(store.directory).count == 2)
     }
 
     @Test func linesLandInOrderInTheNamedFile() throws {
@@ -357,7 +480,69 @@ struct FrameTraceFilePersistenceTests {
         #expect(try traceFiles(store.directory) == ["telemetry-frames-T1.ndjson"])
         let text = try String(contentsOf: store.directory.appendingPathComponent("telemetry-frames-T1.ndjson"),
                               encoding: .utf8)
-        #expect(text == (0..<5).map { "{\"n\":\($0)}" }.joined(separator: "\n") + "\n")
+        let rows = try traceRows(text)
+        #expect(rows.compactMap { $0["n"] as? Int } == Array(0..<5))
+        #expect(rows.compactMap { $0["trace_seq"] as? Int } == Array(1...5))
+        #expect(writer.status.closed && writer.status.complete)
+    }
+
+    @Test func typedFramesKeepTheirPlaceAmongEvents() throws {
+        let store = try IsolatedStore("trace-typed")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory)
+        writer.append("{\"event\":\"before\"}")
+        writer.appendFrame(FrameTimingTracker.TraceRecord(
+            frameIndex: 42, rtpTimestamp: 900, frameBytes: 200, isIDR: false,
+            presentUptimeMs: 123.25, isResumePresent: false, submitToOutput: 1.5), sessionId: "typed")
+        writer.append("{\"event\":\"after\"}")
+        writer.start(isoStamp: "typed")
+        writer.stop()
+        let file = store.directory.appendingPathComponent("telemetry-frames-typed.ndjson")
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        #expect(lines.count == 3)
+        #expect(lines.first?.contains("\"event\":\"before\"") == true)
+        #expect(lines.last?.contains("\"event\":\"after\"") == true)
+        let row = try #require(JSONSerialization.jsonObject(with: Data(lines[1].utf8)) as? [String: Any])
+        #expect(row["session"] as? String == "typed")
+        #expect(row["frame"] as? Int == 42)
+        #expect(row["submit_to_output_ms"] as? Double == 1.5)
+    }
+
+    @Test func overflowReportsLostRecordsAndPreservesSurvivorOrder() throws {
+        let store = try IsolatedStore("trace-overflow")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory)
+        for index in 0..<10_003 { writer.append("{\"n\":\(index)}") }
+        writer.start(isoStamp: "overflow")
+        writer.stop()
+        let file = store.directory.appendingPathComponent("telemetry-frames-overflow.ndjson")
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        #expect(lines.count == 10_001)
+        let rows = try traceRows(lines.joined(separator: "\n"))
+        #expect(rows.first?["dropped_records"] as? Int == 3)
+        #expect(rows.first?["first_lost_seq"] as? Int == 1)
+        #expect(rows.first?["last_lost_seq"] as? Int == 3)
+        #expect(rows.dropFirst().compactMap { $0["n"] as? Int } == Array(3..<10_003))
+        #expect(writer.status.overflowRecords == 3)
+        #expect(!writer.status.complete)
+    }
+
+    @Test func stoppingDrainsAcceptedRecordsAndRejectsLaterAppends() throws {
+        let store = try IsolatedStore("trace-stop")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory)
+        writer.append("{\"event\":\"accepted\"}")
+        writer.start(isoStamp: "stop")
+        writer.stop()
+        writer.append("{\"event\":\"late\"}")
+        writer.stop()
+        let file = store.directory.appendingPathComponent("telemetry-frames-stop.ndjson")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        let rows = try traceRows(text)
+        #expect(rows.count == 1)
+        #expect(rows.first?["event"] as? String == "accepted")
+        #expect(writer.status.acceptedRecords == 1)
+        #expect(writer.status.complete)
     }
 
     @Test func crossingTheSizeCapOpensTheNextSegment() throws {
@@ -380,5 +565,21 @@ struct FrameTraceFilePersistenceTests {
         writer.append("{}")
         writer.stop()
         #expect(try traceFiles(store.directory) == ["file"])
+    }
+}
+
+struct PersistentStorageTests {
+    @Test func testProcessCannotResolveInstallationStorage() throws {
+        let root = try #require(PersistentStorage.testRoot)
+        #expect(PersistentStorage.isTesting)
+        let paths = [PersistentStorage.applicationSupport, PersistentStorage.caches,
+                     PersistentStorage.logs, PersistentStorage.home,
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/Identity"),
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/PinnedHosts"),
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/Covers")]
+        for path in paths {
+            #expect(path.path == root.path || path.path.hasPrefix(root.path + "/"))
+        }
+        #expect(PersistentStorage.defaults !== UserDefaults.standard)
     }
 }

@@ -6,6 +6,7 @@
 //  The stats rows a snapshot builds: order, text, symbols, sections and health.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

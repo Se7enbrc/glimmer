@@ -8,6 +8,7 @@
 //  extras with a distinct value in every field, plus parsers for both wire forms.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -35,6 +36,7 @@ enum TelemetryRenderFixtures {
         snap.sinceConnectSeconds = 42.5
         snap.wallClockISO8601 = "2026-10-10T12:00:00Z"
         snap.serverName = "deadbeef"
+        snap.clientLabel = TelemetryRenderer.pseudonym("Test Mac")
         snap.buildCommit = "abc123"
         snap.buildDate = "2026-10-10"
         fillFrames(&snap)
@@ -153,7 +155,7 @@ enum TelemetryRenderFixtures {
         snap.edrHeadroomAvg = 2.5
         snap.edrHeadroomMax = 4
         snap.displayState = DisplayProbe(edrHeadroom: 2.5, hdrEngaged: true, screenName: "Studio \"Display\"",
-                                         proMotionCapable: true, maxRefreshHz: 120)
+                                         proMotionCapable: true, maxRefreshHz: 120, hdrInput: true)
         snap.decodeState = TelemetryCounters.DecodeState(hwDecode: true, codec: "hevc", pixelFormat: "x420",
                                                          bitDepth: 10, colorSpaceKey: "itur_2100_PQ")
         snap.vtSessionCreateMs = 18.5
@@ -170,7 +172,7 @@ enum TelemetryRenderFixtures {
             physFootprintBytes: 512_000_000, onBattery: true, batteryCharging: false)
         snap.clusterResidency = ClusterResidencySnapshot(
             eClusterActive: 0.25, pClusterActive: 0.75, eClusterCount: 2, pClusterCount: 4,
-            packagePowerW: 9.5, gpuResidencyPercent: 38.5)
+            packagePowerW: 9.5, gpuResidencyPercent: 38.5, gpuPowerW: 0.69)
         snap.rfiTotal = 51
         snap.idrRequestedTotal = 52
         snap.backlogOverflowTotal = 53
@@ -198,9 +200,6 @@ enum TelemetryRenderFixtures {
         handshake.clickToFirstFrameMs = 900
         handshake.launchPathMs = 470
         handshake.launchServerinfoMs = 30
-        handshake.launchCancelMs = 40
-        handshake.launchBusyWaitMs = 50
-        handshake.launchBusyPollCount = 3
         handshake.launchMs = 60
         handshake.buildMs = 70
         snap.handshake = handshake
@@ -307,27 +306,12 @@ enum TelemetryRenderFixtures {
         try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
     }
 
-    struct Sample {
-        let labels: String
-        let value: Double
-    }
-
-    /// A Prometheus text body as metric name to its samples.
-    static func parseProm(_ body: String) -> [String: [Sample]] {
-        var out: [String: [Sample]] = [:]
-        for line in body.split(separator: "\n") where !line.hasPrefix("#") {
-            let text = String(line)
-            guard let space = text.lastIndex(of: " ") else { continue }
-            let head = text[..<space]
-            let value = Double(text[text.index(after: space)...]) ?? .nan
-            var name = String(head)
-            var labels = ""
-            if let brace = head.firstIndex(of: "{") {
-                name = String(head[..<brace])
-                labels = String(head[brace...])
-            }
-            out[name, default: []].append(Sample(labels: labels, value: value))
-        }
-        return out
+    static func source() -> TelemetrySource {
+        TelemetrySource(
+            videoStats: { StreamStatsSnapshot() }, decoderDrops: { 0 }, backpressureDrops: { 0 },
+            presentationLateDrops: { 0 }, presentationGaps: { 0 }, estimatedRtt: { nil },
+            enetHealth: { nil }, pacingLiveness: { nil }, inFlightDecodeBacklog: { 0 },
+            refreshWindow: { nil }, displayProbe: { nil }, displayMode: "window",
+            stream: StreamTelemetryConfig(width: 1920, height: 1080, fps: 60, codec: "HEVC", bitrate: nil))
     }
 }

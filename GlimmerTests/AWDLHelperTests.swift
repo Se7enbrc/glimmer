@@ -370,70 +370,53 @@ struct AWDLLayoutMigrationTests {
 }
 
 struct HelperClientTests {
-    @Test(arguments: [false, true])
-    func timedOutRequestsRetireLiveConnections(duringCount: Bool) async throws {
-        let connections = Mutex<[HelperTestConnection]>([])
-        let proxy = HelperTestProxy(suspendDown: !duringCount, suspendCount: duringCount)
-        let delegate = HelperTestListener(proxy)
-        let listener = NSXPCListener.anonymous()
-        listener.delegate = delegate
-        listener.resume()
-        defer {
-            listener.invalidate()
-            withExtendedLifetime(delegate) {}
-        }
-        let endpoint = listener.endpoint
-        let bootstrap = HelperTestConnection(value: NSXPCConnection(listenerEndpoint: endpoint))
-        bootstrap.value.remoteObjectInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
-        bootstrap.value.resume()
-        defer { bootstrap.value.invalidate() }
-        // Listener startup is not part of the request deadline this test exercises.
-        try #require(await Self.ping(bootstrap) == .reply("test"))
+    @Test func anonymousTransportRejectsEachExpiredGeneration() async throws {
+        let endpoint = RetirementEndpoint()
+        defer { endpoint.close() }
+        let startup = endpoint.connection()
+        startup.remoteObjectInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
+        startup.resume()
+        try #require(await endpoint.probe(startup) == .answered, "Cold anonymous listener did not become ready")
+        startup.invalidate()
+        let made = Mutex<[XPCLease]>([])
         let client = HelperClient(makeConnection: {
-            let connection = NSXPCConnection(listenerEndpoint: endpoint)
-            let probe = HelperTestConnection(value: connection)
-            connections.withLock { $0.append(probe) }
+            let connection = endpoint.connection()
+            made.withLock { $0.append(XPCLease(transport: connection)) }
             return connection
         })
-        for attempt in 1...3 {
+        defer { made.withLock { $0 }.forEach { $0.transport.invalidate() } }
+        for attempt in 0..<3 {
             #expect(await client.currentStatus()?.0 == false)
-            let connection = try #require(connections.withLock { $0.last })
-            // No interruption handler: interrupted connections stay up for launchd's relaunch.
-            #expect(connection.value.interruptionHandler == nil)
-            #expect(await Self.ping(connection) == .reply("test"))
-            if duringCount {
-                #expect(await client.reSuppressCount() == nil)
-            } else {
-                #expect(!(await client.setAWDLDown(true, reason: "test")))
+            let current = try #require(made.withLock { $0.last?.transport })
+            try #require(await endpoint.probe(current) == .answered, "Client transport was not ready")
+            let result = await endpoint.bounded {
+                if attempt == 1 { return await client.reSuppressCount() == nil }
+                return !(await client.setAWDLDown(true, reason: "anonymous timeout test"))
             }
-            #expect(await Self.ping(connection)
-                == .error(NSCocoaErrorDomain, CocoaError.Code.xpcConnectionInvalid.rawValue))
-            #expect(connections.withLock { $0.count } == attempt)
-            proxy.finishDown()
+            try #require(result == true, "Missing reply did not return the product fallback")
+            #expect(await endpoint.probe(current) == .rejected, "Expired connection still accepted a message")
+            #expect(made.withLock { $0.count } == attempt + 1)
+            endpoint.service.finishDown()
         }
         #expect(await client.currentStatus()?.0 == false)
-        #expect(connections.withLock { $0.count } == 4)
+        #expect(made.withLock { $0.count } == 4)
+        await client.drop(1)
+        #expect(await client.currentStatus()?.0 == false)
         await client.invalidate()
     }
 
-    private enum Ping: Equatable, Sendable {
-        case reply(String)
-        case error(String, Int)
-        case noProxy
-    }
-
-    private static func ping(_ connection: HelperTestConnection) async -> Ping {
-        await withCheckedContinuation { continuation in
-            let once = SingleResume(continuation)
-            let remote = connection.value.remoteObjectProxyWithErrorHandler { error in
-                let cocoa = error as NSError
-                once.resume(.error(cocoa.domain, cocoa.code))
+    @Test func probeOutcomesCompeteForExactlyOneCompletion() async {
+        let outcomes: [RetirementEndpoint.ProbeResult] = [.answered, .rejected, .expired]
+        for _ in 0..<64 {
+            let winners = Mutex(0)
+            let result = await withCheckedContinuation { continuation in
+                let completion = SingleResume<RetirementEndpoint.ProbeResult>(continuation)
+                DispatchQueue.concurrentPerform(iterations: outcomes.count) { index in
+                    if completion.resume(outcomes[index]) { winners.withLock { $0 += 1 } }
+                }
             }
-            guard let proxy = remote as? Glimmer.GlimmerHelperProtocol else {
-                once.resume(.noProxy)
-                return
-            }
-            proxy.ping { once.resume(.reply($0)) }
+            #expect(outcomes.contains(result))
+            #expect(winners.withLock { $0 } == 1)
         }
     }
 
@@ -480,28 +463,81 @@ struct HelperClientTests {
     }
 }
 
-// Configuration and invalidation never overlap a probe; Foundation owns message-queue synchronisation.
-private struct HelperTestConnection: @unchecked Sendable {
-    let value: NSXPCConnection
-}
-
-private final class HelperTestListener: NSObject, NSXPCListenerDelegate, Sendable {
-    private let proxy: HelperTestProxy
-
-    init(_ proxy: HelperTestProxy) {
-        self.proxy = proxy
-    }
-
-    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        connection.exportedInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
-        connection.exportedObject = proxy
-        connection.resume()
-        return true
-    }
-}
-
 extension AWDLProcess.Result {
     static func ifconfig(_ succeeded: Bool = true, output: String = "") -> Self {
         Self(status: succeeded ? 0 : 1, output: Data(output.utf8), timedOut: false, truncated: false)
     }
+}
+
+// Test-owned anonymous XPC only. The lock keeps callback-owned connections alive through teardown.
+private final class RetirementEndpoint: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
+    enum ProbeResult: Sendable { case answered, rejected, expired }
+    let service = HelperTestProxy(suspendDown: true, suspendCount: true)
+    private let listener = NSXPCListener.anonymous()
+    private let accepted = Mutex((closed: false, leases: [XPCLease]()))
+
+    override init() {
+        super.init()
+        listener.delegate = self
+        listener.resume()
+    }
+
+    func connection() -> NSXPCConnection { NSXPCConnection(listenerEndpoint: listener.endpoint) }
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+        connection.exportedInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
+        connection.exportedObject = service
+        let admitted = accepted.withLock { state in
+            guard !state.closed else { return false }
+            state.leases.append(XPCLease(transport: connection))
+            return true
+        }
+        if admitted { connection.resume() }
+        return admitted
+    }
+
+    func close() {
+        listener.invalidate()
+        let connections = accepted.withLock { state in
+            state.closed = true
+            let connections = state.leases
+            state.leases = []
+            return connections
+        }
+        connections.forEach { $0.transport.invalidate() }
+        service.finishDown()
+    }
+
+    func probe(_ connection: NSXPCConnection) async -> ProbeResult {
+        await withCheckedContinuation { continuation in
+            let completion = SingleResume(continuation)
+            let deadline = Task {
+                do { try await Task.sleep(for: .seconds(20)) } catch { return }
+                completion.resume(.expired)
+            }
+            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
+                completion.resume(.rejected)
+                deadline.cancel()
+            } as? Glimmer.GlimmerHelperProtocol
+            guard let proxy else { completion.resume(.rejected); deadline.cancel(); return }
+            proxy.ping { _ in completion.resume(.answered); deadline.cancel() }
+        }
+    }
+
+    func bounded(_ operation: @escaping @Sendable () async -> Bool) async -> Bool? {
+        let (events, signal) = AsyncStream<Bool>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let request = Task { signal.yield(await operation()); signal.finish() }
+        let deadline = Task {
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            signal.finish()
+        }
+        defer { request.cancel(); deadline.cancel(); signal.finish() }
+        var result = events.makeAsyncIterator()
+        return await result.next()
+    }
+}
+
+// Foundation synchronizes XPC messaging and invalidation; this immutable lease only shares its lifetime.
+private struct XPCLease: @unchecked Sendable {
+    let transport: NSXPCConnection
 }

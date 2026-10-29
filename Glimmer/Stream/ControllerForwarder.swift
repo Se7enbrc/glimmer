@@ -22,6 +22,7 @@
 //  dwell in ControllerForwarder+QuitChord.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import GameController
 
@@ -30,18 +31,17 @@ extension InputForwarder {
     // MARK: - Per-controller state
 
     /// What an arrival tells the PC about a pad: LI_CTYPE_*, button flags, LI_CCAP_* bits.
-    struct ControllerArrival: Equatable {
-        let type: UInt8
-        let supportedButtons: UInt32
-        let caps: UInt16
-    }
+    typealias ControllerArrival = GlimmerEngine.ControllerArrival
 
     struct AttachedController {
         let slot: UInt8           // 0..15, used as `controllerNumber`
         let arrival: ControllerArrival
         weak var controller: GCController?
         let priorPlayerIndex: GCControllerPlayerIndex
+        let priorInputQueue: DispatchQueue?
+        let priorHandlerQueue: DispatchQueue
         let priorOptionsGesture: GCControllerElement.SystemGestureState?
+        let priorMenuGesture: GCControllerElement.SystemGestureState?
         let priorHomeGesture: GCControllerElement.SystemGestureState?
         /// True if this is a DualSense and we `retain()`ed the raw-HID reader
         /// for it (so detach can `release()` it).
@@ -50,11 +50,19 @@ extension InputForwarder {
         func restoreSystemState() {
             guard let controller else { return }
             controller.playerIndex = priorPlayerIndex
+            controller.input.unmapped?.elementValueDidChangeHandler = nil
+            ControllerButtonRoutes.set(controller, nil)
+            controller.input.unmapped?.queue = priorInputQueue
+            controller.handlerQueue = priorHandlerQueue
             if let priorOptionsGesture {
                 controller.extendedGamepad?.buttonOptions?.preferredSystemGestureState = priorOptionsGesture
             }
+            if let priorMenuGesture {
+                controller.extendedGamepad?.buttonMenu.preferredSystemGestureState = priorMenuGesture
+            }
             if let priorHomeGesture {
-                controller.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = priorHomeGesture
+                controller.physicalInputProfile.buttons[GCInputButtonHome]?
+                    .preferredSystemGestureState = priorHomeGesture
             }
         }
     }
@@ -100,6 +108,9 @@ extension InputForwarder {
                     } else {
                         // Controller already deallocated; just clear bookkeeping.
                         if let state = self.attachedControllers.removeValue(forKey: id) {
+                            self.inputCore.removeController(id: id)
+                            self.nintendoControllerTypes[state.slot] = nil
+                            self.resetControllerMouse(slot: state.slot)
                             self.releaseControllerTouches(slot: state.slot)
                             self.dualSenseRouting.syncControllers()
                             self.dualSenseRouting.unregister(slot: state.slot)
@@ -136,20 +147,18 @@ extension InputForwarder {
         // Lowest free slot 0..15, Sunshine's 16-pad limit (MAX_GAMEPADS). A 17th pad is REFUSED: slot 0 would
         // double-map it, two handlers interleaving full states into one controllerNumber and a haptics
         // register tearing down the legitimate pad's engines.
-        guard let slot = (0..<UInt8(16)).first(where: { (gamepadMask & (1 << $0)) == 0 }) else {
+        guard let slot = inputCore.reserveControllerSlot() else {
             Diag.notice("controller attach refused: all 16 slots occupied "
                 + "(\(gamepad.vendorName ?? "Unknown"))", "Controller")
             return
         }
-        gamepadMask |= UInt16(1) << slot
+        publishInputSnapshot()
+        registerNintendoController(slot: slot, type: NintendoControllerType.identify(gamepad),
+                                   bottomSymbol: gamepad.extendedGamepad?.buttonA.sfSymbolsName ?? "unavailable")
         let priorPlayerIndex = gamepad.playerIndex
         let priorOptionsGesture = gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState
-        let priorHomeGesture: GCControllerElement.SystemGestureState?
-        if #available(macOS 27, *) {
-            priorHomeGesture = gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState
-        } else {
-            priorHomeGesture = nil
-        }
+        let priorMenuGesture = gamepad.extendedGamepad?.buttonMenu.preferredSystemGestureState
+        let priorHomeGesture = gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState
 
         // Light the controller's player-number LEDs to match its slot - the one
         // native touch the pad was missing. GameController owns this on macOS (it
@@ -159,8 +168,7 @@ extension InputForwarder {
         // Sunshine-only territory) stays unset and keeps the system default.
         gamepad.playerIndex = GCControllerPlayerIndex(rawValue: Int(slot)) ?? .indexUnset
 
-        // Determine controller type from GameController metadata. macOS doesn't
-        // expose a clean type enum, so we infer from product category strings.
+        // Keep the PC's emulated layout independent of the optional controls this pad exposes.
         let kind = controllerType(for: gamepad)
         var caps = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS)
         // ControllerHaptics plays rumble through `haptics` alone, so a pad without it
@@ -192,26 +200,10 @@ extension InputForwarder {
             caps |= UInt16(StreamProtocol.LI_CCAP_TOUCHPAD)
         }
 
-        // Create/Share (`buttonOptions`) is bound to a macOS system gesture -
-        // measured on macOS 26 for the DualSense (isBoundToSystemGesture == true;
-        // the WWDC21 contract is double-press = screenshot, long-press = start or
-        // stop a ReplayKit recording). "Bound" means GameController runs the
-        // recognizer FIRST and withholds the press from the app, and the Moonlight
-        // quit chord is by definition a long-press of Create: the hold never
-        // reached us through GameController AND asked macOS to start a screen
-        // recording. A streaming client has exactly one consumer for that button,
-        // the host, so disable the gesture: the press is delivered immediately and
-        // macOS stays out of it.
+        // Gesture-bound Create/Share holds otherwise wait for macOS before reaching the quit chord.
         if let create = gamepad.extendedGamepad?.buttonOptions, create.isBoundToSystemGesture {
-            create.preferredSystemGestureState = .disabled
             Diag.info("controller \(slot): Create/Share was bound to a macOS system gesture - "
                 + "disabled so the press reaches the stream", "Controller")
-        }
-        // Home (PS): macOS 27 honors this only when the user picks Defer to app in
-        // System Settings › Game Controllers, so the default Game Overlay stays and
-        // Defer sends Guide to the PC.
-        if #available(macOS 27, *) {
-            gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
         }
 
         // DualSense + the user opted in: start the raw-HID side-channel so the
@@ -251,7 +243,9 @@ extension InputForwarder {
         let state = AttachedController(
             slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
             controller: gamepad, priorPlayerIndex: priorPlayerIndex,
-            priorOptionsGesture: priorOptionsGesture, priorHomeGesture: priorHomeGesture, retainedHID: useHID
+            priorInputQueue: gamepad.input.unmapped?.queue, priorHandlerQueue: gamepad.handlerQueue,
+            priorOptionsGesture: priorOptionsGesture, priorMenuGesture: priorMenuGesture,
+            priorHomeGesture: priorHomeGesture, retainedHID: useHID
         )
         attachedControllers[ObjectIdentifier(gamepad)] = state
         dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
@@ -275,19 +269,19 @@ extension InputForwarder {
             + "caps=0x\(String(caps, radix: 16)) buttons=0x\(String(buttons, radix: 16))",
             "Controller")
 
-        // Both sources share the stream's handler ownership, reasserted on focus regain.
+        // Arrival must precede installing callbacks now that capture can run concurrently with attach.
+        if isReady { sendArrival(slot: slot, state.arrival) }
         installInputHandlers(for: state)
-
-        // If the stream is already up, announce arrival immediately;
-        // otherwise it'll go out when `setReady(true)` is called.
-        if isReady {
-            sendArrival(slot: slot, state.arrival)
-        }
     }
 
     func detach(gamepad: GCController) {
+        controllerLayouts?.release(gamepad)
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
+        inputCore.removeController(id: ObjectIdentifier(gamepad))
+        gamepad.extendedGamepad?.valueChangedHandler = nil
         state.restoreSystemState()
+        nintendoControllerTypes[state.slot] = nil
+        resetControllerMouse(slot: state.slot)
         dualSenseRouting.disconnectController(ObjectIdentifier(gamepad))
         dualSenseRouting.unregister(slot: state.slot)
         gamepadMask &= ~(UInt16(1) << state.slot)
@@ -347,11 +341,15 @@ extension InputForwarder {
     /// .stop() runs this after stopConnection(), so there is no live
     /// connection to tell.
     func releaseAttachedControllers() {
+        controllerLayouts?.stop()
+        controllerLayouts = nil
         // A pad connecting while stop waits on the PC must not retake the HID
         // retain and haptics, motion, or battery slots this walk releases.
         removeGamepadObservers()
+        resetControllerMouse()
         releaseHIDControllers()
         for state in attachedControllers.values {
+            if let controller = state.controller { inputCore.removeController(id: ObjectIdentifier(controller)) }
             state.controller?.extendedGamepad?.valueChangedHandler = nil
             state.restoreSystemState()
             dualSenseRouting.unregister(slot: state.slot)
@@ -359,11 +357,12 @@ extension InputForwarder {
             ControllerMotion.shared.unregister(slot: state.slot)
             ControllerBattery.shared.unregister(slot: state.slot)
             if state.retainedHID {
-                DualSenseHID.shared.onChange = nil
+                DualSenseHID.shared.onInput = nil
                 DualSenseHID.shared.release()
             }
         }
         attachedControllers.removeAll()
+        nintendoControllerTypes.removeAll()
         touchpadStates.removeAll()
         gamepadMask = 0
         announcedControllers.removeAll()
@@ -373,15 +372,12 @@ extension InputForwarder {
         let center = NotificationCenter.default
         if let observer = connectObserver { center.removeObserver(observer); connectObserver = nil }
         if let observer = disconnectObserver { center.removeObserver(observer); disconnectObserver = nil }
+        if let observer = nintendoLayoutObserver { center.removeObserver(observer); nintendoLayoutObserver = nil }
     }
 
     func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
-        let rc = backend?.sendControllerArrival(
-            num: slot, mask: gamepadMask, type: arrival.type,
-            supportedButtons: arrival.supportedButtons, caps: arrival.caps
-        ) ?? -2
-        record("LiSendControllerArrivalEvent", rc)
-        announcedControllers[slot] = arrival
+        guard flushPendingReleases() else { return }
+        let rc = inputCore.announceController(slot: slot, arrival: arrival)
         // Durable per-session witness of what the PC was told; record() only
         // reaches os_log. Arrivals replay once per pad per stream, so bounded.
         Diag.info("controller \(slot) arrival sent: "
@@ -393,11 +389,9 @@ extension InputForwarder {
 
     /// An empty event with the slot's bit cleared, which Sunshine takes as the pad leaving.
     func sendControllerRemoval(slot: UInt8) {
-        let rc = backend?.sendMultiController(
-            num: Int16(slot), mask: Int16(bitPattern: gamepadMask & ~(UInt16(1) << slot)), buttons: 0,
-            analog: Self.neutralControllerAnalog
-        ) ?? -2
-        record("LiSendMultiControllerEvent(removal)", rc)
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        inputCore.retireController(slot: slot)
+        flushPendingReleases()
     }
 
     /// Every stream start: retire each slot the PC may still hold whose pad left or changed,
@@ -420,29 +414,20 @@ extension InputForwarder {
     /// client's pads across a reconnect and ignores an arrival for a slot it holds.
     static func staleControllerSlots(announced: [UInt8: ControllerArrival],
                                      current: [UInt8: ControllerArrival]) -> [UInt8] {
-        announced.filter { current[$0.key] != $0.value }.keys.sorted()
+        InputCore.staleControllerSlots(announced: announced, current: current)
     }
 
     // MARK: - GCController -> moonlight type/flag derivation
 
     func controllerType(for gamepad: GCController) -> UInt8 {
-        let category = gamepad.productCategory
-        switch category {
-        case GCProductCategoryXboxOne, GCProductCategoryMFi:
-            return UInt8(StreamProtocol.LI_CTYPE_XBOX)
-        case GCProductCategoryDualShock4, GCProductCategoryDualSense:
-            return UInt8(StreamProtocol.LI_CTYPE_PS)
-        case GCProductCategoryHID:
-            return UInt8(StreamProtocol.LI_CTYPE_UNKNOWN)
-        default:
-            // GCProductCategorySwitchPro / JoyCon / etc. fall here on
-            // older SDKs that don't expose a constant for them.
-            if category.localizedCaseInsensitiveContains("switch") ||
-               category.localizedCaseInsensitiveContains("joycon") {
-                return UInt8(StreamProtocol.LI_CTYPE_NINTENDO)
-            }
-            return UInt8(StreamProtocol.LI_CTYPE_UNKNOWN)
+        guard let pad = gamepad.extendedGamepad else {
+            return ControllerDescriptor.Kind.identify(productCategory: gamepad.productCategory).rawValue
         }
+        let profile: ControllerDescriptor.Kind = pad is GCXboxGamepad ? .xbox
+            : pad is GCDualSenseGamepad || pad is GCDualShockGamepad ? .playStation : .unknown
+        let symbols = [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY].map(\.unmappedSfSymbolsName)
+        return ControllerDescriptor.Kind.identify(productCategory: gamepad.productCategory,
+                                                   profile: profile, faceSymbols: symbols).rawValue
     }
 
     /// `forwardsMute`: a DualSense whose raw-HID reader is live, so its Mute reaches the PC.
@@ -471,7 +456,7 @@ extension InputForwarder {
     /// subclasses of `GCExtendedGamepad`, so a downcast on the profile we
     /// already hold is the cleanest probe. `touchpadPrimary`/`touchpadSecondary`
     /// are the two finger contacts on the single physical pad.
-    func touchpadElements(of ex: GCExtendedGamepad)
+    nonisolated func touchpadElements(of ex: GCExtendedGamepad)
         -> (primary: GCControllerDirectionPad, secondary: GCControllerDirectionPad, button: GCControllerButtonInput)? {
         if let ds = ex as? GCDualSenseGamepad {
             return (ds.touchpadPrimary, ds.touchpadSecondary, ds.touchpadButton)
@@ -486,7 +471,7 @@ extension InputForwarder {
     /// has none. Like the touchpad probe, a downcast on the profile we already
     /// hold: only `GCXboxGamepad` exposes `buttonShare`, and only on macOS 12+,
     /// so older SDKs / other pads return nil.
-    func xboxShareButton(of ex: GCExtendedGamepad) -> GCControllerButtonInput? {
+    nonisolated func xboxShareButton(of ex: GCExtendedGamepad) -> GCControllerButtonInput? {
         guard #available(macOS 12.0, *), let xb = ex as? GCXboxGamepad else { return nil }
         return xb.buttonShare
     }
@@ -494,39 +479,55 @@ extension InputForwarder {
     // MARK: - Input handler install / heal
 
     /// Reassert ownership of GameController state and raw-HID centre-button updates.
-    /// The chord recorder polls independently and leaves these handlers alone.
+    /// Layout recording runs only while stream input ownership is suspended.
     func installInputHandlers(for state: AttachedController) {
-        guard let gamepad = state.controller else { return }
+        guard !ControllerLayoutEditing.active, let gamepad = state.controller else { return }
+        gamepad.input.unmapped?.elementValueDidChangeHandler = nil
+        ControllerButtonRoutes.set(gamepad, nil)
+        controllerLayouts?.release(gamepad)
         let slot = state.slot
         let routesHID = state.retainedHID
-        // GameController invokes this on the main queue; assume MainActor so
-        // Swift 6 strict concurrency is satisfied.
-        gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                // The batcher takes this handler-entry stamp for its deliver leg.
-                // Only stamp while ready, or the next push reads stale latency.
-                if self.forwardsControllerEvents {
-                    InputDeliverStamp.shared.stamp(slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
-                }
-                if routesHID { self.dualSenseRouting.gc(pad: pad) }
-                self.sendGamepadUpdate(pad: pad, slot: slot)
+        publishInputSnapshot()
+        let id = ObjectIdentifier(gamepad)
+        let token: UUID
+        if let pad = gamepad.extendedGamepad {
+            token = inputCore.registerController(id: id, slot: slot, buttons: pressedButtonFlags(pad: pad),
+                                         analog: Self.controllerAnalog(pad))
+        } else { return }
+        dualSenseRouting.registerInputToken(token, controller: id)
+        gamepad.extendedGamepad?.valueChangedHandler = nil
+        gamepad.handlerQueue = controllerCaptureQueue
+        // Reassert on main whenever handlers heal, before capture can run.
+        // macOS 27 honors Home suppression only with “Defer to app”; system settings still win.
+        gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
+        gamepad.extendedGamepad?.buttonMenu.preferredSystemGestureState = .disabled
+        gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
+        gamepad.extendedGamepad?.valueChangedHandler = { [weak self, inputCore] pad, _ in
+            InputTimingContext.begin(source: .controller, timestamp: pad.lastEventTimestamp)
+            defer { InputTimingContext.end() }
+            guard let self else { return }
+            if routesHID { DualSenseRouting.shared.gc(pad: pad) }
+            let buttons = self.pressedButtonFlags(pad: pad)
+            let surface = self.touchpadElements(of: pad).map {
+                ControllerTouchpadSample(primaryX: $0.primary.xAxis.value, primaryY: $0.primary.yAxis.value,
+                    secondaryX: $0.secondary.xAxis.value, secondaryY: $0.secondary.yAxis.value,
+                    clicked: $0.button.isPressed)
             }
+            inputCore.acceptController(id: id, token: token, buttons: buttons,
+                                        axes: ((pad.leftTrigger.value, pad.rightTrigger.value),
+                                            (pad.leftThumbstick.xAxis.value, pad.leftThumbstick.yAxis.value),
+                                            (pad.rightThumbstick.xAxis.value, pad.rightThumbstick.yAxis.value)),
+                                        chordButtons: Self.controllerChordButtons(pad, buttons: buttons),
+                                        touchpad: surface, capturedAt: ProcessInfo.processInfo.systemUptime)
         }
-        // Raw-HID centre buttons (Options/Create/Mute): GameController never fires
-        // valueChangedHandler for them, so this onChange is the only path that
-        // carries a centre-button edge (e.g. the Moonlight-default chord's Create)
-        // to the host. DualSenseHID gates onChange on a real bit change; the push
-        // does NOT re-forward the touchpad (that stays on the GameController path,
-        // the single full-state source - no double-feed).
+        // Centre-button edges reuse the bound pad's captured GC axes, without resubmitting touches.
+        // Raw shoulders also recheck the chord when GameController withholds a gesture-bound frame.
         if state.retainedHID {
-            DualSenseHID.shared.onChange = { [weak self] device in
-                guard let self, let id = self.dualSenseRouting.controller(for: device),
-                      let attached = self.attachedControllers[id],
-                      let ex = attached.controller?.extendedGamepad else { return }
-                self.sendCenterButtonUpdate(pad: ex, slot: attached.slot)
+            DualSenseHID.shared.onInput = { [inputCore] device, capturedAt in
+                inputCore.receiveCenterButtons(device: device, capturedAt: capturedAt)
             }
         }
+        installMappedController(state, token: token)
     }
 
     // MARK: - Focus resync
@@ -537,11 +538,15 @@ extension InputForwarder {
     /// that used to live here moved to ControllerBattery.swift, with the
     /// host-facing battery uplink.)
     func resyncControllers() {
+        guard !ControllerLayoutEditing.active else { return }
+        controllerOwnershipSuspended = false
+        publishInputSnapshot()
         guard forwardsControllerEvents else { return }
         for state in attachedControllers.values {
             // Reassert stream ownership before restoring held state after a focus change.
             installInputHandlers(for: state)
-            ControllerMotion.shared.setInputEnabled(true, slot: state.slot)
+            ControllerMotion.shared.setInputEnabled(
+                controllerMouseStates[state.slot]?.isMouse != true, slot: state.slot)
             guard let pad = state.controller?.extendedGamepad else { continue }
             sendGamepadUpdate(pad: pad, slot: state.slot)
         }

@@ -1,48 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamWindow.swift
-//
-//  Fullscreen NSWindow hosting the AVSampleBufferDisplayLayer that
-//  VideoDecoder enqueues decoded sample buffers into. Owned by StreamSession.
-//  Captures the cursor while frontmost, releases it when the user invokes
-//  the quit hotkey.
-//
-//  Why AVSampleBufferDisplayLayer and not CAMetalLayer
-//  ---------------------------------------------------
-//  We tried - three times - to get correct HDR out of a CAMetalLayer driven
-//  by a custom MSL fragment shader doing BT.2020 NCL YUV→RGB + range
-//  scaling. On the a 4K@240 HDR1000 panel, every variant landed somewhere
-//  on the same wrong axis: overbright midtones, washed highlights, milky
-//  blacks. moonlight-qt on the same display, host, and content shows inky
-//  blacks and proper bright highlights.
-//
-//  The reason: on macOS, moonlight-qt's HDR-correct path is not
-//  `vt_metal.mm` (its Metal-shader fallback). The default macOS path is
-//  `vt_avsamplelayer.mm`, which sidesteps Metal entirely. It hands the OS a
-//  CVPixelBuffer wrapped in a CMSampleBuffer and lets AVFoundation +
-//  CoreAnimation do colorspace conversion, PQ EOTF application, and EDR
-//  tone-mapping against the display's actual peak luminance. There is no
-//  shader. There is no manual CSC. The OS owns the pipeline end-to-end.
-//
-//  When you write PQ-encoded BT.2020 codes into a CAMetalLayer with a
-//  custom shader, even with all the right metadata (itur_2100_PQ
-//  colorspace, EDRMetadata, wantsExtendedDynamicRangeContent), the
-//  compositor still has to reverse-engineer what the shader did. The
-//  AVSampleBufferDisplayLayer path skips that round trip: the
-//  CVPixelBuffer carries primaries / transfer / matrix attachments,
-//  the CMFormatDescription carries mastering-display + content-light
-//  metadata, and the layer's colorspace tells the compositor exactly
-//  how to interpret the bits. No guesswork, no shader-vs-OS fight.
-//
-//  This is the same architectural choice moonlight-qt made on macOS and
-//  the reason their HDR output is correct on the same panel.
-//
-//  Full screen has two paths, picked in show() by `coversNotch`. A (default):
-//  a borderless window at mainMenuWindow + 1 with [.hideMenuBar, .hideDock] and
-//  no Space. B: a Space via toggleFullScreen with the auto-hide options.
+// AVSampleBufferDisplayLayer lets macOS own PQ conversion and EDR tone mapping; custom Metal washed out 4K240 HDR.
+// Pixel-buffer attachments and format metadata preserve that pipeline without manual color conversion.
+// StreamSession owns this cursor-capturing window; coversNotch selects a borderless cover or a full-screen Space.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreGraphics
@@ -75,18 +38,26 @@ public final class StreamWindow {
     /// Top-center "Reconnecting..." banner shown over the frozen frame during a
     /// silent reconnect episode or a watchdog video-hold (the launcher's phase
     /// chip is occluded by this fullscreen window).
-    public let reconnectBanner: StreamBannerLayer
+    public let reconnectBanner: StreamBanner
     /// Bottom-center "Network unstable" pill, auto-shown when the link enters
     /// caution/distress - independent of the full stats HUD toggle.
-    public let networkBanner: StreamBannerLayer
+    public let networkBanner: StreamBanner
     /// Bottom-center one-time "press <chord> to leave" toast shown on the first
     /// stream so the quit chord is discoverable (Esc is a game input).
-    public let leaveHintBanner: StreamBannerLayer
+    public let leaveHintBanner: StreamBanner
     /// Bottom-center "Hold Esc to free the pointer" hint, shown over the
     /// picture for the first few window-mode captures. Window mode only - the
     /// sole caller is the capture edge in StreamWindow+Windowed.swift, which
     /// full screen never reaches.
-    public let captureHintBanner: StreamBannerLayer
+    public let captureHintBanner: StreamBanner
+    /// The glyph that stays in a clear corner while a controller is a mouse.
+    public let mouseModeBadge: StreamBanner
+    var streamToastGeneration: UInt64 = 0
+    var mouseModeBadgeGeneration: UInt64 = 0
+    var controllerMouseActive = false
+    var scheduleMouseModeBadge: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(action) }
+    }
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
@@ -126,6 +97,8 @@ public final class StreamWindow {
     /// aborted Path-B session.
     var enterFullScreenObserver: NSObjectProtocol?
     var didClose = false
+    var visualCloseFinished = false
+    var visualCloseWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// `NSApplication.presentationOptions` we observed at `show()` time, so we
     /// can restore exactly that on `close()` rather than guessing at a sane
@@ -150,6 +123,7 @@ public final class StreamWindow {
 
     /// Window-mode title ("Tower - Desktop"). Ignored by the borderless cover.
     public var windowTitle: String = ""
+    var fullscreenRelativePointer = true
 
     /// The window as a small floating panel (StreamWindow+MiniPlayer.swift).
     /// A window-mode variant: `displayMode` reads `.window` while it is on.
@@ -194,7 +168,7 @@ public final class StreamWindow {
     public var onBackgroundedChanged: (@MainActor (Bool) -> Void)?
 
     /// Only hidden presentation suppresses the decoder; a visible unfocused Space keeps playing.
-    public var onPresentationSuppressedChanged: (@MainActor (Bool) -> Void)?
+    public var onPresentationSuppressedChanged: (@MainActor (Bool, VideoDecoder.PresentationVisibility) -> Void)?
     var presentationSuppressed = false
 
     /// Called when the stream window moves to a different display (or its
@@ -208,6 +182,8 @@ public final class StreamWindow {
     /// Called when displays wake, even if the screen signature is unchanged.
     public var onDisplaysWoke: (@MainActor () -> Void)?
 
+    var presentationRevealInProgress = false
+    var pendingFirstFrameReveal = false
     /// Set by show(), cleared by the first-frame fade-in. Until then the window
     /// is invisible and passes clicks through to the launcher's Cancel, and it
     /// takes neither the pointer nor the menu bar.
@@ -244,6 +220,13 @@ public final class StreamWindow {
 
     /// Bumped by every cover slide and reset; a superseded slide's completion bails.
     var coverSlideGeneration = 0
+    var scheduleCoverSettlement: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, settle in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: settle)
+    }
+    var runSlideAnimation: @MainActor (@MainActor () -> Void, @escaping @MainActor () -> Void) -> Void =
+        StreamWindow.runSlideAnimation
+    var runFadeAnimation: @MainActor (NSWindow, CGFloat, @escaping @MainActor () -> Void) -> Void =
+        StreamWindow.runFadeAnimation
 
     /// Called once the window is on screen and key, and again by the first-frame
     /// fade-in: InputForwarder installs its first responder, then takes the
@@ -351,24 +334,14 @@ public final class StreamWindow {
         overlay.displayView = view
         overlay.attach(to: layer)
 
-        // Transient signal pills (sibling sublayers of the display layer, above
-        // the stats panel). Created hidden; the session drives them on edges.
-        let reconnect = StreamBannerLayer(
-            anchor: .topCenter, accent: NSColor.systemOrange.cgColor)
-        reconnect.attach(to: layer)
-        let network = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.systemYellow.cgColor)
-        network.attach(to: layer)
-        // Stacked above the network pill (both bottomCenter) so the two can't
-        // render on top of each other: 28 inset + 34 height + 10 gap = 72.
-        let leaveHint = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 72)
-        leaveHint.attach(to: layer)
-        // One rung higher again (72 + 34 + 10 = 116) so the pointer hint can
-        // share the corner with both of the pills below it.
-        let captureHint = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 116)
-        captureHint.attach(to: layer)
+        // Transient notices float in child windows above the picture, created only while shown.
+        // Co-anchored notices stack one rung apart: 28 inset + 34 height + 10 gap = 72, then 116.
+        let reconnect = StreamBanner(anchor: .topCenter, accent: .systemOrange)
+        let network = StreamBanner(anchor: .bottomCenter, accent: .systemYellow)
+        let leaveHint = StreamBanner(anchor: .bottomCenter, accent: .white, inset: 72)
+        let captureHint = StreamBanner(anchor: .bottomCenter, accent: .white, inset: 116)
+        let badge = StreamBanner(anchor: .corner, accent: .white)
+        for banner in [reconnect, network, leaveHint, captureHint, badge] { banner.attach(to: window) }
 
         // Install the delegate that overrides fullscreen content size so
         // the window covers the panel's notch reserve zone on notched
@@ -385,13 +358,19 @@ public final class StreamWindow {
         self.networkBanner = network
         self.leaveHintBanner = leaveHint
         self.captureHintBanner = captureHint
+        self.mouseModeBadge = badge
         self.displayView = view
         self.streamDelegate = delegate
         // Window mode: the red button / Cmd-W route through the delegate to
         // the session's stop() (StreamWindow+Windowed.swift). Wired after
         // full initialization because it captures self.
         delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
+        configureMouseModeBadge()
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
+        delegate.onFullScreenSettled = { [weak self] in
+            guard let self, self.pendingFirstFrameReveal else { return }
+            self.fadeInOnFirstFrame()
+        }
     }
 
     /// Strong ref so the window delegate isn't deallocated mid-stream
@@ -430,14 +409,9 @@ public final class StreamWindow {
     public func rebuildDisplayLayer() -> AVSampleBufferDisplayLayer {
         let view = displayView
         let fresh = StreamWindow.makeDisplayLayer(frame: view.bounds)
-        // Re-attach the stats overlay + signal pills as sublayers of the NEW
-        // root layer before the swap, so they keep compositing above the video.
-        // attach() re-parents (addSublayer removes from any prior superlayer).
+        // Re-attach the stats overlay to the NEW root layer before the swap, so it keeps compositing above the
+        // video; attach() re-parents. Notices live in their own child windows and need nothing here.
         statsOverlay.attach(to: fresh)
-        reconnectBanner.attach(to: fresh)
-        networkBanner.attach(to: fresh)
-        leaveHintBanner.attach(to: fresh)
-        captureHintBanner.attach(to: fresh)
         // Swap as the view's root layer - same construction as init so the
         // EDR-direct path is preserved (root layer, not a sublayer of a backing
         // layer). wantsLayer stays true.

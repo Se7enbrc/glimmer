@@ -28,6 +28,12 @@ final class KeyableWindow: NSWindow {
         super.resignKey()
     }
 
+    /// Borderless windows have no close button, but Close still means disconnect the session.
+    override func performClose(_ sender: Any?) {
+        guard let streamDelegate = delegate as? StreamWindowDelegate else { super.performClose(sender); return }
+        _ = streamDelegate.windowShouldClose(self)
+    }
+
     override func close() {
         removeGameOverlayMonitor()
         super.close()
@@ -154,13 +160,8 @@ final class StreamWindowDelegate: NSObject, NSWindowDelegate {
         return false
     }
 
-    /// Refuse the close and hand it to the session instead: letting AppKit
-    /// close the window would orderOut a still-live stream (headless session,
-    /// no /cancel - the same orphan issue #84 describes) and skip the fade-out
-    /// teardown `StreamWindow.close()` owns. Window mode only; a fullscreen
-    /// window never reaches here but stays refused for safety.
+    /// Session teardown owns closing in every presentation, including a native Space transition.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard displayMode == .window else { return false }
         onCloseRequested?()
         return false
     }

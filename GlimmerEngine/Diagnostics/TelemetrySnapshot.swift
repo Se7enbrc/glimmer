@@ -1,0 +1,562 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+#if os(macOS)
+
+// Snapshots contain performance values without PC identity or secrets.
+// Sendable reader closures connect the live engine to the opt-in exporter.
+
+import Foundation
+
+// MARK: - Snapshot
+
+/// One resolved sample, built on the exporter queue for NDJSON and the session report.
+/// Fields carry performance values and pseudonyms, never credentials.
+package struct TelemetrySnapshot: Sendable {
+
+    package init() {}
+
+    /// Opaque per-session id (random hex), so a scraper can tell sessions apart.
+    package var sessionId: String = ""
+    /// Seconds since stream connect - makes the INITIAL-CONNECTION phase visible
+    /// (the first samples land at sub-second offsets before frames flow).
+    package var sinceConnectSeconds: Double = 0
+    /// Wall-clock at capture (ISO8601), for the NDJSON timeline.
+    package var wallClockISO8601: String = ""
+
+    // fps
+    package var receivedFps: Double?
+    package var decodedFps: Double?
+    package var renderedFps: Double?
+    /// AVFoundation counters, distinct from enqueue FPS and any physical scanout estimate.
+    package var rendererPerformance: RendererPerformanceSnapshot?
+
+    // decode time: EMA of decode wall-clock (StatsCollector tracks no per-frame
+    // histogram). True quantiles live in glimmer_decode_time_p_ms / _idr_ms.
+    package var decodeEmaMs: Double?
+    // The same EMA split into VT service time and wait behind the prior frame.
+    package var decodeServiceMs: Double?
+    package var decodeWaitMs: Double?
+
+    // present cadence
+    package var presentCadenceErrorMs: Double?
+    package var presentOnTimeCount: UInt64?
+    package var presentLateCount: UInt64?
+    /// % of NEW-frame presents that landed on-cadence (on-time / (on-time+late)).
+    /// Excludes structural stale fills, so it reads smoothness independent of
+    /// content-fps vs refresh - the clean judder signal.
+    package var presentOnTimePercent: Double?
+    /// Late presents the host's own timing explains, never the first after a client
+    /// drop; present_late minus this is the client's share. Frames lost on the network,
+    /// before reaching the Mac, still count on the host side.
+    package var presentLateHostCadenceCount: UInt64?
+    /// Host frame interval percentiles (received PTS deltas, ms) and adjacent
+    /// deltas at least 2.5× apart this window: how evenly the game delivers frames.
+    package var hostFrameIntervalP50Ms: Double?
+    package var hostFrameIntervalP95Ms: Double?
+    package var hostUnevenPairs: UInt64?
+
+    // P1 DECODE/VT state + counters.
+    /// VTDecompressionSession (re)creates this session (monotonic). The first
+    /// create plus every mid-stream param-rebuild; a short-window `increase()`
+    /// brackets a decoder reset that correlates with a present hitch.
+    package var decoderRecreateTotal: UInt64 = 0
+    /// Stream-discontinuity flushes this session (monotonic): param-set rebuilds
+    /// that flushed the renderer + cleared the pacer queue. 0 on a healthy wired
+    /// link; a nonzero delta is a real mid-stream format change / multi-frame skip.
+    package var discontinuityFlushTotal: UInt64 = 0
+    /// Hardware decode, pixel format, bit depth and colorspace for NDJSON.
+    /// Absent before the first decoded frame.
+    package var decodeState: TelemetryCounters.DecodeState?
+    /// Latest VTDecompressionSessionCreate wall-clock cost (ms): the HW-decoder
+    /// bring-up that lands on the first-frame leg. 0 before the first create.
+    package var vtSessionCreateMs: Double = 0
+    /// Largest Cruise traversal-boost gain applied this session (1.0 = unboosted).
+    package var cruiseMaxGain: Double = 1.0
+    /// Decoder (re)creates split by cause (monotonic; sum = decoderRecreateTotal):
+    /// the one-time first create, real resolution changes, and colorspace/HDR/
+    /// profile param-rebuilds that kept dims - so a recreate storm names its cause.
+    package var decoderRecreateFirstTotal: UInt64 = 0
+    package var decoderRecreateResolutionTotal: UInt64 = 0
+    package var decoderRecreateColorspaceTotal: UInt64 = 0
+
+    // P1 PRESENT stale-frame REPEAT (the invisible stutter: the layer re-showing
+    // the last frame when no new frame was due this vsync).
+    /// Monotonic stale-frame repeat total (one per running pacer tick that
+    /// presented no new frame). The exporter derives `staleRepeatsPerSecond`.
+    package var staleFrameRepeatTotal: UInt64 = 0
+    /// Stale-frame repeats per second this window - a SPIKE while fps≈refresh is a
+    /// real micro-judder (at fps<refresh a steady rate is the normal cadence).
+    package var staleRepeatsPerSecond: Double?
+    /// EMPTY-QUEUE subset of the stale repeats (the starve half of the
+    /// clump-then-starve oscillation; not_due = total − this).
+    package var staleEmptyQueueTotal: UInt64 = 0
+    /// DROUGHT subset of the perceived present gaps (content arriving, screen
+    /// held >100ms); remainder is the backoff-then-renderer-reject path.
+    package var presentGapDroughtTotal: UInt64 = 0
+    /// Steady-state audio fill dips under ~15ms that did NOT fully drain -
+    /// cushion margin erosion visible before it becomes an audible under-run.
+    package var audioNearMissTotal: UInt64 = 0
+    /// Playout-stall watchdog rebuilds: the node stopped consuming while
+    /// packets kept arriving (a session that would previously have stayed
+    /// silent until reconnect). Zero in healthy sessions.
+    package var audioStallRecoveryTotal: UInt64 = 0
+    /// REORDER-DISPLACEMENT invariant (measurement only): session-max lateness
+    /// of reordered packets vs the live reorder hold, the violation counter,
+    /// and the distributions. margin = holdMs − maxMs is derived at render.
+    package var reorderDispMaxMs: Double?
+    package var reorderDispMaxPackets: Int?
+    package var reorderDispHoldMs: Double?
+    package var reorderHoldExceededTotal: UInt64 = 0
+    /// Reorder holds taken (a next-frame datagram deferred) and holds whose
+    /// frame completed before the deferred packet replayed.
+    package var reorderHoldTakenTotal: UInt64 = 0
+    package var reorderHoldRescuedTotal: UInt64 = 0
+    package var reorderDisplacementMsHist: LatencyHistogramSnapshot.Stage?
+    package var reorderDisplacementPacketsHist: LatencyHistogramSnapshot.Stage?
+    /// Power state (1Hz): governor-throttle correlation labels. `onBattery` =
+    /// providing source is the internal battery; `lowPowerMode` = the user
+    /// toggle. Together they test "battery predicts the ~106-tick throttle".
+    package var onBattery: Bool?
+    package var lowPowerMode: Bool?
+    /// PIPELINE CADENCE histograms (clump forensics): inter-arrival between
+    /// consecutive frames at receive / assemble / VT-output. Standalone stages.
+    package var pipelineReceiveCadence: LatencyHistogramSnapshot.Stage?
+    package var pipelineAssembleCadence: LatencyHistogramSnapshot.Stage?
+    package var pipelineOutputCadence: LatencyHistogramSnapshot.Stage?
+    /// CRUISE forensics: batch velocity (counts/sec) + applied gain, split
+    /// move vs drag. Standalone stages; units are not ms.
+    package var cruiseVelocityMove: LatencyHistogramSnapshot.Stage?
+    package var cruiseVelocityDrag: LatencyHistogramSnapshot.Stage?
+    package var cruiseGainMove: LatencyHistogramSnapshot.Stage?
+    package var cruiseGainDrag: LatencyHistogramSnapshot.Stage?
+    /// Present-tick MISS totals split by root cause (DESCHEDULED = the tick thread
+    /// didn't get the CPU; COALESCED = macOS delayed the CADisplayLink callback).
+    /// The split picks which of two opposite fixes the residual present gap needs.
+    package var tickMissDescheduledTotal: UInt64 = 0
+    package var tickMissCoalescedTotal: UInt64 = 0
+    /// Present-tick MISS split by a DIRECT promptness measure (PREEMPTED = the
+    /// callback ran a full frame-or-more behind its vsync, so the thread was
+    /// starved - RT not working; LINKSKIP = it ran promptly but the interval still
+    /// stretched, so the display server skipped a vsync - RT working). The finer
+    /// split kept alongside the descheduled/coalesced pair for an old-vs-new read.
+    package var tickMissPreemptedTotal: UInt64 = 0
+    package var tickMissLinkskipTotal: UInt64 = 0
+
+    // P1 PRESENT/DISPLAY: EDR-headroom trend + HDR-engaged + screen + ProMotion.
+    /// EDR headroom (NSScreen.maximumEDR) min/avg/max over this window. 1.0 = SDR;
+    /// >1.0 = HDR engaged. The trend catches the panel falling out of HDR.
+    package var edrHeadroomMin: Double?
+    package var edrHeadroomAvg: Double?
+    package var edrHeadroomMax: Double?
+    /// Latest discrete display state (HDR engaged, screen name, ProMotion). nil
+    /// before the first probe (layer not bound to a screen yet).
+    package var displayState: DisplayProbe?
+
+    // network
+    package var recvJitterMs: Double?
+    package var fecRecoveryRate: Double?
+    package var packetsPerSecond: Double?
+    // FRACTIONAL ms (Double): the native backend measures RTT from a high-res
+    // local monotonic clock, so these carry sub-ms precision. The exporter emits
+    // them with 2-3 decimals (was Int-truncated, which floored a 8.73ms RTT to 8).
+    package var rttMs: Double?
+    package var rttVarianceMs: Double?
+
+    // network - P1 receive-quality (derived from the RTP seq/arrival of packets
+    // WE receive; no host tool). Loss/OOO/dup are per-second RATES the exporter
+    // derives from monotonic-total deltas; goodput is the measured received
+    // bitrate vs the negotiated ceiling; the gap distribution is the microburst
+    // detector. All nil until the receive path has flushed its first ~2s window.
+    /// Pre-FEC packet-loss rate this window (lost / expected), 0...1.
+    package var preFecLossRate: Double?
+    /// Out-of-order (reorder) rate this window (reordered / received), 0...1.
+    package var outOfOrderRate: Double?
+    /// Duplicate rate this window (duplicates / received), 0...1.
+    package var duplicateRate: Double?
+    /// Measured received goodput (Mbps) - bytes/s into the pipeline this window.
+    package var goodputMbps: Double?
+    /// Negotiated stream bitrate ceiling (Mbps) - the goodput baseline.
+    package var negotiatedBitrateMbps: Double?
+    /// Received goodput as a fraction of the negotiated ceiling (0...1+), so a dip
+    /// well below 1 (static scene) vs a saturation near 1 is one glanceable gauge.
+    package var goodputUtilization: Double?
+    /// Inter-packet-gap distribution (µs): p50/p95 + max. The microburst tell -
+    /// a tight p50 with a fat p95/max means the host (or radio) delivers in bursts.
+    package var packetGapP50Us: Double?
+    package var packetGapP95Us: Double?
+    package var packetGapMaxUs: Double?
+
+    // network - FEC health: how close frames ran to unrecoverable. nil until the
+    // first ~2s receive window flushes.
+    /// Host per-frame FEC percentage (latest frame).
+    package var fecPercentage: Int?
+    /// Spare parity shards on the worst frame this window (parity − deficit).
+    package var fecParityMargin: Int?
+
+    // AWDL Wi-Fi helper: whether awdl0 is parked this stream and how many times
+    // macOS re-raised it (the contention the helper fights). nil = helper off.
+    package var awdlSuppressing: Bool?
+    package var awdlReSuppressTotal: UInt64?
+    /// System-wide datagrams dropped at a full UDP receive buffer since the last
+    /// tick. nil on the first tick or if the sysctl fails.
+    package var udpFullSockDelta: UInt64?
+
+    // ENet reliable-stream health
+    package var enetSentReliable: Int?
+    package var enetOldestUnackedMs: UInt32?
+    package var enetSinceLastAckMs: UInt32?
+    /// Reliable-channel retransmits this session (monotonic). A short-window
+    /// `increase()` is the climb that precedes a control-stream stall - pairs with
+    /// the oldest-unacked trend (enetOldestUnackedMs) to bracket a wedge.
+    package var enetRetransmitTotal: UInt64 = 0
+    /// ACK-silence NEAR-MISS edges this session (monotonic): the control loop's ACK
+    /// silence crossed a deep RTT multiple short of the 10s dead-peer cutoff and
+    /// then recovered - the near-death blip the dead-peer counter never records.
+    package var ackSilenceNearMissTotal: UInt64 = 0
+
+    // pacing
+    package var pacingQueueDepth: Int?
+    package var pacingAdaptiveTargetDepth: Int?
+    package var inFlightDecodeBacklog: Int?
+
+    // drops by cause (session-cumulative)
+    package var dropsDecoder: UInt64?
+    package var dropsBackpressure: UInt64?
+    package var dropsPresentationLate: UInt64?
+    package var presentationGaps: UInt64?
+    /// Frames discarded at the depacketizer's recovery gate (waiting for IDR/RFI).
+    package var dropsRecoveryWaitTotal: UInt64 = 0
+
+    // input
+    package var inputEventsPerSecond: Double?
+    package var inputFlushPerSecond: Double?
+    /// Gyro/accel samples per second; not input events (see inputMotionTotal).
+    package var inputMotionPerSecond: Double?
+    /// Idle→active input edge count (monotonic). A short-window `increase()` of
+    /// this marks the exact "resumed controlling after idle" beat so the latency
+    /// transient is auto-correlatable instead of hand-reconstructed.
+    package var inputIdleToActiveTotal: UInt64 = 0
+    /// Milliseconds since the last input event. Climbs while idle, snaps to ~0 on
+    /// resume - pairs with the edge counter to bracket the idle window.
+    package var timeSinceLastInputMs: Double?
+    package var inputCallbackLatency: LatencyHistogramSnapshot.Stage?
+    package var inputTimingDropped: UInt64 = 0
+    package var inputLatency: [InputLatency.Row] = []
+    /// CLIENT-SIDE input latency histogram: queue→wire age of merged input on the
+    /// batcher (oldest unflushed entry → flush). A standalone stage, not part of
+    /// `latencyHistograms`; rendered in the input family.
+    package var inputLocalLatency: LatencyHistogramSnapshot.Stage?
+    /// CLIENT-SIDE input DELIVER latency histogram: the pre-hop main-thread leg
+    /// (controller handler entry → batcher slot stamp). Standalone stage, rendered
+    /// in the input family alongside inputLocalLatency.
+    package var inputDeliverLatency: LatencyHistogramSnapshot.Stage?
+    /// Input flush ticks skipped by backpressure, split by signal (the input p99
+    /// tail attribution): local radio backlog vs host reliable-ACK silence.
+    package var inputFlushSendBackloggedSkipTotal: UInt64 = 0
+    package var inputFlushReliableBackloggedSkipTotal: UInt64 = 0
+
+    // display refresh / cadence (ProMotion ramp-down detector)
+    package var refreshMinHz: Double?
+    package var refreshAvgHz: Double?
+    package var refreshMaxHz: Double?
+    /// Marks a realized refresh-rate change so it can be aligned with an idle-resume transient.
+    package var refreshChanged: Bool = false
+
+    // host encode latency trend (host idle-ramp visibility)
+    package var hostEncodeLatencyMinMs: Double?
+    package var hostEncodeLatencyAvgMs: Double?
+    package var hostEncodeLatencyMaxMs: Double?
+
+    // frame size + type (big-frame / recurring-IDR hypothesis)
+    package var avgFrameBytes: Double?
+    package var maxFrameBytes: Int?
+    package var idrFramePercent: Double?
+
+    // thermal + power (throttling)
+    /// ProcessInfo.thermalState as an ordinal 0...3 (nominal/fair/serious/critical)
+    /// so it plots as a gauge and a threshold alert is trivial.
+    package var thermalState: Int?
+    package var lowPowerModeEnabled: Bool?
+
+    // process
+    package var processCpuPercent: Double?
+    package var threadCount: Int?
+
+    // P1 RESOURCE (the P-vs-E-core visibility pass). Two halves that bracket "are
+    // we using P vs E cores right?": the per-PROCESS per-thread view (which threads
+    // are hot + their QoS INTENT, mapped to the thread name) + the process memory
+    // footprint + AC/battery, captured by `ResourceTelemetry`; and the SYSTEM-side
+    // P-cluster vs E-cluster ACTIVE RESIDENCY via IOReport, captured by
+    // `IOReportSampler`. Both sampled on the 1Hz exporter queue only (never a hot
+    // path) and only on the gate-on path. nil before the first sample / when the
+    // sampler isn't available.
+    package var resource: ResourceSnapshot?
+    package var clusterResidency: ClusterResidencySnapshot?
+
+    // event counters (monotonic)
+    package var rfiTotal: UInt64 = 0
+    package var idrRequestedTotal: UInt64 = 0
+    package var backlogOverflowTotal: UInt64 = 0
+    package var presentStallTotal: UInt64 = 0
+    package var frameLossTotal: UInt64 = 0
+    package var unrecoverableFrameTotal: UInt64 = 0
+    package var pacerDisabledTotal: UInt64 = 0
+    /// User "that felt bad" bookmark presses (signal 4). A short-window
+    /// `increase()` marks the exact beat the user flagged jank.
+    package var bookmarkTotal: UInt64 = 0
+    /// Cruise traversal-boost batch counts: boosted (gain>1) vs identity (active
+    /// motion that stayed at gain==1). The split tunes vKnee against real traces.
+    package var cruiseBoostedBatchesTotal: UInt64 = 0
+    package var cruiseIdentityBatchesTotal: UInt64 = 0
+
+    // Cumulative histograms are captured once per tick, outside the frame path.
+    // NDJSON carries derived percentiles; absent observations remain unavailable.
+    package var latencyHistograms: LatencyHistogramSnapshot?
+
+    // Wi-Fi radio (signal 3). One CoreWLAN sample per ~1Hz tick (never the hot
+    // path). nil when the sampler isn't installed; the snapshot's `linkState`
+    // distinguishes associated-Wi-Fi from wired/unassociated, and the radio
+    // fields are nil off Wi-Fi (an absent series == "no radio here").
+    package var wifi: WiFiSnapshot?
+
+    // Build identity is constant for a session and accompanies its NDJSON evidence.
+    package var buildCommit: String = ""
+    package var buildDate: String = ""
+
+    // The PC's per-install pseudonym (the `host` label and NDJSON field), never its name.
+    // Session-constant; the exporter copies it from its stored server label each tick.
+    package var serverName: String = ""
+    package var clientLabel: String = ""
+
+    // P1 AUDIO (the OTHER stream). All read off the always-live audio
+    // counters/gauges the audio receive + output path batches into OFF the hot
+    // path; nil until audio is flowing. See the AudioSnapshot type below.
+    package var audio: AudioSnapshot?
+    package var receiveVideo = ReceiveTimingTelemetry.Snapshot()
+    package var receiveAudio = ReceiveTimingTelemetry.Snapshot()
+    package var audioPipeline: AudioPipelineTelemetry.Snapshot?
+
+    // P2 SESSION-LIFECYCLE signals (all read off the always-live counters /
+    // `TelemetryCounters.p2` on the exporter's 1Hz queue - never a hot path).
+    //
+    /// CONNECT-HANDSHAKE breakdown: per-stage connect timing. Carried on EVERY
+    /// tick once complete so a scrape always sees it, but emitted as a one-shot
+    /// explicit NDJSON EVENT line exactly once (see the exporter). nil before any
+    /// stage has fired.
+    package var handshake: HandshakeBreakdown?
+    /// Reconnect count this session - connections re-established in place after a drop.
+    package var reconnectTotal: UInt64 = 0
+    /// Wake-from-sleep count this session - wakes while a stream was live.
+    package var wakeTotal: UInt64 = 0
+    /// Route/link-class change count this run (monotonic) - the egress-route flip
+    /// (e.g. wake on a different AP) the NDJSON route_change event already marks.
+    package var routeChangeTotal: UInt64 = 0
+    /// Latest disconnect reason (the live default is `.none` until a terminate).
+    package var disconnectReason: DisconnectReason = .none
+    /// PROCESS-GLOBAL per-reason disconnect totals (label, total), monotonic and
+    /// surviving session resets - so a scrape catches the reason the <1ms exporter
+    /// teardown would otherwise hide. Emitted as `glimmer_disconnect_total{reason}`.
+    package var disconnectByReason: [(label: String, total: UInt64)] = []
+    /// IDR/RFI round-trip: request/matched counts + the most-recent measured RTT.
+    /// The full distribution rides `latencyHistograms.idrRoundTrip`.
+    package var idrRoundTrip: IdrRoundTripSnapshot?
+    /// CORRUPTION/ARTIFACT heuristic hits this run (monotonic) + per-second rate.
+    package var corruptionTotal: UInt64 = 0
+    package var corruptionPerSecond: Double?
+}
+
+// MARK: - Audio snapshot
+
+/// Audio rates use deltas of monotonic totals against packet counts.
+/// Raw totals remain available for offline analysis.
+package struct AudioSnapshot: Sendable {
+
+    package init(
+        packetsTotal: UInt64 = 0,
+        packetsLostTotal: UInt64 = 0,
+        fecRecoveredTotal: UInt64 = 0,
+        packetsPerSecond: Double? = nil,
+        gapMaxMs: Double? = nil,
+        lossRate: Double? = nil,
+        fecRecoveryRate: Double? = nil,
+        bufferFillMs: Double? = nil,
+        resamplerPpm: Double? = nil,
+        engineRunning: Bool? = nil,
+        bufferFillMinMs: Double? = nil,
+        rePrimeTotal: UInt64 = 0,
+        underrunTotal: UInt64 = 0,
+        overrunTotal: UInt64 = 0,
+        underrunsPerSecond: Double? = nil,
+        overrunsPerSecond: Double? = nil,
+        audioClockDriftMs: Double? = nil,
+        firstPacketMs: Double? = nil
+    ) {
+        self.packetsTotal = packetsTotal
+        self.packetsLostTotal = packetsLostTotal
+        self.fecRecoveredTotal = fecRecoveredTotal
+        self.packetsPerSecond = packetsPerSecond
+        self.gapMaxMs = gapMaxMs
+        self.lossRate = lossRate
+        self.fecRecoveryRate = fecRecoveryRate
+        self.bufferFillMs = bufferFillMs
+        self.resamplerPpm = resamplerPpm
+        self.engineRunning = engineRunning
+        self.bufferFillMinMs = bufferFillMinMs
+        self.rePrimeTotal = rePrimeTotal
+        self.underrunTotal = underrunTotal
+        self.overrunTotal = overrunTotal
+        self.underrunsPerSecond = underrunsPerSecond
+        self.overrunsPerSecond = overrunsPerSecond
+        self.audioClockDriftMs = audioClockDriftMs
+        self.firstPacketMs = firstPacketMs
+    }
+
+    // ---- Receive-path quality (from the audio RTP we get; no host tool) ----
+    /// Audio data packets accepted this session (monotonic).
+    package var packetsTotal: UInt64 = 0
+    /// Audio packets lost AND unrecovered by FEC this session (monotonic).
+    package var packetsLostTotal: UInt64 = 0
+    /// Audio packets recovered by Reed-Solomon FEC this session (monotonic).
+    package var fecRecoveredTotal: UInt64 = 0
+    /// Audio packets accepted per second this window (derived from the delta);
+    /// 0 once no receive fold has landed for `audioFoldSilenceSeconds`.
+    package var packetsPerSecond: Double?
+    /// Longest audio inter-arrival gap this tick (ms), counting one still open.
+    package var gapMaxMs: Double?
+    /// Unrecovered audio-loss rate this window (lost / expected), 0...1.
+    package var lossRate: Double?
+    /// Audio FEC-recovery rate this window (recovered / (recovered + accepted)),
+    /// 0...1 - how much on-the-wire loss FEC papered over (the lossy-link story).
+    package var fecRecoveryRate: Double?
+
+    // ---- Output / playout health ----
+    /// Decoded audio buffered ahead of the playhead (ms) - the buffer level/fill.
+    package var bufferFillMs: Double?
+    /// RESAMPLER applied rate offset (ppm): the drift-tracking resampler's live
+    /// `varispeed.rate − 1`, parts-per-million. 0 disengaged; ~the steady host↔Mac
+    /// clock offset (tens of ppm) when converged - the direct view of the loop
+    /// holding the fill, vs the av_skew that bounces with video-side timing.
+    package var resamplerPpm: Double?
+    /// HAL audio output running (1 = up). 0 with packets still flowing is the
+    /// post-reconnect "playout dead" signature the isShutdown-latch fix targets.
+    /// nil before the engine first starts.
+    package var engineRunning: Bool?
+    /// Windowed MINIMUM buffer fill this tick (ms) - the trough of the
+    /// scheduled-ahead backlog, reset-on-read. The 1Hz `bufferFillMs` gauge can
+    /// miss the instantaneous low that precedes an under-run; this is the field that
+    /// proves the buffer is (or is no longer) draining toward 0. Post-fix it should
+    /// stay well above 0 (the held cushion); a fall toward 0 quantifies residual
+    /// drift and justifies a deeper adaptive cushion. nil when no trough this tick.
+    package var bufferFillMinMs: Double?
+    /// Playout RE-PRIME count this session (monotonic): each full drain that forced
+    /// the cushion to be re-pre-rolled - the only place the fixed cushion can still
+    /// gap, so it's countable alongside the under-run total.
+    package var rePrimeTotal: UInt64 = 0
+    /// Output under-runs this session (player drained → audible gap), monotonic.
+    package var underrunTotal: UInt64 = 0
+    /// Output over-runs this session (decoded buffer dropped - backlog too deep),
+    /// monotonic.
+    package var overrunTotal: UInt64 = 0
+    /// Under-runs per second this window (derived from the delta) - the audible-
+    /// glitch RATE, the headline output-health number.
+    package var underrunsPerSecond: Double?
+    /// Over-runs per second this window (derived from the delta).
+    package var overrunsPerSecond: Double?
+
+    // ---- Audio clock + cold-start ----
+    /// AUDIO CLOCK DRIFT (ms), signed: the audio playout clock's slip vs WALL
+    /// CLOCK (net of the buffer cushion), NOT a cross-stream A/V delta.
+    /// + = audio media played behind wall time (device clock slow), − = ahead.
+    package var audioClockDriftMs: Double?
+    /// Time from stream start to first decoded audio (ms) - the cold-start metric
+    /// (the known ~5-7s-on-lossy-link issue). One-shot; constant once measured.
+    package var firstPacketMs: Double?
+}
+
+// MARK: - Snapshot source
+
+/// What the exporter needs to assemble a snapshot, captured as Sendable closures
+/// so the exporter never reaches back into actor-isolated session state. The
+/// session wires these from the live StatsCollector / backend / decoder / pacer.
+/// The video-stats provider returns the SAME `StreamStatsSnapshot` the overlay
+/// uses (one StatsCollector read, its existing lock - no second hot-path lock).
+package struct TelemetrySource: Sendable {
+
+    package init(
+        videoStats: @escaping @Sendable () -> StreamStatsSnapshot,
+        decoderDrops: @escaping @Sendable () -> UInt64,
+        backpressureDrops: @escaping @Sendable () -> UInt64,
+        presentationLateDrops: @escaping @Sendable () -> UInt64,
+        presentationGaps: @escaping @Sendable () -> UInt64,
+        estimatedRtt: @escaping @Sendable () -> (rttMs: Double, varianceMs: Double)?,
+        enetHealth: @escaping @Sendable () -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)?,
+        pacingLiveness: @escaping @Sendable () -> PacerLivenessSnapshot?,
+        inFlightDecodeBacklog: @escaping @Sendable () -> Int,
+        refreshWindow: @escaping @Sendable () -> PacerRefreshWindowSnapshot?,
+        displayProbe: @escaping @MainActor @Sendable () -> DisplayProbe?,
+        rendererProbe: @escaping @Sendable () -> RendererPerformanceSource? = { nil },
+        displayMode: String = "fullScreen",
+        stream: StreamTelemetryConfig? = nil,
+        capture: TelemetryCapture = TelemetryCapture()
+    ) {
+        self.videoStats = videoStats
+        self.decoderDrops = decoderDrops
+        self.backpressureDrops = backpressureDrops
+        self.presentationLateDrops = presentationLateDrops
+        self.presentationGaps = presentationGaps
+        self.estimatedRtt = estimatedRtt
+        self.enetHealth = enetHealth
+        self.pacingLiveness = pacingLiveness
+        self.inFlightDecodeBacklog = inFlightDecodeBacklog
+        self.refreshWindow = refreshWindow
+        self.displayProbe = displayProbe
+        self.rendererProbe = rendererProbe
+        self.displayMode = displayMode
+        self.stream = stream
+        self.capture = capture
+    }
+
+    /// Reads `StatsCollector.snapshot()` (decode/pacing/drop counters). NOTE:
+    /// `snapshot()` slides the collector's FPS window on each call, so when BOTH
+    /// the overlay timer and the exporter are on (both 1Hz) each gets ~half the
+    /// frames over ~half the wall-time - the per-second RATES stay correct, only
+    /// the averaging window halves (acceptable noise for a diagnostic). Reuses
+    /// the collector's existing lock; no second hot-path lock is introduced.
+    package var videoStats: @Sendable () -> StreamStatsSnapshot
+    /// Decoder + backpressure + presentation-late cumulative drop totals.
+    package var decoderDrops: @Sendable () -> UInt64
+    package var backpressureDrops: @Sendable () -> UInt64
+    package var presentationLateDrops: @Sendable () -> UInt64
+    /// Perceived present gaps (renderer showed nothing fresh) - the felt-stutter signal.
+    package var presentationGaps: @Sendable () -> UInt64
+    /// ENet RTT (fractional ms, high-res local clock) + reliable-stream health.
+    package var estimatedRtt: @Sendable () -> (rttMs: Double, varianceMs: Double)?
+    package var enetHealth: @Sendable () -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)?
+    /// Pacer present-side liveness (adaptive depth, queue depth) + in-flight decode.
+    package var pacingLiveness: @Sendable () -> PacerLivenessSnapshot?
+    package var inFlightDecodeBacklog: @Sendable () -> Int
+    /// Per-second display-refresh window (min/avg/max Hz + change marker). RESET-
+    /// ON-READ, so the exporter is its ONLY caller and reads it exactly once per
+    /// capture tick. nil when pacing isn't up.
+    package var refreshWindow: @Sendable () -> PacerRefreshWindowSnapshot?
+    /// One main-actor PRESENT/DISPLAY probe (EDR headroom + HDR-engaged + screen +
+    /// ProMotion) for the P1 display sampler. `@MainActor` because the underlying
+    /// NSScreen / layer reads are main-only; the `DisplayTelemetry` sampler calls
+    /// it from a MAIN-queue 1Hz timer built only on the gate-on path (never a hot
+    /// path). nil before the layer is bound to a screen.
+    package var displayProbe: @MainActor @Sendable () -> DisplayProbe?
+    /// Invoked only by the opt-in exporter's existing capture tick and completion checks.
+    package var rendererProbe: @Sendable () -> RendererPerformanceSource? = { nil }
+    /// How the stream was shown at session start (`StreamDisplayMode` raw
+    /// value) - written into the one-shot config event so a windowed capture
+    /// is never read as a fullscreen one. Defaulted so callers that predate
+    /// the mode keep compiling.
+    package var displayMode: String = "fullScreen"
+    /// The negotiated stream shape and codec and the bitrate decision, for the
+    /// same config event. nil where no session built it.
+    package var stream: StreamTelemetryConfig?
+    package var capture = TelemetryCapture()
+}
+
+#endif

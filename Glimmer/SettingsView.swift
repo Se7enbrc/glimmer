@@ -123,7 +123,7 @@ struct SettingsRoot: View {
                 case .general: GeneralPane()
                 case .streaming: QualityPane()
                 case .pcs: PCsPane()
-                case .shortcuts: ShortcutsPane()
+                case .shortcuts: NavigationStack { ShortcutsPane() }
                 case .diagnostics: DiagnosticsPane()
                 case .about: AboutPane()
                 }
@@ -133,5 +133,6 @@ struct SettingsRoot: View {
             .navigationTitle(selection.title)
         }
         .navigationSplitViewStyle(.balanced)
+        .modifier(PairingPresentation(owner: .settings))
     }
 }

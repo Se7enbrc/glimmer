@@ -3,77 +3,122 @@ description: Stop a stream, get the pointer back, and use copy and paste.
 icon: keyboard
 ---
 
-# Keyboard and controller shortcuts
+# Control your stream with shortcuts
 
-These are the default bindings. Your current keyboard and controller shortcuts
-are in Settings → Input, including any changes you have made.
+Stop and Stats work on Mac and with a hardware keyboard on iPhone and iPad. Mini
+Player, pointer capture, paste and Mac system shortcuts below apply to Mac. On
+iPhone and iPad, the stream menu also offers “Show Stream Stats” or “Hide Stream
+Stats”.
+
+| Reference                      | Location                                        |
+| ------------------------------ | ----------------------------------------------- |
+| Saved bindings                 | Settings › Input; defaults below.               |
+| Shortcuts app, Siri, Spotlight | [Automation](AUTOMATION.md).                    |
+| Key symbols                    | ⌃ Control · ⌥ Option/Alt · ⇧ Shift · ⌘ Command. |
 
 ## While streaming
 
-The stream must have keyboard focus. If another Mac app is active, click the
-stream before using its shortcuts.
+| Action in the focused stream | Default        | Result                                                                                    |
+| ---------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Stop                         | ⌃Q (Control-Q) | Ends the stream; quits the PC app unless “Leave games running when you disconnect” is on. |
+| Mini Player                  | Control-M      | Toggles presentation.                                                                     |
+| Stats                        | Control-Z      | Toggles for this stream; next uses Settings › Quality.                                    |
+| Pointer                      | Control-P      | Toggles captured/free; keeps choice across focus changes.                                 |
 
-| Action                               | Default shortcut | Notes                                                                                  |
-| ------------------------------------ | ---------------- | -------------------------------------------------------------------------------------- |
-| Stop streaming                       | Control-Q · ⌃Q   | Returns to Glimmer. Command-Q quits the app.                                           |
-| Enter or leave Mini Player           | Control-M · ⌃M   | Returns to the previous presentation when leaving Mini Player.                         |
-| Show or hide stream stats            | Control-I · ⌃I   | Applies to this stream; the next follows Settings → Quality.                           |
-| Capture or release the pointer       | Control-P · ⌃P   | Window and Mini Player only. In fullscreen, this goes to the PC.                       |
-| Paste Mac clipboard text into the PC | Control-V · ⌃V   | Command-V also works when Command shortcuts stay with the Mac.                         |
-| Bookmark a rough moment              | Control-B · ⌃B   | Requires Performance telemetry in Settings → Diagnostics. Otherwise it goes to the PC. |
+| Text and diagnostics | Default   | Result                                        |
+| -------------------- | --------- | --------------------------------------------- |
+| Paste                | Control-V | Types Mac text into PC.                       |
+| Bookmark             | Control-B | With telemetry enabled; otherwise sent to PC. |
 
-To leave fullscreen temporarily, use Command-Tab to switch apps or Control-M to
-open Mini Player. The stream keeps running. Select Back to Stream in the
-launcher to return.
+⌃Z (Control-Z) is the default for “Show or Hide Stream Stats”; ⌃Q is the default
+for “Stop Streaming”. Change either in Settings › Input. Saved custom bindings
+stay yours. The old stats default moves to ⌃Z once; choosing ⌃I afterward keeps
+it.
+
+Stats changes apply to this stream. Settings › Quality chooses the initial
+visibility and overlay detail for future streams, including on iPhone and iPad.
+
+{% hint style="warning" %}
+
+Closing the stream window or quitting Glimmer follows “Leave games running when
+you disconnect” in Settings › General. It is off by default, so save first.
+Command-Q quits Glimmer. An explicit “Quit” action quits the PC app even when
+the setting is on.
+
+{% endhint %}
 
 ## Escape and mouse capture
 
-In a window or Mini Player, hold plain Escape for about one second to release
-the pointer. A quick tap still reaches the game, and holding it sends Escape to
-the game before releasing capture. Adding a modifier cancels the release
-gesture. Holding Escape does not release fullscreen capture.
-
-Mini Player captures on a click, not on hover. A normal stream window can
-capture when the pointer enters its picture while the window has focus.
-Controllers keep working while Mini Player is visible, even when another Mac app
-is active; keyboard and mouse input follow focus.
+| Gesture                                          | Result                                                                           |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Hold plain Escape ~1 second                      | Frees pointer in window/Mini Player; also sends Escape.                          |
+| Tap Escape / add modifier                        | Sends Escape / cancels release gesture.                                          |
+| Enter fullscreen                                 | Captured controls, including Desktop; Escape won't free pointer.                 |
+| Click Mini Player / enter focused window picture | Captures pointer.                                                                |
+| Aim                                              | Mac tracking speed without acceleration; optional fast-flick boost defaults off. |
 
 ## Copy and paste
 
-Control-C copies inside the PC. It does not copy that text to the Mac. Sunshine
-currently has no PC-to-client clipboard channel. See the
-[upstream clipboard discussion](https://github.com/LizardByte/Sunshine/issues/1539).
-
-Glimmer's paste command types the Mac clipboard into the PC as text. It does not
-synchronize clipboards or transfer files and images. Text is limited to 4,096
-UTF-8 bytes per paste.
+| Action    | Result                                       |
+| --------- | -------------------------------------------- |
+| Control-V | Up to 4,096 UTF-8 bytes; no files or images. |
+| Command-V | Same, when Command stays with Mac.           |
+| Control-C | Copies within PC; no clipboard sync.         |
 
 ## Mac shortcuts and Game Mode
 
-Command stays with the Mac by default, so Command-Tab switches apps and
-Command-Space opens Spotlight. Settings → Input can send Command to the PC as
-the Windows key while the game captures the pointer. The Stop Streaming shortcut
-works either way.
+| Shortcut                             | Default action                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Command-Tab / Command-Space          | Switch Mac apps / Spotlight; stream continues.                                             |
+| Command-comma                        | Settings.                                                                                  |
+| Command-1 through Command-9          | Switch PC in Stream menu; stream continues.                                                |
+| Command-Escape                       | Game Overlay in native fullscreen; Settings holds Game Mode.                               |
+| Command forwarding, Settings › Input | Sends Windows key fullscreen or captured in window/Mini Player; stop shortcut still works. |
 
-In native fullscreen, Command-Escape opens macOS Game Overlay. Its Settings
-contains the Game Mode switch. See
-[Apple's Game Mode guide](https://support.apple.com/en-us/105118).
+## Controller shortcuts
 
-## Controller stop shortcut
+Hold the complete shortcut for about half a second, then release every button.
+The defaults on Mac, iPhone and iPad are:
 
-The default is to hold both stick buttons, L3 + R3, for about half a second.
-Settings → Input shows the current chord and lets you choose another one.
+- **Stop:** L1 + R1 + Create/Select + Options/Start.
+- **Stats:** L1 + R1 + L3 + R3, using both stick buttons.
 
-For Start + Select + L1 + R1, the names differ by controller:
+Change either in Settings › Input › Controller layouts. Choose Stop streaming or
+Stats, record at least three buttons, then release. Shortcuts use physical
+buttons independently of the game's mapping. Existing saved choices stay yours.
 
-- DualSense: Options + Create + L1 + R1. Extra DualSense buttons must be
-  enabled.
-- Xbox: Menu + View + LB + RB.
+| Controller        | Button names                |
+| ----------------- | --------------------------- |
+| PlayStation       | L1 + R1 + Create + Options. |
+| Xbox              | LB + RB + Menu + View.      |
+| Other controllers | L1 + R1 + Start + Select.   |
+
+On a Mac, a DualSense connection that hides Options or Create needs **Extra
+DualSense buttons** enabled in Settings › Input.
+
+## Controller options
+
+| Settings › Input                      | Effect                                                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Extra DualSense buttons               | Options, Create, mute and adaptive triggers; needs Input Monitoring.                                    |
+| Nintendo button layout                | Recognized Nintendo pads only, not individual Joy-Con sides; defaults off, swaps game buttons by label. |
+| Nintendo layout with controller mouse | Mouse controls stay positional.                                                                         |
+| Feedback and motion                   | Rumble, trigger rumble, gyro, touchpad, battery and light bar need controller and Sunshine support.     |
+
+## Controller mouse and launcher
+
+| Control                              | Result                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| Hold mouse-mode toggle, then release | Switch modes. Change the binding in Settings › Input › Controller mouse.               |
+| D-pad / left stick in launcher       | Move focus; macOS-supported controllers only.                                          |
+| Bottom / right face button           | Select / dismiss.                                                                      |
+| Mouse controls                       | [Click, scroll and touchpad map](guides/CONTROLLERS.md#use-the-controller-as-a-mouse). |
 
 ## When you forget
 
-The Stream menu has Mini Player and Stop Streaming. Command-comma (⌘,) opens
-Settings; Input holds the configurable bindings and Diagnostics explains
-bookmarks.
+| Need                         | Open              |
+| ---------------------------- | ----------------- |
+| Mini Player / Stop streaming | Stream menu.      |
+| Bindings                     | Settings › Input. |
 
-Key symbols: **⌃ Control · ⌥ Option/Alt · ⇧ Shift · ⌘ Command**.
+Next: [use keyboard and mouse controls](guides/KEYBOARD_MOUSE.md).

@@ -7,6 +7,7 @@
 //  The overlay timer's tick and the paced present watchdog's episode steps, called directly.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import QuartzCore
 import Testing
@@ -32,11 +33,28 @@ struct StatsOverlayRefreshTests {
         _ refresh: StatsOverlayRefresh, _ dec: VideoDecoder, _ overlay: StatsOverlayLayer,
         reads: Reads, rows: Set<StatsRow.Kind>
     ) {
-        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
         refresh.tick(
             dec: dec, overlay: overlay, banner: banner, input: nil,
             rows: { reads.rows += 1; return rows },
             thresholds: { reads.thresholds += 1; return .default })
+    }
+
+    @Test func occludedStreamSkipsHUDWorkAndRefreshesWhenVisibleAgain() {
+        let dec = VideoDecoder()
+        dec.statsOverlayEnabled = true
+        let overlay = attachedOverlay()
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
+        let refresh = StatsOverlayRefresh()
+        var reads = 0
+        refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
+                     rows: { reads += 1; return [.codec] }, thresholds: { .default }, visible: false)
+        #expect(reads == 0)
+        #expect(overlay.rowViews.isEmpty)
+        refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
+                     rows: { reads += 1; return [.codec] }, thresholds: { .default }, visible: true)
+        #expect(reads == 1)
+        #expect(Set(overlay.rowViews.keys) == [.codec])
     }
 
     @Test func aHiddenHudSkipsTheRowsThresholdsAndLayout() {
@@ -47,6 +65,25 @@ struct StatsOverlayRefreshTests {
         #expect(reads.rows == 0 && reads.thresholds == 0)
         #expect(overlay.rowViews.isEmpty)
         #expect(overlay.videoSize == .zero)
+    }
+
+    @Test func backdropRectClearsWhenOccludedAndRecoversOnTheNextVisibleTick() {
+        let dec = VideoDecoder()
+        dec.statsOverlayEnabled = true
+        dec.streamWidth = 1_920
+        dec.streamHeight = 1_080
+        let overlay = StatsOverlayLayer()
+        let video = CALayer()
+        video.bounds = CGRect(x: 0, y: 0, width: 1_280, height: 800)
+        overlay.attach(to: video)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
+        let refresh = StatsOverlayRefresh()
+        for visible in [true, false, true] {
+            refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
+                         rows: { [.renderFps] }, thresholds: { .default }, visible: visible)
+            #expect(dec.hudBackdropRect.isEmpty == !visible)
+            if visible { #expect(dec.hudBackdropRect == overlay.backdropSampleRect) }
+        }
     }
 
     /// A Settings flip shows on the next tick, without restarting the stream.
@@ -104,12 +141,12 @@ struct StatsOverlayRefreshTests {
     }
 
     @Test func thePillLatchesOnlyOnSustainedHitching() {
-        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
         banner.announce = { _ in }
         for _ in 0..<9 { banner.setSustained(true, text: "Stream stuttering") }
-        #expect(banner.layer.isHidden)
+        #expect(!banner.isVisible)
         banner.setSustained(true, text: "Stream stuttering")
-        #expect(!banner.layer.isHidden && banner.displayedText == "Stream stuttering")
+        #expect(banner.isVisible && banner.displayedText == "Stream stuttering")
     }
 }
 
@@ -123,7 +160,7 @@ struct PacedPresentWatchdogTests {
         let clock = ScriptedClock()
         let decoder = VideoDecoder()
         decoder.backend = recorder
-        return (StreamSession(backend: recorder, clock: clock.session), decoder, clock)
+        return (StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session), decoder, clock)
     }
 
     private func live(

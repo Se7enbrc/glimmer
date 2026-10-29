@@ -3,42 +3,62 @@
 
 // Reused text layers keep the HUD's refresh independent of video presentation.
 
+import GlimmerEngine
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import QuartzCore
 
 extension StatsOverlayLayer {
-    /// Combine only when both metrics are enabled; Custom can still show either alone.
-    static func combinedRows(_ rows: [StatsRow]) -> [StatsRow] {
-        guard let codec = rows.first(where: { $0.kind == .codec }),
-              rows.contains(where: { $0.kind == .bitrate }) else { return rows }
-        return rows.compactMap { row in
-            if row.kind == .codec { return nil }
-            guard row.kind == .bitrate else { return row }
-            return StatsRow(kind: row.kind, label: row.label, value: "\(row.value) · \(codec.value)",
-                            symbolName: nil, health: row.health, section: row.section)
+    #if os(macOS)
+    func updateAccessibleRows(_ rows: [StatsRow], cap: String) {
+        guard let view = displayView else { return }
+        guard isVisible else {
+            view.setAccessibilityChildren([])
+            return
         }
+        let kinds = Set(rows.map(\.kind))
+        accessibleRows = accessibleRows.filter { kinds.contains($0.key) }
+        let children = rows.map { row in
+            let element = accessibleRows[row.kind] ?? NSAccessibilityElement()
+            element.setAccessibilityRole(.staticText)
+            element.setAccessibilityParent(view)
+            element.setAccessibilityLabel(row.label)
+            element.setAccessibilityValue(row.value)
+            accessibleRows[row.kind] = element
+            return element
+        }
+        if !cap.isEmpty {
+            accessibleCap.setAccessibilityRole(.staticText)
+            accessibleCap.setAccessibilityParent(view)
+            accessibleCap.setAccessibilityLabel(cap)
+        }
+        view.setAccessibilityChildren(children + (cap.isEmpty ? [] : [accessibleCap]))
+        updateAccessibilityFrames()
+    }
+
+    func updateAccessibilityFrames() {
+        guard let root = layer.superlayer else { return }
+        for (kind, element) in accessibleRows {
+            guard let row = rowViews[kind] else { continue }
+            element.setAccessibilityFrameInParentSpace(row.container.convert(row.container.bounds, to: root))
+        }
+        accessibleCap.setAccessibilityFrameInParentSpace(layer.convert(
+            CGRect(x: 0, y: 0, width: layer.bounds.width, height: 12), to: root))
+    }
+
+    #endif
+
+    static func combinedRows(_ rows: [StatsRow]) -> [StatsRow] {
+        StatsOverlayFormatting.combinedRows(rows)
     }
 
     static func displayRows(snapshot: StreamStatsSnapshot, enabled: Set<StatsRow.Kind>,
                             targetFps: Double, thresholds: StatsThresholds) -> [StatsRow] {
-        let rows = snapshot.rows(enabled: enabled, targetFps: targetFps, thresholds: thresholds).map { row in
-            let value: String
-            switch row.kind {
-            case .bitrate: value = formatted(snapshot.measuredBitrateMbps, format: "%.1f Mbps")
-            case .latency: value = formatted(snapshot.rttMs, format: "%.2f ms")
-            default: value = row.value.replacingOccurrences(of: "\u{2014}", with: "-")
-            }
-            return StatsRow(kind: row.kind, label: row.label, value: value,
-                            symbolName: row.symbolName, health: row.health, section: row.section)
-        }
-        let combined = combinedRows(rows)
-        return coreKinds.compactMap { kind in combined.first { $0.kind == kind } }
-            + combined.filter { !coreKinds.contains($0.kind) }
-    }
-
-    private static func formatted(_ value: Double?, format: String) -> String {
-        guard let value, value.isFinite, value >= 0 else { return "-" }
-        return String(format: format, value)
+        StatsOverlayFormatting.displayRows(snapshot: snapshot, enabled: enabled,
+                                           targetFps: targetFps, thresholds: thresholds)
     }
 
     func makeRow(kind: StatsRow.Kind) -> RowSublayers {
@@ -62,23 +82,23 @@ extension StatsOverlayLayer {
         return text
     }
 
-    var primaryInk: NSColor {
-        usesDarkInk ? NSColor(red: 0.11, green: 0.21, blue: 0.26, alpha: 1)
-            : NSColor(red: 0.94, green: 0.96, blue: 0.97, alpha: 1)
+    var primaryInk: StatsColor {
+        usesDarkInk ? StatsColor(red: 0.11, green: 0.21, blue: 0.26, alpha: 1)
+            : StatsColor(red: 0.94, green: 0.96, blue: 0.97, alpha: 1)
     }
 
-    var secondaryInk: NSColor { primaryInk.withAlphaComponent(reduceTransparency ? 1 : 0.76) }
+    var secondaryInk: StatsColor { primaryInk.withAlphaComponent(reduceTransparency ? 1 : 0.76) }
 
-    private var cautionInk: NSColor {
-        usesDarkInk ? NSColor(red: 0.70, green: 0.35, blue: 0, alpha: 1) : .systemOrange
+    private var cautionInk: StatsColor {
+        usesDarkInk ? StatsColor(red: 0.70, green: 0.35, blue: 0, alpha: 1) : .systemOrange
     }
 
-    private var criticalInk: NSColor {
-        usesDarkInk ? NSColor(red: 0.72, green: 0.10, blue: 0.08, alpha: 1) : .systemRed
+    private var criticalInk: StatsColor {
+        usesDarkInk ? StatsColor(red: 0.72, green: 0.10, blue: 0.08, alpha: 1) : .systemRed
     }
 
     func applyShadow(to target: CALayer) {
-        target.shadowColor = (usesDarkInk ? NSColor.white : NSColor.black).cgColor
+        target.shadowColor = (usesDarkInk ? StatsColor.white : StatsColor.black).cgColor
         target.shadowOpacity = reduceTransparency ? 0.8 : 0.48
         target.shadowRadius = reduceTransparency ? 0.5 : 1.5
         target.shadowOffset = CGSize(width: 0, height: -0.5)
@@ -86,7 +106,7 @@ extension StatsOverlayLayer {
 
     func apply(row: StatsRow, to sub: RowSublayers) {
         sub.labelLayer.string = NSAttributedString(string: row.label, attributes: [
-            .font: Self.labelFont, .foregroundColor: secondaryInk
+            .font: resolvedLabelFont, .foregroundColor: secondaryInk
         ])
         sub.valueLayer.string = attributedValue(row)
         applyShadow(to: sub.labelLayer)
@@ -99,25 +119,25 @@ extension StatsOverlayLayer {
 
     func attributedValue(_ row: StatsRow) -> NSAttributedString {
         let core = Self.coreKinds.contains(row.kind)
-        let font = Self.valueFont(for: row.health, differentiateWithoutColor:
-                                    NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor)
+        let emphasized = Self.differentiateWithoutColorEnabled && (row.health == .warning || row.health == .critical)
+        let font = resolvedValueFont(bold: emphasized)
         let text = NSMutableAttributedString(string: row.value, attributes: [
-            .font: core ? font : Self.detailFont, .foregroundColor: primaryInk
+            .font: core ? font : resolvedDetailFont, .foregroundColor: primaryInk
         ])
         if core, let space = row.value.firstIndex(of: " ") {
             let suffix = NSRange(space..<row.value.endIndex, in: row.value)
-            text.addAttributes([.font: Self.labelFont, .foregroundColor: secondaryInk], range: suffix)
+            text.addAttributes([.font: resolvedLabelFont, .foregroundColor: secondaryInk], range: suffix)
         } else if !core, row.health == .warning || row.health == .critical {
             text.addAttribute(.foregroundColor, value: cautionInk, range: NSRange(location: 0, length: text.length))
-            if NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor {
-                text.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(
-                    ofSize: Self.detailFont.pointSize, weight: .bold), range: NSRange(location: 0, length: text.length))
+            if Self.differentiateWithoutColorEnabled {
+                text.addAttribute(.font, value: StatsFont.monospacedDigitSystemFont(
+                    ofSize: resolvedDetailFont.pointSize, weight: .bold), range: NSRange(location: 0, length: text.length))
             }
         }
         return text
     }
 
-    static func valueFont(for health: StatsRow.Health, differentiateWithoutColor: Bool) -> NSFont {
+    static func valueFont(for health: StatsRow.Health, differentiateWithoutColor: Bool) -> StatsFont {
         if differentiateWithoutColor, health == .warning || health == .critical {
             return emphasizedValueFont
         }

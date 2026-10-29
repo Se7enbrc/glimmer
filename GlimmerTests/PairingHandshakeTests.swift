@@ -8,6 +8,7 @@
 //  certificate pin and fingerprint checks, the wire hex, and the small pairing and poller helpers.
 //
 
+@testable import GlimmerEngine
 import CoreWLAN
 import CryptoKit
 import Foundation
@@ -15,6 +16,7 @@ import Testing
 @testable import Glimmer
 
 struct PairingHandshakeTests {
+    private let settings = IsolatedDefaults()
 
     private typealias Identity = (certPEM: String, keyPEM: String)
 
@@ -170,7 +172,7 @@ struct PairingHandshakeTests {
     }
 
     @MainActor @Test func pinsAreFourDigits() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         for _ in 0..<50 {
             let pin = model.generatePairingPIN()
             #expect(pin.count == 4 && pin.allSatisfy(\.isASCII) && pin.allSatisfy(\.isNumber))
@@ -178,7 +180,7 @@ struct PairingHandshakeTests {
     }
 
     @MainActor @Test func aLateStatusNeverPaintsAnotherPC() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Glimmer.Host(id: "tower", name: "tower", customName: nil, localAddress: "192.0.2.10",
                                           manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
                                           appVersion: nil, macAddress: nil)

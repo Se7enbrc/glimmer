@@ -17,6 +17,7 @@
 //  is no double-accel. No wire/host/protocol change: still relative LiSendMouseMove.
 //
 
+import GlimmerEngine
 import Foundation
 
 // MARK: - Cruise traversal-boost gain
@@ -58,7 +59,7 @@ enum CruiseTraversal {
         let vFull: Double
         let dragDeltaScale: Double
 
-        static func current(_ defaults: UserDefaults = .standard) -> Tuning {
+        static func current(_ defaults: UserDefaults = PersistentStorage.defaults) -> Tuning {
             let kneeValue = defaults.double(forKey: vKneeDefaultsKey)
             let knee = kneeValue > 0 ? kneeValue : defaultVKnee
             let fullValue = defaults.double(forKey: vFullDefaultsKey)

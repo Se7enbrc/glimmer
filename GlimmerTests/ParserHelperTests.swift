@@ -16,7 +16,7 @@
 //      SPS/VPS sniff on untrusted host input - the memory-safety surface)
 //    - VideoDepacketizer.splitAnnexBParamSets (transform of one AU; reads only
 //      the init-time-immutable codec flag, no queue/clock/mutable state)
-//    - RtpAudioQueue.padShard       (pure pad/clamp of a byte buffer)
+//    - RtpAudioQueue.copyShard       (pure pad/clamp of a byte buffer)
 //    - RtpAudioQueue.appendRtpHeader (pure big-endian RTP-header serialization)
 //
 //  Still NOT covered: RtpVideoQueue+Reconstruct.buildShards. It is an instance
@@ -26,6 +26,7 @@
 //  scope. Left `private`.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Network
 import Testing
@@ -218,8 +219,6 @@ struct ParserHelperTests {
 
     // MARK: - VideoDepacketizer.isIdrFrameStart (untrusted Annex-B sniff)
     //
-    // Sunshine's IDRs carry SPS (H.264) or VPS (HEVC) after optional AUD/SEI NALs.
-    // Malformed prefixes must not open the key-frame recovery gate.
 
     @Test func isIdrFrameStartH264AcceptsSpsAfter4ByteStart() {
         // 00 00 00 01 | 0x67 (NAL header: type = 0x67 & 0x1F = 7 = SPS).
@@ -247,7 +246,7 @@ struct ParserHelperTests {
     }
 
     @Test func isIdrFrameStartAccepts3ByteStartCode() {
-        // Moonlight's getAnnexBStartSequence takes either start-code length.
+        // Annex B permits the three-byte prefix and an additional preceding zero byte.
         #expect(VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x67, 0x42], hevc: false))
         #expect(VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x40, 0x01], hevc: true))
     }
@@ -263,13 +262,12 @@ struct ParserHelperTests {
         // SEI before an ordinary slice is not a key frame.
         let seiThenSlice: [UInt8] = [0, 0, 0, 1, 0x06, 0x80, 0, 0, 1, 0x41, 0x9A]
         #expect(!VideoDepacketizer.isIdrFrameStart(seiThenSlice, hevc: false))
-        // Only HEVC's prefix SEI (39) is skipped, as in Moonlight; a suffix SEI (40) ends the scan.
+        // HEVC suffix SEI (40) cannot stand in for leading prefix SEI (39).
         let suffixSeiThenVps: [UInt8] = [0, 0, 0, 1, 0x50, 0x01, 0x80, 0, 0, 0, 1, 0x40, 0x01]
         #expect(!VideoDepacketizer.isIdrFrameStart(suffixSeiThenVps, hevc: true))
     }
 
     @Test func isIdrFrameStartMalformedInputsReturnFalseNoCrash() {
-        // Truncated prefixes must not read beyond the payload.
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: false))
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: true))
         #expect(!VideoDepacketizer.isIdrFrameStart([0], hevc: false))
@@ -448,7 +446,7 @@ struct ParserHelperTests {
         #expect(TelemetryCounters.shared.recoveryWaitDropTotal.value &- before >= UInt64(frames.count))
     }
 
-    // MARK: - RtpAudioQueue.padShard (pad/clamp a byte buffer to a fixed size)
+    // MARK: - RtpAudioQueue.copyShard (pad/clamp a byte buffer to a fixed size)
 
     /// A fresh audio queue. The init only sets a couple of fields - no queue or
     /// clock - so it is safe to construct for the pure byte-shape helpers.
@@ -461,24 +459,30 @@ struct ParserHelperTests {
         #expect(!audioQueue().incompatibleServer)
     }
 
+    private func paddedShard(_ bytes: [UInt8], to size: Int) -> [UInt8] {
+        var storage = [UInt8](repeating: 255, count: size)
+        audioQueue().copyShard(bytes[...], into: &storage, size: size)
+        return storage
+    }
+
     @Test func padShortBufferZeroPadsToSize() {
-        let out = audioQueue().padShard([1, 2, 3], to: 6)
+        let out = paddedShard([1, 2, 3], to: 6)
         #expect(out == [1, 2, 3, 0, 0, 0])
     }
 
     @Test func padExactSizeIsUnchanged() {
         let bytes: [UInt8] = [9, 8, 7, 6]
-        #expect(audioQueue().padShard(bytes, to: 4) == bytes)
+        #expect(paddedShard(bytes, to: 4) == bytes)
     }
 
     @Test func padOversizeBufferIsTruncated() {
-        #expect(audioQueue().padShard([1, 2, 3, 4, 5], to: 3) == [1, 2, 3])
+        #expect(paddedShard([1, 2, 3, 4, 5], to: 3) == [1, 2, 3])
     }
 
     @Test func padEmptyBufferBecomesAllZeros() {
-        #expect(audioQueue().padShard([], to: 4) == [0, 0, 0, 0])
+        #expect(paddedShard([], to: 4) == [0, 0, 0, 0])
         // Pad-to-zero of an empty buffer stays empty.
-        #expect(audioQueue().padShard([], to: 0).isEmpty)
+        #expect(paddedShard([], to: 0).isEmpty)
     }
 
     // MARK: - RtpAudioQueue.appendRtpHeader (12-byte big-endian RTP header)

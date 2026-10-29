@@ -9,6 +9,7 @@
 //  the stream runs with its window and permissions, never a second instance.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 
@@ -19,7 +20,7 @@ extension GlimmerCLI {
 
     static func stream(_ command: Command, model: AppModel) async -> Int32 {
         guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
-        let live = await probe(host, model: model)
+        let live = await probe(host, model: model, waitUntilIdle: true)
         switch live?.state {
         case .asleep, nil:
             let hint = model.canWake(host) ? " To wake it: glimmer wake \"\(host.displayName)\" --wait" : ""
@@ -35,7 +36,8 @@ extension GlimmerCLI {
             return Exit.usage
         }
         var takeover = command.flags.contains("--force")
-        if !takeover, let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
+        if !takeover, live?.runningAppID != app.id,
+           let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
             // Glimmer's own stream may be what keeps the PC busy; it refuses a second one.
             if runningGlimmer() != nil, let reply = await ask([Key.verb: "check", Key.host: host.id], within: .seconds(2)),
                reply[Key.event] == Event.rejected {
@@ -46,11 +48,12 @@ extension GlimmerCLI {
             takeover = true
         }
         model.hostRoute.monitor(address: nil)
-        return await handOff(app: app, host: host, takeover: takeover, command: command)
+        return await handOff(app: app, host: host, takeover: takeover, command: command,
+                             approvedOccupant: takeover ? live?.runningAppID : nil)
     }
 
     /// The named app, matched as Stream from PC matches it, or the launcher's hero
-    /// target (the probe just selected this PC, so a running app is resumed).
+    /// target (the probe just selected this PC, so its running app is preferred).
     private static func pickApp(_ name: String?, on host: Host, model: AppModel) -> LibraryApp? {
         guard let name else {
             if model.heroTargetApp == nil { printError("Glimmer doesn't know any apps on \(host.displayName).") }
@@ -70,7 +73,8 @@ extension GlimmerCLI {
             printError("\(pc) is running \(occupant). Run again with --force to quit it and start \(app).")
             return false
         }
-        printError("\(pc) is running \(occupant). Quit it and start \(app)? [y/N] ", newline: false)
+        printError("\(pc) is running \(occupant). Unsaved progress may be lost. "
+            + "Quit \(occupant) and start \(app)? [y/N] ", newline: false)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
         return answer == "y" || answer == "yes"
     }
@@ -78,7 +82,7 @@ extension GlimmerCLI {
     /// Open (or bring forward) the app through Launch Services, then post the
     /// request until it answers. Returns after the handoff unless asked to wait.
     static func handOff(
-        app: LibraryApp, host: Host, takeover: Bool, command: Command,
+        app: LibraryApp, host: Host, takeover: Bool, command: Command, approvedOccupant: Int? = nil,
         open: () async -> NSRunningApplication? = { await openGlimmer() },
         post: ([String: String], CommandReplies) async -> [String: String]? = {
             await ask($0, within: .seconds(20), replies: $1)
@@ -86,7 +90,8 @@ extension GlimmerCLI {
     ) async -> Int32 {
         guard let glimmer = await open() else { return Exit.failed }
         let replies = CommandReplies()
-        let request = [Key.verb: "stream", Key.host: host.id, Key.app: String(app.id), Key.takeover: takeover ? "1" : "0"]
+        var request = [Key.verb: "stream", Key.host: host.id, Key.app: String(app.id), Key.takeover: takeover ? "1" : "0"]
+        if let approvedOccupant { request[Key.occupant] = String(approvedOccupant) }
         guard let first = await post(request, replies) else {
             printError("Glimmer didn't answer. Open it and try again.")
             return Exit.failed

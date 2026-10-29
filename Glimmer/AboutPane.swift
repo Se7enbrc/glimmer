@@ -1,14 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AboutPane.swift
-//
-//  Settings → About. App identity, the credo, version (with the option-click
-//  Diagnostics reveal), credits, license, and the donate link. Split out of
-//  SettingsPCsShortcutsPanes.swift to keep that file under the 600-line bar.
-//
-
 import AppKit
 import SwiftUI
 
@@ -20,6 +12,8 @@ private enum AboutLink {
     static let license = "https://www.gnu.org/licenses/gpl-3.0.html"
     static let sunshine = "https://github.com/LizardByte/Sunshine"
     static let moonlight = "https://github.com/moonlight-stream"
+    static let support = "https://se7enbrc.github.io/glimmer/support/"
+    static let privacy = "https://se7enbrc.github.io/glimmer/privacy/"
     /// The support link - the donate row reads this one constant and nothing
     /// else. Mirrors the repo's FUNDING.yml (GitHub Sponsors).
     static let donate = "https://github.com/sponsors/Se7enbrc"
@@ -29,11 +23,7 @@ struct AboutPane: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        // First-party utility tone - see System Settings ▸ About, Disk
-        // Utility ▸ About, Activity Monitor ▸ About: app name + plain
-        // description + version + credits. No marketing voice, no
-        // exclamation marks, no comparisons to other products. The credo
-        // is the one allowed line of soul.
+        // Keep identity and links in the same quiet style as system About panes.
         Form {
             Section {
                 HStack(spacing: 18) {
@@ -56,19 +46,16 @@ struct AboutPane: View {
                         Text("Stream your gaming PC to this Mac.")
                             .font(.title3)
                             .foregroundStyle(.secondary)
+                        if DiagnosticBuild.isEnabled {
+                            Text("Diagnostic build · performance recording enabled by default")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                         Text("Version \(versionString)")
                             .font(.footnote)
                             .foregroundStyle(.tertiary)
-                            // Hidden reveal for the telemetry/tuning sections
-                            // inside Settings → Diagnostics (the pane itself is
-                            // always visible for the input test + logs; only the
-                            // debug wires hide). Option-clicking the version line
-                            // toggles the `showDiagnostics` UserDefault - a
-                            // deliberate, undiscoverable gesture so normal users
-                            // never trip it, but a power user (or a bug report)
-                            // can surface them. The Telemetry toggle lives inside
-                            // those sections, so it can't gate its own reveal -
-                            // hence this separate gesture-driven flag.
+                            // The diagnostics toggle lives inside the hidden sections,
+                            // so Option-click provides an independent reveal.
                             .gesture(
                                 TapGesture()
                                     .modifiers(.option)
@@ -84,10 +71,15 @@ struct AboutPane: View {
                 }
                 .padding(.vertical, 6)
             }
-            // Order: Support up top (the one ask), License in the middle (the
-            // legal fact), and the third-party credits at the bottom as a
-            // closing note of appreciation.
             Section("Support") {
+                if let url = URL(string: AboutLink.support) {
+                    Link("Support", destination: url)
+                        .font(.footnote)
+                }
+                if let url = URL(string: AboutLink.privacy) {
+                    Link("Privacy Policy", destination: url)
+                        .font(.footnote)
+                }
                 if let url = URL(string: AboutLink.donate) {
                     Link("Support Glimmer's development", destination: url)
                         .font(.footnote)

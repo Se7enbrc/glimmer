@@ -1,18 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  SettingsGeneralStreamingPanes.swift
-//
-//  The General and Quality settings panes (+ their resolution/stats helpers),
-//  split out of SettingsView.swift. SettingsRoot composes them across files, so
-//  the pane types are internal. (Filename keeps the pane's pre-rename
-//  "Streaming" spelling - renaming the file means touching the pbxproj for
-//  zero behavioural gain.) `LoginItemManager`, the registration plumbing behind
-//  the General pane's launch toggles, lives in
-//  SettingsGeneralStreamingPanes+LoginItem.swift.
-//
+// General and Quality panes; login-item registration lives in the LoginItem extension.
 
+import GlimmerEngine
 import AppKit
 import os
 import ServiceManagement
@@ -21,9 +12,11 @@ import SwiftUI
 // MARK: - General
 
 struct GeneralPane: View {
+    var reconcileLoginItem: @MainActor () async -> SMAppService.Status? = { await LoginItemManager.reconcile() }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
-    @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
-    @AppStorage("launchMinimized") private var launchMinimized: Bool = false
+    @AppStorage("launchAtLogin", store: PersistentStorage.defaults) private var launchAtLogin: Bool = false
+    @AppStorage("launchMinimized", store: PersistentStorage.defaults) private var launchMinimized: Bool = false
 
     /// Keep failed registration visible beside the saved intent until it succeeds.
     @State private var loginItemIssue: LoginItemManager.RegistrationIssue?
@@ -121,6 +114,7 @@ struct GeneralPane: View {
                 }
                 .accessibilityLabel("Play sound on the PC")
             }
+            DisconnectSettings()
             Section {
                 // Picker sourced from the selected host's announced app
                 // list (Sunshine's `applist`). "Desktop" is always
@@ -137,8 +131,12 @@ struct GeneralPane: View {
             } footer: {
                 Text("To stream a different app once, click it in the launcher.")
             }
+            SettingsResetSection(enabled: !model.isStreaming) { includeGames in
+                try await model.resetSettings(includeGames: includeGames)
+            }
         }
         .formStyle(.grouped)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: launchAtLogin)
         .onAppear { refreshLoginItemState() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshLoginItemState()
@@ -150,7 +148,7 @@ struct GeneralPane: View {
     /// registration above, since reconcile may re-register.
     private func refreshLoginItemState() {
         Task { @MainActor in
-            let status = await LoginItemManager.reconcile()
+            let status = await reconcileLoginItem()
             if status != nil || loginItemIssue != .failed {
                 loginItemIssue = LoginItemManager.registrationIssue(for: status)
             }
@@ -196,6 +194,7 @@ enum CommonResolution: CaseIterable {
 struct QualityPane: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
 
     /// The privileged AWDL network helper (parks awdl0 during streams). Shared
     /// singleton so this toggle and the stream lifecycle drive one instance.
@@ -389,13 +388,15 @@ struct QualityPane: View {
             }
 
             Section("Your next stream") {
-                Text(model.streamSpecSummary)
+                Text(model.streamSpecSummary(adaptive: adaptiveBandwidth))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .animation(reduceMotion ? nil : .snappy, value: model.qualityPreset)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.qualityPreset == .custom)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.effectiveDisplayMode)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.statsOverlayPreset == .custom)
         .onAppear { awdl.refresh() }
     }
 
@@ -428,7 +429,8 @@ struct QualityPane: View {
                 .menuStyle(.button)
                 .help("Common resolutions")
                 .fixedSize()
-                TextField("", text: $customWidthText)
+                TextField("Width in pixels", text: $customWidthText)
+                    .labelsHidden()
                     .frame(width: 70)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
@@ -438,7 +440,8 @@ struct QualityPane: View {
                     .onChange(of: model.customWidth) { _, value in customWidthText = String(value) }
                     .onSubmit { settleCustomFieldText() }
                 Text("×").foregroundStyle(.secondary)
-                TextField("", text: $customHeightText)
+                TextField("Height in pixels", text: $customHeightText)
+                    .labelsHidden()
                     .frame(width: 70)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
@@ -451,7 +454,8 @@ struct QualityPane: View {
             HStack {
                 Text("Refresh rate")
                 Spacer()
-                TextField("", text: $customFPSText)
+                TextField("Refresh rate in hertz", text: $customFPSText)
+                    .labelsHidden()
                     .frame(width: 60)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()

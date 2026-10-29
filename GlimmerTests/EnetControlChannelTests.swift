@@ -8,12 +8,27 @@
 //  stored state expose the results. One uses a loopback listener to read the ACKs.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Network
 import Testing
 @testable import Glimmer
 
 struct EnetControlChannelTests {
+
+    @Test func disconnectedInputReportsOnlyOncePerConnection() throws {
+        let channel = try EnetFixture.channel()
+        channel.interrupt()
+        let prefix = "ENet input send failed (ch 251)"
+        let before = LogStore.shared.snapshot().filter { $0.message.hasPrefix(prefix) }.count
+        for _ in 0..<10 { #expect(!channel.sendInputPacket([1], channel: 251)) }
+        let after = LogStore.shared.snapshot().filter { $0.message.hasPrefix(prefix) }.count
+        #expect(after - before == 1)
+        let replacement = try EnetFixture.channel()
+        replacement.interrupt()
+        #expect(!replacement.sendInputPacket([1], channel: 251))
+        #expect(LogStore.shared.snapshot().filter { $0.message.hasPrefix(prefix) }.count - after == 1)
+    }
 
     private static let key: [UInt8] = Array(0..<16).map { UInt8($0) }
     /// SERVER_TERMINATED_CLOSED, a code the host really sends.
@@ -27,6 +42,7 @@ struct EnetControlChannelTests {
     private static func makeChannel() throws -> (EnetControlChannel, Codes) {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: key))
+        EnetFixture.connect(channel)
         let codes = Codes()
         channel.onTerminated = { codes.values.append($0) }
         return (channel, codes)

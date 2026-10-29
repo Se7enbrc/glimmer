@@ -8,6 +8,7 @@
 //  answers through a handler, so request building and reply handling run without a socket.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import os
 @testable import Glimmer
@@ -54,7 +55,7 @@ final class FakeSunshine: Sendable {
     func client(_ server: ServerInfo, identity: (certPEM: String, keyPEM: String)? = nil) -> NetworkClient {
         let cert = identity?.certPEM ?? "client-cert"
         let key = identity?.keyPEM ?? "client-key"
-        return NetworkClient(server: server, transport: transport,
+        return NetworkClient(server: server, deviceName: { "Test device" }, transport: transport,
                              identity: { (cert, key, FakeSunshine.clientUniqueID) })
     }
 

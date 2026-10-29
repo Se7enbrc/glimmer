@@ -9,12 +9,60 @@
 //  warp's jump never reaches the PC.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct StreamWindowFirstFrameTests {
+
+    @Test func firstPictureWaitsForNativeSpaceSettlement() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        #expect(stream.pendingFirstFrameReveal)
+        #expect(stream.awaitingFirstFrameFadeIn)
+        #expect(stream.cursorHideCount == 0)
+        stream.streamDelegate.closeState.transition = .idle
+        stream.streamDelegate.onFullScreenSettled?()
+        #expect(!stream.pendingFirstFrameReveal)
+        #expect(!stream.awaitingFirstFrameFadeIn)
+    }
+
+    @Test func aDroppedSpaceSettlementCannotStrandTheFirstPicture() throws {
+        let stream = StreamWindow()
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { delay, action in
+            #expect(delay == 1.5)
+            settle = action
+        }
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        #expect(stream.pendingFirstFrameReveal)
+        #expect(stream.awaitingFirstFrameFadeIn)
+        let fallback = try #require(settle)
+        fallback()
+        #expect(!stream.pendingFirstFrameReveal)
+        #expect(!stream.awaitingFirstFrameFadeIn)
+    }
+
+    @Test func closeDuringNativeEntryNeverRevealsAPendingPicture() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        stream.didClose = true
+        stream.streamDelegate.closeState.transition = .idle
+        stream.streamDelegate.onFullScreenSettled?()
+        #expect(stream.awaitingFirstFrameFadeIn)
+        #expect(stream.cursorHideCount == 0)
+    }
 
     @Test(arguments: [false, true])
     func eachDisplayTypeRetainsItsFullScreenChoice(usesSpace: Bool) {
@@ -95,7 +143,7 @@ struct StreamWindowFirstFrameTests {
         var backgrounded: [Bool] = []
         var suppressed: [Bool] = []
         stream.onBackgroundedChanged = { backgrounded.append($0) }
-        stream.onPresentationSuppressedChanged = { suppressed.append($0) }
+        stream.onPresentationSuppressedChanged = { value, _ in suppressed.append(value) }
 
         stream.backgroundStreamWindow()
 
@@ -111,7 +159,7 @@ struct StreamWindowFirstFrameTests {
         var backgrounded: [Bool] = []
         var suppressed: [Bool] = []
         stream.onBackgroundedChanged = { backgrounded.append($0) }
-        stream.onPresentationSuppressedChanged = { suppressed.append($0) }
+        stream.onPresentationSuppressedChanged = { value, _ in suppressed.append(value) }
         stream.installPresentationVisibilityObserver(nc: center)
         defer { for token in stream.keyObservers { center.removeObserver(token) } }
 
@@ -125,6 +173,34 @@ struct StreamWindowFirstFrameTests {
         center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
         #expect(!stream.presentationSuppressed)
         #expect(suppressed == [true])
+    }
+
+    @Test func windowSuppressionDiagnosticUsesNotificationAndCurrentPredicate() throws {
+        let stream = StreamWindow()
+        let center = NotificationCenter()
+        stream.window.title = "Identifying PC and game title"
+        stream.window.alphaValue = 0
+        stream.presentationRevealInProgress = true
+        stream.streamDelegate.closeState.transition = .entering
+        var inputs: VideoDecoder.PresentationVisibility?
+        stream.onPresentationSuppressedChanged = { _, visibility in inputs = visibility }
+        stream.installPresentationVisibilityObserver(nc: center)
+        defer { for token in stream.keyObservers { center.removeObserver(token) } }
+        center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
+        let visibility = try #require(inputs)
+        #expect(visibility.reason == .occlusionChanged)
+        #expect(visibility.windowVisible == stream.window.isVisible)
+        #expect(visibility.minimized == stream.window.isMiniaturized)
+        #expect(visibility.occlusionState == UInt64(stream.window.occlusionState.rawValue))
+        #expect(visibility.occlusionVisible == stream.window.occlusionState.contains(.visible))
+        #expect(visibility.appActive == NSApp.isActive)
+        #expect(visibility.revealing == true)
+        #expect(visibility.alphaZero == true)
+        #expect(visibility.miniPlayer == stream.isMiniPlayer)
+        #expect(visibility.fullScreenTransition == .entering)
+        let fields = VideoDecoder.suppressionFields(true, visibility: visibility, sessionGeneration: UUID(),
+            presentationGeneration: 1, uptimeNanos: 0).joined(separator: ",")
+        #expect(!fields.contains(stream.window.title))
     }
 
     /// A failing connect leaves the pointer free for the launcher's Cancel: the
@@ -336,6 +412,37 @@ struct StreamWindowFirstFrameTests {
         #expect(NSCursor.current === NSCursor.arrow)
     }
 
+    @Test func fullscreenAbsolutePointerHidesTheMacCursor() {
+        let stream = StreamWindow()
+        stream.fullscreenRelativePointer = false
+        let view = StreamInputView()
+        stream.window.contentView = view
+        defer { stream.setCursorHidden(false) }
+        stream.setCursorHidden(true)
+        stream.reassertCursorHiddenIfNeeded()
+        #expect(stream.cursorHideCount == 1)
+        #expect(NSCursor.current !== NSCursor.arrow)
+        stream.setCursorHidden(false)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
+    @Test func fullscreenCaptureReleaseKeepsTheAbsolutePointerHiddenOnlyWhileFocused() {
+        let stream = StreamWindow()
+        stream.awaitingFirstFrameFadeIn = true
+        stream.window.contentView = StreamInputView()
+        stream.fullscreenRelativePointer = false
+        defer { stream.setCursorHidden(false) }
+        stream.setPointerCaptured(false, isKeyWindow: true)
+        #expect(stream.cursorHideCount == 0)
+        stream.awaitingFirstFrameFadeIn = false
+        stream.setPointerCaptured(false, isKeyWindow: true)
+        #expect(stream.cursorHideCount == 1)
+        stream.setPointerCaptured(false, isKeyWindow: false)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
     @Test func repeatedDisplayHidesReleaseTheirImageAndCountTogether() throws {
         let stream = StreamWindow()
         let view = StreamInputView()
@@ -408,6 +515,7 @@ private final class MotionRecorder: StreamInputViewDelegate {
     func streamViewPointerDidEnter(_ view: StreamInputView) {}
     func streamViewPointerDidExit(_ view: StreamInputView) {}
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool { false }
+    func streamView(_ view: StreamInputView, commitText text: String) {}
     func streamViewPaste(_ view: StreamInputView) {}
 
     @Test func noEscapeChordLeavesTheSpace() {

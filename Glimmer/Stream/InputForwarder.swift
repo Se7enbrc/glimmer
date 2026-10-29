@@ -97,6 +97,7 @@
 //     it `LiSendMultiControllerEvent` events appear to be silently dropped on
 //     newer Sunshine builds.
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
@@ -111,6 +112,7 @@ public final class InputForwarder {
 
     weak var window: NSWindow?
     weak var inputView: StreamInputView?
+    var controllerLayouts: MacControllerLayouts?
 
     /// Called when the user presses the configured quit hotkey. The session
     /// owner wires this to stop streaming.
@@ -123,7 +125,7 @@ public final class InputForwarder {
     /// user makes in Settings while a stream is live take effect immediately
     /// - capturing the chord once at attach time meant the live edit silently
     /// did nothing until the next stream restart, which is a real UX trap.
-    public var quitHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultQuit }
+    package var quitHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultQuit }
 
     /// Called when the user presses the configured stats-overlay hotkey.
     /// The session owner wires this to toggle the in-stream stats overlay.
@@ -133,7 +135,7 @@ public final class InputForwarder {
 
     /// Provider for the stats-overlay hotkey. See `quitHotkeyProvider` for
     /// why this is a closure rather than a stored chord value.
-    public var statsHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultStats }
+    package var statsHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultStats }
 
     /// Called when the user presses the telemetry-bookmark chord (signal 4 -
     /// "that felt bad"). CLIENT-ONLY: the chord is consumed in the input path and
@@ -151,36 +153,32 @@ public final class InputForwarder {
 
     /// Provider for the bookmark chord. See `quitHotkeyProvider` for why this is
     /// a closure rather than a stored chord value.
-    public var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
+    package var bookmarkEnabled: @MainActor () -> Bool = { TelemetryGate.isEnabled }
+    package var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
-    /// Provider for the Window-mode pointer chord. Same live-read closure
-    /// shape as the quit/stats chords. Only consulted while `isWindowMode` is
-    /// on, where it TOGGLES capture.
-    public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
+    /// Read live like the quit/stats chords; toggles capture in every presentation.
+    package var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
     /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).
-    var scrollQuantizer = ScrollQuantizer()
 
     /// The mini player chord: a client-only toggle, never forwarded.
-    public var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
+    package var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
     public var onMiniPlayerHotkey: (@MainActor () -> Void)?
 
     /// Mini player: no hover grab, a click takes the pointer. Set live by
     /// `setMiniPlayer` (InputForwarder+WindowPointer.swift).
     var isMiniPlayer = false
+    var controllerOwnershipSuspended = false
     let controllerBackgroundEventsID = UUID()
     /// The pointer entered or left the mini player; the window shows its
     /// close button off this edge.
     var onMiniPlayerHoverChanged: (@MainActor (Bool) -> Void)?
 
-    /// Window mode: relative capture is grabbed by the pointer being over the
-    /// picture and left with a held Esc, the pointer chord, or switching apps.
-    /// Outside capture the pointer is a normal Mac pointer mirrored onto the
-    /// host as absolute positions. Full screen keeps the always-on capture
-    /// that follows key status. Set by the session at attach; flipped live by
-    /// a Space exit (`setWindowMode`). What it gates lives in
-    /// InputForwarder+WindowPointer.swift and +HoverCapture.swift.
+    /// Window mode grabs on hover; fullscreen follows the app's initial policy
+    /// and the user's live capture toggle across focus changes.
     var isWindowMode: Bool = false
+    var fullscreenRelativePointer = true
+    var onPointerModeToggled: (@MainActor (Bool) -> Void)?
 
     /// The stream's pixel dimensions, the reference frame absolute pointer
     /// positions are measured in. Set by the session at start and re-set on a
@@ -205,22 +203,22 @@ public final class InputForwarder {
     /// table in InputForwarder+HoverCapture.swift and this is its only writer.
     var isHoverCaptureSuppressed = false
 
-    /// Fired on every capture edge (true = engaged) while `isWindowMode` is
-    /// on. StreamWindow hides and shows the cursor off it - visibility stays
-    /// the window's, this only reports the edge. NEVER fired in full screen,
-    /// where the window's own show / resign / becomeKey path owns the cursor
-    /// exactly as before.
+    /// StreamWindow owns cursor visibility in every presentation.
     var onPointerCaptureChanged: (@MainActor (Bool) -> Void)?
 
     /// Controller-side quit chord. The ControllerForwarder extension
     /// consults this on every gamepad update and fires `onQuitHotkey`
     /// when all chord buttons are held simultaneously. Closure so live
     /// edits in Settings take effect on the next gamepad event.
-    public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none }
+    package var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none } {
+        didSet { observeControllerConfiguration() }
+    }
 
     /// The user-recorded button set for the `.custom` quit chord.
     /// Consulted only when `controllerQuitChordProvider()` returns `.custom`.
-    public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] }
+    package var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] } {
+        didSet { observeControllerConfiguration() }
+    }
 
     /// In-flight hold-to-quit dwell for the controller quit chord. Armed by
     /// the ControllerForwarder extension when the chord first reads fully
@@ -228,65 +226,58 @@ public final class InputForwarder {
     /// session teardown (`detach()`). Stored here because extensions can't
     /// add stored properties - the dwell logic lives with the chord matcher
     /// in ControllerForwarder+QuitChord.swift.
-    var quitChordDwellTask: Task<Void, Never>?
+    let controllerChordDwell = ControllerChordDwell()
+    var quitChordDwellTask: Task<Void, Never>? { controllerChordDwell.task }
 
     /// Slot that armed the in-flight dwell. Only that pad's value-changed
     /// frames may cancel the count - a second pad's frames (which won't
     /// match the chord) say nothing about whether the holder is still
     /// holding.
-    var quitChordDwellSlot: UInt8?
+    var quitChordDwellSlot: UInt8? { controllerChordDwell.slot }
 
     /// Rate-limit state for the quit-chord Diag breadcrumbs (arm / cancel /
     /// expiry / partial hold). Same stored-property-in-extension constraint as
     /// the dwell fields above; the logic is in ControllerForwarder+QuitChord.
     var quitChordCrumbs = QuitChordBreadcrumbState()
 
-    /// Whether macOS-level "system" modifier combos that use the Cmd key
-    /// should be forwarded to the host or left to macOS.
-    ///
-    /// macOS owns a lot of meaningful Cmd chords - ⌘-Tab (app switcher),
-    /// ⌘-Space (Spotlight), ⌘-Q (quit), ⌘-` (window cycle), ⌘-H/⌘-M (hide/
-    /// miniaturise). The Cmd key reports as `VK_LWIN`/`VK_RWIN` to the host,
-    /// so the naive thing to do - forward everything - turns ⌘-Tab into a
-    /// Win+Tab on the gaming PC, popping Windows' Task View while the
-    /// streamer is trying to leave the stream. That's the bug we're closing.
-    ///
-    /// When this is `false` (the default), the InputForwarder:
-    ///   * Drops `keyDown` events whose modifier mask contains `.command`
-    ///     so they're handled by the macOS responder chain instead. ⌘-Q
-    ///     quits Glimmer; ⌘-Tab switches apps; ⌘-Space opens Spotlight.
-    ///   * Skips the `flagsChanged` path for the `.command` modifier so
-    ///     we never emit a LWIN/RWIN down/up to the host.
-    ///   * Strips `MODIFIER_META` from `modifierByte(from:)` so a
-    ///     non-Cmd key that happens to be pressed while the user holds
-    ///     Cmd doesn't reach the host with a phantom Win-key modifier.
-    ///
-    /// When this is `true` and the stream holds the pointer (`forwardsCommand`),
-    /// every Cmd chord is forwarded as a Win-key chord - at the cost of macOS no
-    /// longer reacting to those combos while the pointer is held. That's the
-    /// mode power users on dedicated streaming hardware want.
-    ///
-    /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
-    /// this gate, so it keeps working regardless of capture state - including
-    /// the default ⌃⌥Q, which carries no Cmd and so never reaches the gate.
+    /// Opted-in Command chords become Win-key chords in fullscreen or a captured window.
+    /// Otherwise key-downs, modifier transitions and the meta byte stay local to avoid phantom Win keys.
+    /// Client quit/stats chords run before this gate so they work in either mode.
     public var captureSysKeys: Bool = false
 
     /// Delayed input belongs to one ready connection and one uninterrupted focus interval.
     var inputGeneration: UInt64 = 0
 
+    /// Keyboard events wait behind text until cross-channel modifier releases settle.
+    var pendingTextTask: Task<Void, Never>?
+    var pendingKeyboardEvents: [(InputForwarder) -> Void] = []
+
     /// Opens when the backend can accept input; reconnects invalidate delayed work.
     public internal(set) var isReady: Bool = false {
-        didSet { if isReady != oldValue { inputGeneration &+= 1 } }
+        didSet {
+            if isReady != oldValue { inputGeneration &+= 1 }
+            publishInputSnapshot()
+        }
     }
 
     /// Supplied by the session; replacing it invalidates text queued for the old connection.
     var backend: StreamingBackend? {
-        didSet { inputGeneration &+= 1 }
+        didSet {
+            inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+            inputGeneration &+= 1
+            publishInputSnapshot(focused: false)
+            if oldValue != nil {
+                isReady = false
+                inputOwnershipLost(reason: "connection replaced")
+                releases.releaseAll(connectionLost: true)
+                updateReconciliationTimer()
+            }
+        }
     }
 
     /// Set the backend the forwarder uses. Called by StreamSession right after
     /// `attach(to:)`.
-    public func setBackend(_ backend: StreamingBackend) {
+    func setBackend(_ backend: StreamingBackend) {
         self.backend = backend
     }
 
@@ -299,22 +290,26 @@ public final class InputForwarder {
 
     /// Bitmask of slots currently in use; bit N == 1 means slot N is occupied.
     /// Sent to the host as `activeGamepadMask` on every controller event.
-    var gamepadMask: UInt16 = 0
+    var gamepadMask: UInt16 {
+        get { inputCore.withLock { inputCore.snapshot.mask } }
+        set { inputCore.withLock { inputCore.snapshot.mask = newValue }; publishInputSnapshot() }
+    }
+
+    var onControllerMouseChanged: (@MainActor (String, Bool) -> Void)?
+    /// Whether any slot is a mouse; it also falls when a mouse-mode controller leaves.
+    var onControllerMouseActiveChanged: (@MainActor (Bool) -> Void)?
+    var controllerMouseActive = false
+    var nintendoLayoutProvider: @MainActor () -> Bool = { ControllerButtonLayout.usesLabels() }
+    var useNintendoLabels = false { didSet { publishInputSnapshot() } }
+    var nintendoLayoutObserver: NSObjectProtocol?
+    var nintendoControllerTypes: [UInt8: NintendoControllerType] = [:] { didSet { publishInputSnapshot() } }
 
     /// What the PC may still hold in each slot. Only a stream start retires an entry,
     /// since a removal sent into a link that is already dead never arrives.
-    var announcedControllers: [UInt8: ControllerArrival] = [:]
-
-    /// Per-slot DualSense/DualShock touchpad finger tracking, so the touchpad
-    /// surface can be forwarded as host touch events (down/move/up). Keyed by
-    /// controller slot. The physical touchpad *click* rides the normal button
-    /// bitmask (TOUCHPAD_FLAG); only the finger surface needs this state.
-    var touchpadStates: [UInt8: TouchpadState] = [:]
-
-    /// Monotonic pointer-id source for controller touch events. The host
-    /// correlates a finger's down→move→up by pointerId, so each new contact
-    /// gets a fresh id. Never 0 (some hosts treat 0 as "no pointer").
-    var nextTouchPointerId: UInt32 = 1
+    var announcedControllers: [UInt8: ControllerArrival] {
+        _read { inputCore.lock.lock(); defer { inputCore.lock.unlock() }; yield inputCore.announcedControllers }
+        _modify { inputCore.lock.lock(); defer { inputCore.lock.unlock() }; yield &inputCore.announcedControllers }
+    }
 
     /// Cached connection observers so we can deregister on `detach()`.
     var connectObserver: NSObjectProtocol?
@@ -325,8 +320,6 @@ public final class InputForwarder {
     /// with a slow-moving trackpad we routinely see 0.3px/event. The
     /// accumulator carries the fraction forward until it crosses a
     /// whole-pixel boundary, which is what the host expects.
-    var mouseResidualX: Double = 0
-    var mouseResidualY: Double = 0
 
     /// Cruise traversal-boost state (see InputForwarder+Cruise.swift). Stored on
     /// the class because extensions can't add stored properties.
@@ -448,6 +441,7 @@ public final class InputForwarder {
 
     init(cruiseTuning: CruiseTraversal.Tuning) {
         self.cruiseTuning = cruiseTuning
+        connectInputCore()
         setupGamepadObservers()
     }
 
@@ -455,6 +449,8 @@ public final class InputForwarder {
         // `isolated` so the MainActor observer tokens are readable here: the backstop for a
         // forwarder freed without detach().
         removeGamepadObservers()
+        removeInputRecoveryObservers()
+        reconciliationTimer?.invalidate()
     }
 
     // MARK: - LiSend wrappers with diagnostic logging
@@ -463,21 +459,14 @@ public final class InputForwarder {
     // LI_ERR_UNSUPPORTED when the host lacks the entry point.
     // Log the first non-zero return per code so transient failures stay quiet.
 
-    private var loggedFailureCodes: Set<Int32> = []
-
-    // Internal so the ControllerForwarder extension can call `record` from
-    // ControllerForwarder.swift to log non-zero LiSend* return codes.
     func record(_ name: StaticString, _ rc: Int32) {
         guard rc != 0 else { return }
-        if !loggedFailureCodes.contains(rc) {
-            loggedFailureCodes.insert(rc)
-            log.error("\(name, privacy: .public) returned \(rc) (first occurrence)")
-        }
+        inputCore.withLock { inputCore.record(name, rc) }
     }
 
     // MARK: - Modifier mapping
 
-    /// Win VK codes of the modifier sides the host has been told are held.
+    /// Physical modifier sides owned by this view; failed ups live in the release ledger.
     var heldModifierVKs: Set<Int16> = []
     /// Set when the PC may not match `heldModifierVKs` (attach, raise-all). Only
     /// then does a key-down resync: a tool-posted ⌃C carries ⌃ with no
@@ -486,46 +475,25 @@ public final class InputForwarder {
     /// The Mac's Caps Lock state last seen, so a toggle is sent exactly once.
     var lastCapsLock = false
 
-    /// Keys (exactly as sent, flags included) and mouse buttons the host holds
-    /// down, so focus loss, a reconnect or teardown can release them: the
-    /// physical release goes elsewhere, and a held W would walk forever.
+    /// Physical ownership ends on an up or focus loss. The separate release ledger
+    /// remembers what the PC may still hold until the reliable channel accepts the up.
     var heldKeys: Set<VKScanCode> = []
-    var heldMouseButtons: Set<Int32> = []
-
-    /// Send key-up / button-release for everything we believe the host holds,
-    /// then clear the bookkeeping (modifiers included). A key still physically
-    /// held stays released until re-pressed, as in upstream clients.
-    func raiseAllHeldInputs(reason: String) {
-        let keyCount = heldKeys.count
-        let buttonCount = heldMouseButtons.count
-        if isReady {
-            for key in heldKeys {
-                let rc = backend?.sendKeyboard(
-                    keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
-                    modifiers: 0, flags: key.flags) ?? -2
-                record("LiSendKeyboardEvent2(raise-all)", rc)
-            }
-            for button in heldMouseButtons {
-                let rc = backend?.sendMouseButton(
-                    action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
-                record("LiSendMouseButtonEvent(raise-all)", rc)
-            }
-            for vk in heldModifierVKs.sorted() {
-                let rc = backend?.sendKeyboard(
-                    keyCode: VKScanCode(vk: vk).wireCode,
-                    action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
-                record("LiSendKeyboardEvent2(modifier release)", rc)
-            }
-            if keyCount + buttonCount > 0 {
-                Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
-                    + "mouse button(s) on \(reason)", "Stream")
-            }
-        }
-        heldKeys.removeAll()
-        heldMouseButtons.removeAll()
-        heldModifierVKs.removeAll()
-        modifiersNeedResync = true
-    }
+    var keyMapping: (Int) -> VKScanCode? = { vkScanCode(forCarbonKeyCode: $0) }
+    var physicalKeys: [UInt16: VKScanCode] = [:]
+    var missingPhysicalKeys: Set<UInt16> = []
+    var missingModifierVKs: Set<Int16> = []
+    var physicalMouseButtons: [Int: Int32] = [:]
+    nonisolated let inputCore = InputCore()
+    nonisolated let controllerCaptureQueue = DispatchQueue(
+        label: "io.ugfugl.Glimmer.controllerCapture", qos: .userInteractive)
+    var controllersNeedAnnouncement = false { didSet { publishInputSnapshot() } }
+    var reconciliationTimer: Timer?
+    var lastInputEventTime: TimeInterval?
+    var keyboardMonitoringGranted: () -> Bool = { HIDGamepadManager.accessGranted }
+    var physicalKeyState: (UInt16) -> Bool = { CGEventSource.keyState(.combinedSessionState, key: $0) }
+    var currentModifierFlags: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
+    var currentMouseButtons: () -> Int = { NSEvent.pressedMouseButtons }
+    var inputRecoveryObservers: [(NotificationCenter, NSObjectProtocol)] = []
 
     /// True from attach until the first connection goes live: Esc cancels the
     /// connect then, and is game input from then on (reconnects included).

@@ -1,9 +1,5 @@
-<!--
-Thanks for contributing. Pull requests start as an issue the maintainer has
-agreed to; one without an agreed issue is closed. Please read
-docs/CONTRIBUTING.md first: it covers setup, build (`make`), lint posture, the
-Swift 6 concurrency rules, and the commit-message conventions this repo uses.
--->
+<!-- Start with an issue the maintainer agreed to; one without it is closed.
+Read docs/CONTRIBUTING.md for setup, checks and contribution terms. -->
 
 ## Issue
 
@@ -15,11 +11,8 @@ Swift 6 concurrency rules, and the commit-message conventions this repo uses.
 
 ## How verified
 
-<!--
-How did you check it works? `make verify` plus a real stream from a PC running
-Sunshine is the bar for engine changes; for streaming-quality changes, telemetry
-numbers (before and after) are the house currency. See docs/PROFILING.md.
--->
+<!-- Record `make verify` and real-PC checks for engine changes.
+Streaming-quality changes need before/after telemetry; see docs/PROFILING.md. -->
 
 ## Not verified
 
@@ -27,6 +20,11 @@ numbers (before and after) are the house currency. See docs/PROFILING.md.
 
 ## Checklist
 
+- [ ] I agree to GPL-3.0 with the [LICENSE additional permission](../LICENSE)
+      and, unless my PR is exempt as described in the
+      [contribution guide](../docs/CONTRIBUTING.md#licensing-of-contributions),
+      certify the [DCO 1.1](https://developercertificate.org) with a
+      `Signed-off-by:` matching the author of each contribution commit
 - [ ] `make verify` passes on the exact PR head in a clean worktree; SHA and
       checks recorded above (strict lint, zero warnings, tests)
 - [ ] Comments explain the WHY for any non-obvious decision (see

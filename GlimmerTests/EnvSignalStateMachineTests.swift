@@ -8,11 +8,20 @@
 //  CAUTION/DISTRESS ladder and its quiet step-down, the wired reset and the cadence dial.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct EnvSignalStateMachineTests {
+    @Test func routeObservationsStayWithTheirController() {
+        let first = EnvSignalController()
+        let second = EnvSignalController()
+        first.streamLinkValue = "wired"
+        #expect(second.streamLink == "unknown")
+        second.streamLinkValue = "wifi"
+        #expect(first.streamLink == "wired")
+    }
 
     private func associated(rssi: Int?, rate: Double?) -> WiFiSnapshot {
         WiFiSnapshot(linkState: .associated, rssiDbm: rssi, txRateMbps: rate)
@@ -126,6 +135,8 @@ struct EnvSignalStateMachineTests {
         close(controller, jitterMs: 400)
         #expect(controller.decision.headroomLevel == EnvSignalController.maxHeadroomLevel)
         #expect(controller.decision.generation > generation)
+        #expect(controller.pacerHeadroom.decision.generation == controller.decision.generation)
+        #expect(controller.pacerHeadroom.decision.headroomLevel == controller.decision.headroomLevel)
     }
 
     @Test func wiredRouteForcesClearAndRestAtOnce() {

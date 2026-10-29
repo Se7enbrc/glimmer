@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 #if canImport(Sparkle)
+import GlimmerEngine
 import Sparkle
 import SwiftUI
 
@@ -22,11 +23,6 @@ final class UpdaterController {
         controller = SPUStandardUpdaterController(
             startingUpdater: true, updaterDelegate: streamAwareAlerts, userDriverDelegate: streamAwareAlerts)
         streamAwareAlerts.observeAvailability(of: controller.updater)
-        // Default to daily checks, preserving any opt-out made in Sparkle's update alert.
-        if UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") == nil {
-            controller.updater.automaticallyChecksForUpdates = true
-        }
-        controller.updater.updateCheckInterval = 86_400
     }
 
     var updater: SPUUpdater { controller.updater }
@@ -51,7 +47,7 @@ final class StreamAwareUpdateAlerts: NSObject, @preconcurrency SPUStandardUserDr
         isStreaming: @escaping @MainActor () -> Bool,
         showUpdate: @escaping @MainActor () -> Void,
         checkInBackground: @escaping @MainActor () -> Void,
-        updateDefaults: UserDefaults = .standard
+        updateDefaults: UserDefaults = PersistentStorage.defaults
     ) {
         self.isStreaming = isStreaming
         self.showUpdate = showUpdate

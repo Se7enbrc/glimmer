@@ -1,0 +1,161 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+import GlimmerEngine
+import SwiftUI
+
+struct ControllerLayoutDiagram: View {
+    let family: ControllerDiagramFamily
+    let controls: [ControllerLayoutControl]
+    @State var rear = false
+    @State var selectedShoulder: ControllerLayoutSource?
+    var highlighted: Set<ControllerLayoutSource> = []
+    var annotations: [ControllerDiagramAnnotation] = []
+    var focused: Set<ControllerLayoutSource> = []
+    var select: (ControllerLayoutControl) -> Void
+
+    private var positioned: [(ControllerLayoutControl, ControllerDiagramPlacement)] {
+        controls.compactMap { control in
+            ControllerDiagramGeometry.placement(control, family: family).map { (control, $0) }
+        }
+    }
+
+    private var visibleControls: [(ControllerLayoutControl, ControllerDiagramPlacement)] {
+        controls.compactMap { control in
+            ControllerDiagramGeometry.visiblePlacement(control, family: family, rear: rear).map { (control, $0) }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if positioned.contains(where: { $0.1.rear }) {
+                Picker("Controller view", selection: $rear) {
+                    Text("Front").tag(false)
+                    Text("Back").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("Controller view")
+                .frame(maxWidth: 220)
+            }
+            annotationRail(above: true)
+            GeometryReader { geometry in
+                let scale = geometry.size.width / 480
+                ZStack(alignment: .topLeading) {
+                    ControllerArtwork(family: family, rear: rear, controls: controls)
+                    if !rear {
+                        directionPad(scale: scale)
+                        stick(left: true, scale: scale)
+                        stick(left: false, scale: scale)
+                    }
+                    ForEach(visibleControls, id: \.0.id) { control, placement in
+                        controlButton(control, placement: placement, scale: scale)
+                    }
+                    ForEach([true, false], id: \.self) { left in
+                        ControllerShoulderMenu(family: family, controls: controls, rear: rear, left: left,
+                                               scale: scale, selected: selectedShoulder, highlighted: highlighted) { control in
+                            choose(control)
+                        }
+                    }
+                }
+            }
+            .aspectRatio(480.0 / 330, contentMode: .fit)
+            .frame(maxWidth: 560)
+            .environment(\.layoutDirection, .leftToRight)
+            annotationRail(above: false)
+            if controls.contains(where: { control in
+                if case .extra = control.id { return ControllerDiagramGeometry.placement(control, family: family) == nil }
+                return false
+            }) {
+                Text("Some button positions aren't provided by this controller. Use the list to edit them.")
+                    .controllerSettingsFootnote().foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .onChange(of: focused) { _, sources in
+            let placements = controls.filter { sources.contains($0.id) }.compactMap {
+                ControllerDiagramGeometry.placement($0, family: family)
+            }
+            rear = placements.contains { $0.rear }
+        }
+    }
+
+    private func choose(_ control: ControllerLayoutControl) {
+        selectedShoulder = ControllerShoulderGeometry.isShoulder(control.id) ? control.id : nil
+        select(control)
+    }
+
+    @ViewBuilder
+    private func controlButton(_ control: ControllerLayoutControl, placement: ControllerDiagramPlacement,
+                               scale: CGFloat) -> some View {
+        if !ControllerShoulderGeometry.isShoulder(control.id) {
+            ordinaryButton(control, placement: placement, scale: scale)
+        }
+    }
+
+    private func annotationRail(above: Bool) -> some View {
+        ControllerDiagramAnnotationRail(annotations: annotations, controls: controls, family: family,
+            rear: rear, above: above, focused: focused)
+            .frame(maxWidth: 560)
+    }
+
+    /// Diagram controls already carry the button trait, so the spoken name drops the role word.
+    static func spokenName(_ name: String) -> String {
+        guard name.hasSuffix(" button") else { return name }
+        let base = String(name.dropLast(" button".count))
+        return base.hasSuffix(" stick") ? base + " click" : base
+    }
+
+    private func ordinaryButton(_ control: ControllerLayoutControl, placement: ControllerDiagramPlacement,
+                                scale: CGFloat) -> some View {
+        Button { choose(control) } label: {
+            ControllerControlArtwork(control: control, placement: placement, family: family, scale: scale)
+                .contentShape(ControllerButtonShape(family: family, placement: placement,
+                                                    source: control.id))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(highlighted.contains(control.id) ? Color.accentColor : Color.primary)
+        .accessibilityLabel(Self.spokenName(control.name))
+        .help(control.name)
+        .position(x: placement.point.x * scale, y: placement.point.y * scale)
+    }
+
+    private func directionPad(scale: CGFloat) -> some View {
+        let directions: [ControllerMappedButton] = [.up, .down, .left, .right]
+        let available = controls.filter { control in directions.contains { control.id == .button($0) } }
+        return Menu {
+            ForEach(available) { control in Button(control.name) { choose(control) } }
+        } label: {
+            ControllerDpadArtwork(family: family, scale: scale)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain).menuIndicator(.hidden)
+        .disabled(available.isEmpty)
+        .foregroundStyle(available.contains { highlighted.contains($0.id) } ? Color.accentColor : Color.primary)
+        .accessibilityLabel("D-pad")
+        .position(x: family.dpad.x * scale, y: family.dpad.y * scale)
+    }
+
+    private func stick(left: Bool, scale: CGFloat) -> some View {
+        let axes: [ControllerMappedAxis] = left ? [.leftX, .leftY] : [.rightX, .rightY]
+        let available = controls.filter { control in
+            switch control.id {
+            case .button(let button): button == (left ? .leftStick : .rightStick)
+            case .axis(let axis), .direction(let axis, _): axes.contains(axis)
+            default: false
+            }
+        }
+        let point = left ? family.leftStick : family.rightStick
+        return Menu {
+            ForEach(available) { control in Button(control.name) { choose(control) } }
+        } label: {
+            ControllerStickArtwork(family: family, scale: scale)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain).menuIndicator(.hidden)
+        .disabled(available.isEmpty)
+        .foregroundStyle(available.contains { highlighted.contains($0.id) } ? Color.accentColor : Color.primary)
+        .accessibilityLabel(left ? "Left stick" : "Right stick")
+        .position(x: point.x * scale, y: point.y * scale)
+    }
+}

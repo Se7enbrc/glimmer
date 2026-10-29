@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  SettingsPCsShortcutsPanes.swift
-//
-//  The PCs and Input settings panes (+ the PC tile), split out of
-//  SettingsView.swift. Internal so SettingsRoot can compose them across files.
-//  The shortcut and chord recorders live in SettingsShortcutRecorders.swift.
-//
+// PCs and Input settings share the native keyboard shortcut recorder.
 
+import GameController
+import GlimmerEngine
 import SwiftUI
 
 // MARK: - PCs
 
 struct PCsPane: View {
     @Environment(AppModel.self) private var model
-    @State private var showPairSheet = false
-    @State private var initialPairAddress: String = ""
 
     var body: some View {
         ScrollView {
@@ -52,8 +46,7 @@ struct PCsPane: View {
                 // A standard button: the launcher's accent capsule is for the one
                 // thing to do there; in Settings, pairing is one action among many.
                 Button {
-                    initialPairAddress = ""
-                    showPairSheet = true
+                    model.requestPairing(for: nil, owner: .settings)
                 } label: {
                     Label("Pair a PC…", systemImage: "plus")
                 }
@@ -61,19 +54,11 @@ struct PCsPane: View {
             }
             .padding(20)
         }
-        .sheet(isPresented: $showPairSheet) {
-            PairSheet(initialAddress: initialPairAddress)
-                .environment(model)
-                // Sheets on macOS 26 read better with the Tahoe glass
-                // backdrop - `.thinMaterial` matches the Settings window
-                // chrome so the PIN tiles' tinted glass layers cleanly on
-                // top instead of stacking against an opaque sheet plate.
-                .presentationBackground(.thinMaterial)
-        }
     }
 }
 
 struct PCTile: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let host: Host
     @Environment(AppModel.self) private var model
 
@@ -92,7 +77,8 @@ struct PCTile: View {
                 } label: {
                     Image(systemName: isDefault ? "star.fill" : "star")
                         .symbolRenderingMode(.hierarchical)
-                        .contentTransition(.symbolEffect(.replace))
+                        .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                        .animation(Motion.fade, value: isDefault)
                         .foregroundStyle(isDefault ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
@@ -131,7 +117,7 @@ struct PCTile: View {
                 // Facts, not buttons: the PC's apps as plain glyphs.
                 HStack(spacing: 8) {
                     ForEach(host.apps.prefix(3)) { app in
-                        Image(systemName: app.systemImage)
+                        app.icon
                             .font(.system(size: 12, weight: .medium))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
@@ -143,7 +129,7 @@ struct PCTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Glass tile - each PC card reads as a floating panel against the
         // settings background. The star alone marks the default PC.
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .glassSurface(in: .rect(cornerRadius: 16))
         // Shared right-click menu, the same items as the visible button above
         // and the launcher hero's menu.
         .hostContextMenu(host)
@@ -162,15 +148,20 @@ struct PCTile: View {
 // MARK: - Shortcuts
 
 struct ShortcutsPane: View {
+    static let pointerDetail =
+        "Captures or releases the pointer in a window or full screen."
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
-    @State private var showChordCapture = false
+    @State private var nintendoPresence = NintendoControllerPresence()
+    @State private var dualSenseConnected = false
     // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
-    @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
+    @AppStorage("disableMouseAccelWhileStreaming", store: PersistentStorage.defaults) private var rawMouseWhileStreaming: Bool = true
 
-    /// The chosen chord can't fire on a DualSense until the raw-HID reader is on.
+    /// Some DualSense connections need the raw reader for the fixed stop chord.
     private var chordNeedsExtraButtons: Bool {
-        !model.rawHIDControllerEnabled
+        dualSenseConnected && !model.rawHIDControllerEnabled
             && InputForwarder.needsRawHIDCenterButtons(chord: model.controllerQuitChord,
                                                        custom: model.customControllerChord)
     }
@@ -197,10 +188,8 @@ struct ShortcutsPane: View {
                 // stream stats toggle in Quality.
                 HotkeyRow(label: stats, detail: "For this stream only. The next stream follows Settings › Quality.",
                           hotkey: $model.statsHotkey, taken: taken)
-                // Window mode only: in full screen the pointer is hidden for the
-                // whole session, so the chord reaches the PC like any other key.
                 HotkeyRow(label: pointer,
-                          detail: "Takes the pointer from the game or gives it back. In full screen it goes to the game.",
+                          detail: Self.pointerDetail,
                           hotkey: $model.releasePointerHotkey, taken: taken)
                 HotkeyRow(label: mini,
                           detail: "Shrinks the stream to a small window over your other apps, and brings it back.",
@@ -219,24 +208,8 @@ struct ShortcutsPane: View {
             }
 
             Section("Stop streaming with a controller") {
-                // Hold-to-quit chord on the gamepad. Fires the same path as
-                // the keyboard quit hotkey above - useful for couch
-                // streaming where the keyboard isn't reachable.
-                Picker("Hold to stop streaming", selection: $model.controllerQuitChord) {
-                    ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
-                        Text(chord.displayName).tag(chord)
-                    }
-                }
-                if model.controllerQuitChord == .custom {
-                    HStack {
-                        Text(model.customControllerChord.isEmpty
-                             ? "No chord recorded yet"
-                             : ControllerButton.describe(model.customControllerChord))
-                            .foregroundStyle(model.customControllerChord.isEmpty ? .secondary : .primary)
-                        Spacer()
-                        Button("Record…") { showChordCapture = true }
-                    }
-                }
+                ControllerLayoutShortcutSummary()
+                NavigationLink("Controller layouts") { ControllerLayoutsView() }
                 // RawHIDControl while off is its "Turn On…" button and explainer.
                 if chordNeedsExtraButtons {
                     HStack(spacing: 8) {
@@ -247,11 +220,9 @@ struct ShortcutsPane: View {
                         RawHIDControl()
                     }
                 }
-                Text("Hold these buttons together on the controller for a moment to stop streaming. "
-                    + "L3 + R3 by default; the keyboard shortcut above always works too.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
+
+            ControllerMouseSettingsSection()
 
             // Raw-HID DualSense reader. Shown when a pad is connected or the
             // feature is on (its off-switch must not vanish with the pad), but
@@ -267,6 +238,8 @@ struct ShortcutsPane: View {
                         + "Off by default; needs Input Monitoring.")
                 }
             }
+
+            NintendoLayoutSettings(isConnected: nintendoPresence.isConnected)
 
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
@@ -304,9 +277,20 @@ struct ShortcutsPane: View {
             }
         }
         .formStyle(.grouped)
-        .sheet(isPresented: $showChordCapture) {
-            ChordCaptureSheet().environment(model)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.controllerConnected)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.rawHIDControllerEnabled)
+        .onAppear {
+            nintendoPresence.start()
+            updateControllerPresence()
+            ControllerLayoutsModel.shared.games = model.controllerLayoutGames()
         }
+        .onDisappear { nintendoPresence.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in updateControllerPresence() }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in updateControllerPresence() }
+    }
+
+    private func updateControllerPresence() {
+        dualSenseConnected = GCController.controllers().contains { $0.extendedGamepad is GCDualSenseGamepad }
     }
 }
 

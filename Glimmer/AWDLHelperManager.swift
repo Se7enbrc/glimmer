@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Combine
 import Foundation
 import ServiceManagement
@@ -231,7 +232,7 @@ final class AWDLHelperManager: ObservableObject {
             reachable: { await client.currentStatus() != nil },
             count: { await client.reSuppressCount() },
             daemonJobMissing: { await AWDLHelperRecovery.daemonJobMissing() },
-            daemonLayout: { await AWDLHelperRecovery.daemonLayout() }), defaults: .standard)
+            daemonLayout: { await AWDLHelperRecovery.daemonLayout() }), defaults: PersistentStorage.defaults)
     }
 
     init(operations: Operations, defaults: UserDefaults) {

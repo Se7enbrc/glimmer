@@ -41,6 +41,7 @@
 //                            receipt, gates ≥ 5 min, writes the blob.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 
@@ -140,16 +141,9 @@ enum SessionReceiptStore {
     /// Capture the always-live end-of-session numbers. Called from
     /// `StreamSession.stop()` (the one engine-side hook) BEFORE the backend
     /// tears down - `estimatedRtt()` dies with the connection, and the
-    /// collector resets on the next session. `receivedBytes` has no accessor
-    /// of its own, so we take the same unfair lock the collector's own
-    /// accessors take - a one-shot read at the teardown edge, never hot path.
+    /// collector resets on the next session.
     static func captureStreamEnd(rttMs: Double?, collector: StatsCollector?, at now: Date = Date()) {
-        var videoBytes: UInt64?
-        if let collector {
-            collector.lock.lock()
-            videoBytes = collector.receivedBytes
-            collector.lock.unlock()
-        }
+        let videoBytes = collector?.receivedBytesSnapshot()
         lock.lock()
         endRttMs = rttMs
         endVideoBytes = videoBytes
@@ -161,7 +155,7 @@ enum SessionReceiptStore {
     /// (and stashes nothing) when the session never went live or ran under
     /// the 5-minute threshold. Consumes the latch either way, so a receipt
     /// can never be double-counted or leak into the next session.
-    static func finalizeSession(defaults: UserDefaults = .standard) -> SessionReceipt? {
+    static func finalizeSession(defaults: UserDefaults = PersistentStorage.defaults) -> SessionReceipt? {
         lock.lock()
         let session = pending
         let rtt = endRttMs
@@ -197,7 +191,7 @@ enum SessionReceiptStore {
 
     /// Read half of the contract (the guidance copy in Settings rides this).
     static func load(hostId: String, width: Int, height: Int, refreshHz: Int,
-                     defaults: UserDefaults = .standard) -> SessionReceipt? {
+                     defaults: UserDefaults = PersistentStorage.defaults) -> SessionReceipt? {
         let storageKey = key(hostId: hostId, width: width, height: height, refreshHz: refreshHz)
         guard let data = defaults.data(forKey: storageKey) else { return nil }
         let decoder = JSONDecoder()

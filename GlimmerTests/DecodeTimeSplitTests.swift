@@ -8,6 +8,7 @@
 //  how the Decode time row shows it, and how the config event names the decode mode.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 import os
@@ -73,16 +74,16 @@ struct DecodeTimeSplitTests {
         #expect(total.value == "2.76 ms")
     }
 
-    @Test func telemetryExportsTheSplitNextToTheTotal() {
+    @Test func telemetryExportsTheSplitNextToTheTotal() throws {
         var snap = TelemetrySnapshot()
         snap.decodeEmaMs = 2.76
         snap.decodeServiceMs = 2.41
         snap.decodeWaitMs = 0.35
         let extras = TelemetrySnapshot.Extras()
-        let json = TelemetryRenderer.ndjson(snap, extras: extras)
-        #expect(json.contains("\"decode_service_ms\":2.41") && json.contains("\"decode_wait_ms\":0.35"))
-        let prom = TelemetryRenderer.prometheus(snap, extras: extras)
-        #expect(prom.contains("glimmer_decode_service_ema_ms") && prom.contains("glimmer_decode_wait_ema_ms"))
+        let row = try TelemetryRenderFixtures.row(TelemetryRenderer.ndjson(snap, extras: extras))
+        #expect((row["decode_ema_ms"] as? NSNumber)?.doubleValue == 2.76)
+        #expect((row["decode_service_ms"] as? NSNumber)?.doubleValue == 2.41)
+        #expect((row["decode_wait_ms"] as? NSNumber)?.doubleValue == 0.35)
     }
 
     @Test func decodeTimeOnlyFlagsADecodeLongerThanTheFrameBudget() {

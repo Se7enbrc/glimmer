@@ -1,0 +1,525 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+#if os(macOS)
+// NDJSON rendering shares pseudonyms and histogram interpolation with the session report.
+
+import Foundation
+import Darwin
+
+extension TelemetryRenderer {
+
+    /// A tiny field accumulator so the section renderers below stay flat (no giant
+    /// nested-closure function). `value`-type, mutated in place; `line()` joins.
+    package struct NDJSONBuilder {
+
+        package init(
+            fields: [String] = []
+        ) {
+            self.fields = fields
+        }
+
+        package var fields: [String] = []
+        package mutating func add(_ key: String, _ value: Double?) {
+            guard let value, value.isFinite else { return }
+            fields.append("\"\(key)\":\(TelemetryRenderer.jsonNumber(value))")
+        }
+        package mutating func addInt(_ key: String, _ value: Int?) {
+            guard let value else { return }
+            fields.append("\"\(key)\":\(value)")
+        }
+        package mutating func addCount(_ key: String, _ value: UInt64?) {
+            guard let value else { return }
+            fields.append("\"\(key)\":\(value)")
+        }
+        package mutating func addBool(_ key: String, _ value: Bool?) {
+            guard let value else { return }
+            fields.append("\"\(key)\":\(value)")
+        }
+        package mutating func addString(_ key: String, _ value: String?) {
+            guard let value, !value.isEmpty else { return }
+            fields.append("\"\(key)\":\"\(TelemetryRenderer.jsonStringEscape(value))\"")
+        }
+        package mutating func addRaw(_ raw: [String]) { fields.append(contentsOf: raw) }
+        package func line() -> String { "{" + fields.joined(separator: ",") + "}" }
+    }
+
+    /// Render one NDJSON object line from a per-second snapshot + its sidecar
+    /// Extras (sampled together on the capture tick). Delegates to focused
+    /// section helpers so this stays a readable table of contents.
+    package static func ndjson(_ snap: TelemetrySnapshot, extras: TelemetrySnapshot.Extras) -> String {
+        var builder = NDJSONBuilder()
+        builder.fields.append("\"ts\":\"\(snap.wallClockISO8601)\"")
+        builder.fields.append("\"session\":\"\(snap.sessionId)\"")
+        // Per-install pseudonyms identify the PC and Mac without naming them.
+        builder.addString("client", snap.clientLabel)
+        builder.addString("host", snap.serverName)
+        // Build attribution (signal 5a) as an NDJSON header field on every line,
+        // so a single line is enough to tie a sample to a build.
+        builder.addString("build_commit", snap.buildCommit)
+        builder.addString("build_date", snap.buildDate)
+        builder.add("t_connect_s", snap.sinceConnectSeconds)
+        ndjsonFrames(&builder, snap)
+        ndjsonRendererPerformance(&builder, snap.rendererPerformance)
+        ndjsonNetwork(&builder, snap, extras)
+        ndjsonPacingDrops(&builder, snap, extras)
+        ndjsonInputRefresh(&builder, snap, extras)
+        ndjsonInputLatency(&builder, snap.inputLatency)
+        builder.addCount("input_timing_dropped_total", snap.inputTimingDropped)
+        builder.addCount("input_flush_backpressure_skips_total", snap.inputFlushSendBackloggedSkipTotal)
+        builder.addCount("input_flush_backpressure_reliable_skips_total", snap.inputFlushReliableBackloggedSkipTotal)
+        ndjsonFrameSizeThermalProcess(&builder, snap)
+        ndjsonResource(&builder, snap)
+        ndjsonEventCounters(&builder, snap)
+        builder.addRaw(ndjsonLatencyFields(snap))
+        builder.addRaw(ndjsonRollingLatencyFields(extras))
+        ndjsonDecodeDisplay(&builder, snap, extras)
+        ndjsonAudio(&builder, snap, extras)
+        ndjsonLink(&builder, snap, extras)
+        ndjsonSessionLifecycle(&builder, snap)
+        return builder.line()
+    }
+
+    /// P2 SESSION-LIFECYCLE fields on the per-second line: handshake breakdown
+    /// legs, reconnect count + disconnect reason, IDR/RFI round-trip counts + last
+    /// RTT, and the corruption heuristic total + per-second rate. (The handshake
+    /// ALSO gets a one-shot explicit `event:"handshake"` line - see the exporter.)
+    /// Numbers, the reason label, nil legs omitted.
+    private static func ndjsonSessionLifecycle(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
+        if let handshake = snap.handshake {
+            builder.add("handshake_rtsp_ms", handshake.rtspMs)
+            builder.add("handshake_control_setup_ms", handshake.controlSetupMs)
+            builder.add("handshake_enet_connect_ms", handshake.enetConnectMs)
+            builder.add("handshake_first_frame_ms", handshake.firstFrameMs)
+            builder.add("handshake_total_ms", handshake.totalMs)
+        }
+        builder.addCount("reconnect_total", snap.reconnectTotal)
+        builder.addCount("wake_total", snap.wakeTotal)
+        builder.addInt("disconnect_reason", snap.disconnectReason.rawValue)
+        builder.addString("disconnect_reason_label", snap.disconnectReason.label)
+        if let idr = snap.idrRoundTrip {
+            // EXPLICIT-IDR-only (RFIs ride rfi_total and don't arm round-trips)
+            // - see IdrRoundTripSnapshot.
+            builder.addCount("idr_round_trip_request_total", idr.requestsTotal)
+            builder.addCount("idr_round_trip_matched_total", idr.matchedTotal)
+            builder.add("idr_round_trip_last_ms", idr.lastRoundTripMs)
+        }
+        builder.addCount("corruption_heuristic_total", snap.corruptionTotal)
+        builder.add("corruption_heuristic_per_s", snap.corruptionPerSecond)
+    }
+
+    /// P1 AUDIO (the other stream): receive-quality totals + rates, output health
+    /// (buffer fill / under-runs / over-runs), A/V sync drift, and the cold-start
+    /// first-packet time. Numbers only; omitted entirely when no audio this tick.
+    private static func ndjsonAudio(
+        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
+    ) {
+        guard let audio = snap.audio else { return }
+        ndjsonAudioPipeline(&builder, snap.audioPipeline)
+        builder.addCount("audio_packets_total", audio.packetsTotal)
+        builder.addCount("audio_packets_lost_total", audio.packetsLostTotal)
+        builder.addCount("audio_fec_recovered_total", audio.fecRecoveredTotal)
+        // FEC blocks dropped on a parity/data size mismatch (counted, never a
+        // silent permanent give-up).
+        builder.addCount("audio_fec_mismatch_total", extras.audioFecMismatchTotal)
+        // Receive-start failures (H7): >0 with audio dark = video-only session.
+        builder.addCount("audio_receive_failed_total", extras.audioReceiveFailedTotal)
+        // Packets that decoded to nothing and were concealed: under-runs at zero loss.
+        builder.addCount("audio_decode_failed_total", extras.audioDecodeFailedTotal)
+        builder.add("audio_pkts_per_s", audio.packetsPerSecond)
+        builder.add("audio_gap_max_ms", audio.gapMaxMs)
+        builder.add("audio_loss_rate", audio.lossRate)
+        builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)
+        builder.add("audio_engine_running", audio.engineRunning.map { $0 ? 1.0 : 0.0 })
+        builder.add("audio_buffer_fill_ms", audio.bufferFillMs)
+        builder.add("audio_resampler_ppm", audio.resamplerPpm)
+        builder.add("audio_buffer_fill_min_ms", audio.bufferFillMinMs)
+        // The adaptive target the fill is steered toward - fill vs target is
+        // the cushion judge - and the link's cap on it.
+        builder.add("audio_playout_target_ms", extras.audioPlayoutTargetMs)
+        builder.add("audio_cushion_max_ms", extras.audioCushionMaxMs)
+        builder.addCount("audio_underrun_total", audio.underrunTotal)
+        builder.addCount("audio_underrun_deadair_total", extras.audioUnderrunDeadairTotal)
+        builder.addCount("audio_overrun_total", audio.overrunTotal)
+        // Designed playout-backlog trims (5ms chops), split out so the overrun
+        // total above stays ceiling-backstop-only.
+        builder.addCount("audio_trim_total", extras.audioTrimTotal)
+        builder.add("audio_trims_per_s", extras.audioTrimsPerSecond)
+        builder.addCount("audio_reprime_total", audio.rePrimeTotal)
+        builder.addCount("audio_stall_recovery_total", snap.audioStallRecoveryTotal)
+        builder.add("audio_underruns_per_s", audio.underrunsPerSecond)
+        builder.add("audio_overruns_per_s", audio.overrunsPerSecond)
+        builder.add("audio_clock_drift_ms", audio.audioClockDriftMs)
+        // av_skew_ms - the true CROSS-STREAM A/V alignment, deliberately next
+        // to the wall-clock drift it must never be confused with. SIGN: + =
+        // audio late (behind video). Derived ONCE per tick in capture() (the
+        // accumulating derive that feeds the scorecard percentiles at this 1Hz
+        // cadence) and carried on `extras`, so the prom + NDJSON forms of one
+        // tick are byte-identical - calling deriveSkewMs again here re-latched
+        // the non-idempotent epoch and split the two wire forms. Absent (not 0)
+        // while either stream is dark/stale or re-anchoring; rebase_total makes
+        // every mid-session re-baseline countable.
+        builder.add("av_skew_ms", extras.avSkewMs)
+        // The cushion-SUBTRACTED true clock skew from the SAME derive (no
+        // deliberate-cushion bias) - the genuine host↔Mac clock offset the drift
+        // resampler corrects, vs av_skew_ms which reads ~cushion+single-digit ms.
+        builder.add("av_clock_skew_ms", extras.avClockSkewMs)
+        builder.addCount("av_skew_rebase_total", extras.avSkewRebaseTotal)
+        // The live learned LOSS FLOOR under the playout target (the decay
+        // limit-cycle fix) - absent until first learned, so a floor-held
+        // target is legible against the evidence holding it.
+        let cushionFloorMs = extras.audioCushionFloorMs
+        builder.add("audio_cushion_floor_ms", cushionFloorMs > 0 ? cushionFloorMs : nil)
+        let cushionSeedMs = extras.audioCushionSeedMs
+        builder.add("audio_cushion_seed_ms", cushionSeedMs > 0 ? cushionSeedMs : nil)
+        builder.add("audio_first_packet_ms", audio.firstPacketMs)
+    }
+
+    /// P1 DECODE/VT state + PRESENT/DISPLAY fields. Decode: the (re)create count +
+    /// the live state (hw-decode / pixel format / bit depth / colorspace). Present:
+    /// the stale-frame-repeat total + per-second rate, the EDR-headroom trend, and
+    /// the HDR-engaged / screen / ProMotion state. Numbers, bools, and labels only.
+    private static func ndjsonDecodeDisplay(
+        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
+    ) {
+        builder.addCount("decoder_recreate_total", snap.decoderRecreateTotal)
+        builder.addCount("decoder_recreate_first_total", snap.decoderRecreateFirstTotal)
+        builder.addCount("decoder_recreate_resolution_total", snap.decoderRecreateResolutionTotal)
+        builder.addCount("decoder_recreate_colorspace_total", snap.decoderRecreateColorspaceTotal)
+        if snap.vtSessionCreateMs > 0 { builder.add("vt_session_create_ms", snap.vtSessionCreateMs) }
+        builder.addCount("discontinuity_flush_total", snap.discontinuityFlushTotal)
+        if let state = snap.decodeState {
+            builder.addBool("decode_hw", state.hwDecode)
+            builder.addString("decode_pixel_format", state.pixelFormat)
+            builder.addInt("decode_bit_depth", state.bitDepth)
+            builder.addString("decode_colorspace", state.colorSpaceKey)
+        }
+        builder.addCount("present_stale_repeat_total", snap.staleFrameRepeatTotal)
+        builder.add("present_stale_repeats_per_s", snap.staleRepeatsPerSecond)
+        // Over-target force-releases (zero in steady state; a per-second spike
+        // is the due-gate self-oscillation signature).
+        builder.addCount("pacer_over_target_release_total", extras.pacerOverTargetReleaseTotal)
+        builder.add("pacer_over_target_releases_per_s", extras.pacerOverTargetReleasesPerSecond)
+        builder.add("pacer_over_target_release_ratio", extras.pacerOverTargetReleaseRatio)
+        // Present-tick miss split by cause (descheduled thread vs coalesced callback).
+        builder.addCount("tick_miss_descheduled_total", snap.tickMissDescheduledTotal)
+        builder.addCount("tick_miss_coalesced_total", snap.tickMissCoalescedTotal)
+        // The finer direct-promptness split (preempted thread vs skipped vsync
+        // delivery) - names the residual the pair above conflates.
+        builder.addCount("tick_miss_preempted_total", snap.tickMissPreemptedTotal)
+        builder.addCount("tick_miss_linkskip_total", snap.tickMissLinkskipTotal)
+        builder.add("edr_headroom_min", snap.edrHeadroomMin)
+        builder.add("edr_headroom_avg", snap.edrHeadroomAvg)
+        builder.add("edr_headroom_max", snap.edrHeadroomMax)
+        if let display = snap.displayState {
+            builder.addBool("hdr_engaged", display.hdrEngaged)
+            builder.addBool("hdr_input", display.hdrInput)
+            builder.addString("screen", display.screenName)
+            builder.addBool("promotion_capable", display.proMotionCapable)
+            builder.addInt("max_refresh_hz", display.maxRefreshHz)
+        }
+    }
+
+    private static func ndjsonFrames(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
+        builder.add("fps_received", snap.receivedFps)
+        builder.add("fps_decoded", snap.decodedFps)
+        builder.add("fps_rendered", snap.renderedFps)
+        builder.add("decode_ema_ms", snap.decodeEmaMs)
+        builder.add("decode_service_ms", snap.decodeServiceMs)
+        builder.add("decode_wait_ms", snap.decodeWaitMs)
+        builder.add("present_cadence_err_ms", snap.presentCadenceErrorMs)
+        builder.addCount("present_on_time", snap.presentOnTimeCount)
+        builder.addCount("present_late", snap.presentLateCount)
+        // The host-caused share of present_late (network loss counts as host), and how
+        // unevenly the host delivers.
+        builder.addCount("present_late_host_cadence", snap.presentLateHostCadenceCount)
+        builder.add("host_frame_interval_p50_ms", snap.hostFrameIntervalP50Ms)
+        builder.add("host_frame_interval_p95_ms", snap.hostFrameIntervalP95Ms)
+        builder.addCount("host_uneven_pairs", snap.hostUnevenPairs)
+        builder.add("host_encode_min_ms", snap.hostEncodeLatencyMinMs)
+        builder.add("host_encode_avg_ms", snap.hostEncodeLatencyAvgMs)
+        builder.add("host_encode_max_ms", snap.hostEncodeLatencyMaxMs)
+    }
+
+    private static func ndjsonNetwork(
+        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
+    ) {
+        builder.add("recv_jitter_ms", snap.recvJitterMs)
+        builder.add("fec_recovery_rate", snap.fecRecoveryRate)
+        builder.add("fec_percentage", snap.fecPercentage.map(Double.init))
+        builder.add("fec_parity_margin", snap.fecParityMargin.map(Double.init))
+        builder.add("reorder_disp_max_ms", snap.reorderDispMaxMs)
+        builder.add("reorder_hold_exceeded", Double(snap.reorderHoldExceededTotal))
+        builder.addCount("reorder_hold_taken_total", snap.reorderHoldTakenTotal)
+        builder.addCount("reorder_hold_rescued_total", snap.reorderHoldRescuedTotal)
+        builder.add("pkts_per_s", snap.packetsPerSecond)
+        // FRACTIONAL ms (high-res local clock): emit the Double with decimals via
+        // `add` (jsonNumber → %.3f) instead of truncating to Int, so a sub-ms RTT
+        // like 8.73 ms is preserved in the telemetry stream.
+        builder.add("rtt_ms", snap.rttMs)
+        builder.add("rtt_var_ms", snap.rttVarianceMs)
+        // P1 receive-quality (derived from the RTP seq/arrival of packets WE get).
+        builder.add("pre_fec_loss_rate", snap.preFecLossRate)
+        builder.add("out_of_order_rate", snap.outOfOrderRate)
+        builder.add("duplicate_rate", snap.duplicateRate)
+        builder.add("goodput_mbps", snap.goodputMbps)
+        builder.add("negotiated_bitrate_mbps", snap.negotiatedBitrateMbps)
+        builder.add("goodput_utilization", snap.goodputUtilization)
+        builder.add("packet_gap_p50_us", snap.packetGapP50Us)
+        builder.add("packet_gap_p95_us", snap.packetGapP95Us)
+        builder.add("packet_gap_max_us", snap.packetGapMaxUs)
+        builder.addInt("enet_sent_reliable", snap.enetSentReliable)
+        builder.addInt("enet_oldest_unacked_ms", snap.enetOldestUnackedMs.map(Int.init))
+        builder.addInt("enet_since_last_ack_ms", snap.enetSinceLastAckMs.map(Int.init))
+        builder.addCount("enet_retransmit_total", snap.enetRetransmitTotal)
+        // Unknown inbound control datagrams ignored (the volume the
+        // once-per-type log suppression would otherwise hide).
+        builder.addCount("ctrl_ignored_total", extras.ctrlIgnoredTotal)
+        // Per-socket GAP-EVENT totals (video=net_ / audio_ / enet_ × the
+        // 20/50/100ms thresholds): the honest link-health counters - the
+        // jitter EWMA and the windowed gap gauges above are provably blind to
+        // rare 40-110ms blips. All three sockets ride this one section so the
+        // NIC-doze discriminator ("all sockets gapped together" vs one path)
+        // is a single row query, present from t=0 even before audio flows.
+        // The enet_ family counts reliable-ACK DELAYS (first send → matched
+        // ACK, measured in handleAcknowledge), not raw arrival gaps: the
+        // control channel is quiet by design between messages (its idle cadence
+        // otherwise reads as a flood of fake >100ms "gaps" on a clean link),
+        // and arrival-gap gating was blind during input-idle - exactly where
+        // NIC doze lives. ACK-delay data is the comparable "host answered late"
+        // leg beside net_/audio_.
+        builder.addCount("net_gaps_over_20ms_total", extras.videoGapOver20msTotal)
+        builder.addCount("net_gaps_over_50ms_total", extras.videoGapOver50msTotal)
+        builder.addCount("net_gaps_over_100ms_total", extras.videoGapOver100msTotal)
+        builder.addCount("audio_gaps_over_20ms_total", extras.audioGapOver20msTotal)
+        builder.addCount("audio_gaps_over_50ms_total", extras.audioGapOver50msTotal)
+        builder.addCount("audio_gaps_over_100ms_total", extras.audioGapOver100msTotal)
+        builder.addCount("enet_gaps_over_20ms_total", extras.enetGapOver20msTotal)
+        builder.addCount("enet_gaps_over_50ms_total", extras.enetGapOver50msTotal)
+        builder.addCount("enet_gaps_over_100ms_total", extras.enetGapOver100msTotal)
+    }
+
+    private static func ndjsonPacingDrops(
+        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
+    ) {
+        builder.addInt("pacing_depth", snap.pacingQueueDepth)
+        builder.addInt("pacing_target_depth", snap.pacingAdaptiveTargetDepth)
+        builder.addInt("decode_backlog", snap.inFlightDecodeBacklog)
+        // Pacer tick/release rates - the direct display-link-callback-miss
+        // measure (a ticks/s deficit below the refresh Hz is missed callbacks).
+        builder.add("pacer_ticks_per_s", extras.pacerTicksPerSecond)
+        builder.add("pacer_releases_per_s", extras.pacerReleasesPerSecond)
+        // 1 = the tick thread got Mach time-constraint (RT) scheduling; the yes/no
+        // the tick_miss_preempted/linkskip split is read against.
+        builder.addBool("pacer_tick_realtime", extras.pacerTickRealtime)
+        builder.addCount("drops_decoder", snap.dropsDecoder)
+        builder.addCount("drops_backpressure", snap.dropsBackpressure)
+        builder.addCount("drops_presentation_late", snap.dropsPresentationLate)
+        // Frames lost while waiting for an IDR/RFI recovery frame (not in frame_loss_total).
+        builder.addCount("drops_recovery_wait_total", snap.dropsRecoveryWaitTotal)
+        // Designed suppressed-mode drops + the 0/1 context gauge, split from
+        // drops_presentation_late so that counter stays a genuine-lateness
+        // signal while the window is backgrounded.
+        builder.addCount("drops_suppressed_total", extras.suppressedDropTotal)
+        builder.addCount("pacer_submit_release_total", extras.pacerSubmitReleaseTotal)
+        builder.addBool("present_suppressed", extras.presentSuppressed)
+        // The THIRD hidden-window state: gated (decode stopped after ~2s of
+        // continuous suppression) + its quiet drops, so fps_decoded=0 with
+        // drops_suppressed flat self-labels instead of reading as a wedge.
+        builder.addBool("decode_gated", extras.decodeGated)
+        builder.addCount("drops_decode_gated_total", extras.decodeGatedDropTotal)
+    }
+
+    private static func ndjsonInputRefresh(
+        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
+    ) {
+        builder.add("input_events_per_s", snap.inputEventsPerSecond)
+        builder.add("input_flush_per_s", snap.inputFlushPerSecond)
+        builder.add("input_motion_per_s", snap.inputMotionPerSecond)
+        builder.add("dualsense_hid_reports_per_s", extras.dualSenseHidReportsPerSecond)
+        builder.addCount("input_idle_to_active_total", snap.inputIdleToActiveTotal)
+        builder.add("input_since_last_ms", snap.timeSinceLastInputMs)
+        // Host rumble RECEIVED at dispatch (pre-guard) + the invalid-drop
+        // sibling - the shipped feature's volume signal, riding the input
+        // section it correlates with. events − dropped = deposited.
+        builder.addCount("rumble_events_total", extras.rumbleEventTotal)
+        builder.add("rumble_events_per_s", extras.rumbleEventsPerSecond)
+        builder.addCount("rumble_dropped_invalid_total", extras.rumbleDroppedInvalidTotal)
+        builder.add("refresh_min_hz", snap.refreshMinHz)
+        builder.add("refresh_avg_hz", snap.refreshAvgHz)
+        builder.add("refresh_max_hz", snap.refreshMaxHz)
+        builder.addBool("refresh_changed", snap.refreshChanged)
+    }
+
+    private static func ndjsonFrameSizeThermalProcess(
+        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot
+    ) {
+        builder.add("frame_bytes_avg", snap.avgFrameBytes)
+        builder.addInt("frame_bytes_max", snap.maxFrameBytes)
+        builder.add("frame_idr_percent", snap.idrFramePercent)
+        builder.addInt("thermal_state", snap.thermalState)
+        builder.addBool("low_power_mode", snap.lowPowerModeEnabled)
+        builder.add("cpu_percent", snap.processCpuPercent)
+        builder.addInt("thread_count", snap.threadCount)
+    }
+
+    /// P1 RESOURCE (the P-vs-E-core visibility signal): the per-thread CPU/QoS view
+    /// (as a nested `threads` array so each hot line keeps name+cpu+qos together),
+    /// the SoC P-cluster vs E-cluster active residency, the memory footprint, and
+    /// the AC/battery flags. The threads array is the one nested structure the
+    /// flat builder emits as a raw field; it is capped upstream
+    /// (`ResourceTelemetry.maxThreadsEmitted`) so a line stays bounded.
+    private static func ndjsonResource(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
+        if let resource = snap.resource {
+            if !resource.threads.isEmpty {
+                let entries = resource.threads.map { thread -> String in
+                    var entry = NDJSONBuilder()
+                    entry.addString("name", resource.threadLabel(thread))
+                    entry.addCount("tid", thread.tid == 0 ? nil : thread.tid)
+                    entry.add("cpu_percent", thread.cpuPercent)
+                    entry.addInt("qos", thread.qos)
+                    entry.addString("qos_label", thread.qosLabel)
+                    return entry.line()
+                }
+                builder.addRaw(["\"threads\":[\(entries.joined(separator: ","))]"])
+            }
+            builder.addCount("phys_footprint_bytes", resource.physFootprintBytes)
+            builder.addCount("resident_size_bytes", resource.residentSizeBytes)
+            builder.addCount("compressed_bytes", resource.compressedBytes)
+            builder.addCount("internal_bytes", resource.internalBytes)
+            builder.addCount("reusable_bytes", resource.reusableBytes)
+            builder.addString("memory_probe_status", resource.memoryProbeStatus)
+            builder.addInt("memory_probe_kr", resource.memoryProbeResult)
+            builder.add("resource_sample_t_ms", resource.sampleUptimeMs)
+            builder.add("resource_sample_duration_ms", resource.sampleDurationMs)
+            builder.addBool("battery_charging", resource.batteryCharging)
+        }
+        builder.addBool("on_battery", snap.resource?.onBattery ?? snap.onBattery)
+        if let cluster = snap.clusterResidency {
+            builder.add("soc_ecluster_active", cluster.eClusterActive)
+            builder.add("soc_pcluster_active", cluster.pClusterActive)
+            builder.addInt("soc_ecluster_channels", cluster.eClusterCount)
+            builder.addInt("soc_pcluster_channels", cluster.pClusterCount)
+            // Reuse the once-per-tick delta; resampling would corrupt the baseline.
+            // Missing gauges stay absent. GPU residency measures time awake, not cost.
+            builder.add("package_power_w", cluster.packagePowerW)
+            builder.add("gpu_residency_percent", cluster.gpuResidencyPercent)
+            builder.add("gpu_power_w", cluster.gpuPowerW)
+        }
+    }
+
+    private static func ndjsonEventCounters(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
+        builder.addCount("rfi_total", snap.rfiTotal)
+        builder.addCount("idr_requested_total", snap.idrRequestedTotal)
+        builder.addCount("backlog_overflow_total", snap.backlogOverflowTotal)
+        builder.addCount("present_stall_total", snap.presentStallTotal)
+        builder.addCount("frame_loss_total", snap.frameLossTotal)
+        builder.addCount("unrecoverable_frame_total", snap.unrecoverableFrameTotal)
+        builder.addCount("pacer_disabled_total", snap.pacerDisabledTotal)
+        builder.addCount("bookmark_total", snap.bookmarkTotal)
+    }
+
+    // The LINK section (`ndjsonLink`) lives in TelemetryExporter+RenderNDJSONLink.swift.
+
+    /// Per-stage p50/p95/p99 values interpolate the matching histogram buckets.
+    /// Stages without observations are omitted.
+    package static func ndjsonLatencyFields(_ snap: TelemetrySnapshot) -> [String] {
+        guard let histograms = snap.latencyHistograms else { return [] }
+        var fields: [String] = []
+        func addStage(_ prefix: String, _ stage: LatencyHistogramSnapshot.Stage) {
+            func add(_ key: String, _ value: Double?) {
+                guard let value, value.isFinite else { return }
+                fields.append("\"\(key)\":\(jsonNumber(value))")
+            }
+            add("\(prefix)_p50_ms", histogramQuantile(0.50, stage: stage))
+            add("\(prefix)_p95_ms", histogramQuantile(0.95, stage: stage))
+            add("\(prefix)_p99_ms", histogramQuantile(0.99, stage: stage))
+        }
+        addStage("lat_recv_to_assemble", histograms.receiveToAssemble)
+        addStage("lat_assemble_to_submit", histograms.assembleToSubmit)
+        addStage("lat_decode_submit_to_output", histograms.submitToOutput)
+        addStage("lat_output_to_present", histograms.outputToPresent)
+        addStage("lat_end_to_end", histograms.endToEnd)
+        addStage("glass_to_glass", histograms.glassToGlass)
+        addStage("input_to_photon_est", histograms.inputToPhoton)
+        // The client input legs input_to_photon_est is built from.
+        if let stage = snap.inputDeliverLatency { addStage("lat_input_deliver", stage) }
+        if let stage = snap.inputCallbackLatency { addStage("lat_input_callback_queue", stage) }
+        if let stage = snap.inputLocalLatency { addStage("lat_input_queue_to_wire", stage) }
+        // DECODE time split by frame type (signal: DECODE).
+        addStage("decode_idr", histograms.decodeIDR)
+        addStage("decode_p", histograms.decodeP)
+        // IDR/RFI round-trip distribution (signal: IDR-RTT).
+        addStage("idr_round_trip", histograms.idrRoundTrip)
+        return fields
+    }
+
+    /// Rolling 60-second percentiles distinguish recent stalls from old ones.
+    /// Only pipeline and glass-to-glass stages carry these fields; empty windows are omitted.
+    package static func ndjsonRollingLatencyFields(_ extras: TelemetrySnapshot.Extras) -> [String] {
+        guard let rolling = extras.latencyRolling60s else { return [] }
+        var fields: [String] = []
+        // Emitted even at 0 (unlike the stages) - 0 is exactly the signal that
+        // distinguishes "stale window" from "live but quiet". endToEnd is the
+        // per-present spine, so its count IS the presented-frames-in-window.
+        fields.append("\"frames_in_window_60s\":\(rolling.endToEnd.observationCount)")
+        func addStage(_ prefix: String, _ stage: LatencyHistogramSnapshot.Stage) {
+            func add(_ key: String, _ value: Double?) {
+                guard let value, value.isFinite else { return }
+                fields.append("\"\(key)\":\(jsonNumber(value))")
+            }
+            add("\(prefix)_p50_60s_ms", histogramQuantile(0.50, stage: stage))
+            add("\(prefix)_p95_60s_ms", histogramQuantile(0.95, stage: stage))
+            add("\(prefix)_p99_60s_ms", histogramQuantile(0.99, stage: stage))
+        }
+        addStage("lat_recv_to_assemble", rolling.receiveToAssemble)
+        addStage("lat_assemble_to_submit", rolling.assembleToSubmit)
+        addStage("lat_decode_submit_to_output", rolling.submitToOutput)
+        addStage("lat_output_to_present", rolling.outputToPresent)
+        addStage("lat_end_to_end", rolling.endToEnd)
+        addStage("glass_to_glass", rolling.glassToGlass)
+        return fields
+    }
+
+    /// Escape a string for a JSON value (NDJSON). Backslash, double-quote, and
+    /// control chars an SSID or label could carry. Kept minimal - the rig only
+    /// ever emits ASCII labels (SSIDs, band names) plus the build SHA/date.
+    package static func jsonStringEscape(_ value: String) -> String {
+        var out = ""
+        out.reserveCapacity(value.count)
+        for scalar in value.unicodeScalars {
+            switch scalar {
+            case "\\": out += "\\\\"
+            case "\"": out += "\\\""
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            default:
+                if scalar.value < 0x20 {
+                    out += String(format: "\\u%04x", scalar.value)
+                } else {
+                    out.unicodeScalars.append(scalar)
+                }
+            }
+        }
+        return out
+    }
+
+    /// Avoid exponent notation for ordinary values so offline NDJSON readers agree.
+    package static func jsonNumber(_ value: Double) -> String {
+        if value == value.rounded() && abs(value) < 1e15 {
+            return String(Int64(value))
+        }
+        // Scaling large doubles loses fractional bits before rounding.
+        guard value.isFinite, abs(value) < 1e12 else {
+            return String(format: "%.3f", value)
+        }
+        let scaled = Int64((abs(value) * 1_000).rounded())
+        let fraction = scaled % 1_000
+        let padding = fraction < 10 ? "00" : fraction < 100 ? "0" : ""
+        let sign = value < 0 && scaled != 0 ? "-" : ""
+        return "\(sign)\(scaled / 1_000).\(padding)\(fraction)"
+    }
+}
+
+#endif

@@ -16,6 +16,7 @@
 //  full-screen user lands back in full screen and the window user in a window.
 //
 
+import GlimmerEngine
 import AppKit
 
 extension StreamWindow {
@@ -50,7 +51,7 @@ extension StreamWindow {
             retireFullScreenCover()
             applyMiniPlayerChrome()
             installWindowedLifecycleObservers()
-            setBackgrounded(false)
+            setBackgrounded(false, reason: .miniPlayerChanged)
             onDidBecomeReadyForInput?()
             onMiniPlayerChanged?(true)
         }
@@ -163,9 +164,9 @@ extension StreamWindow {
     func updateMiniPlayerControls() {
         guard isMiniPlayer, let close = window.standardWindowButton(.closeButton) else { return }
         let visible = miniPlayerHovering && !didHideCursor
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            close.alphaValue = visible ? 1 : 0
-        } else {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Motion.short
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             close.animator().alphaValue = visible ? 1 : 0
         }
     }

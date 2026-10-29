@@ -11,6 +11,7 @@
 //  UserDefaults key is read-only there for one-shot migration.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import os.log
@@ -28,11 +29,13 @@ extension AppModel {
     /// The moonlight-qt install does not have to be present - we're just
     /// reading a plist that may or may not exist. Safe to call on every
     /// launch; the flag short-circuits after the first successful pass.
-    func migrateFromMoonlightQtIfNeeded(defaults: UserDefaults = .standard,
+    func migrateFromMoonlightQtIfNeeded(defaults: UserDefaults? = nil,
                                         moonlightSuite: String = IdentityManager.moonlightQtSuiteName) {
+        let defaults = defaults ?? hostsDefaults
         let flagKey = "glimmer.hostsMigratedFromMoonlightQt"
         guard !defaults.bool(forKey: flagKey) else { return }
 
+        guard !PersistentStorage.isTesting || moonlightSuite != IdentityManager.moonlightQtSuiteName else { return }
         guard let mq = UserDefaults(suiteName: moonlightSuite) else {
             defaults.set(true, forKey: flagKey)
             return
@@ -87,7 +90,8 @@ extension AppModel {
 
     /// Rebuild `hosts` from UserDefaults. Public because Settings → PCs calls
     /// it after the user manually edits the list.
-    func loadHosts(defaults: UserDefaults = .standard) {
+    func loadHosts(defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? hostsDefaults
         let count = defaults.integer(forKey: "hosts.size")
         guard count > 0 else {
             hosts = []
@@ -139,7 +143,8 @@ extension AppModel {
                 // Backfilled from /serverinfo's `<mac>` on every successful
                 // poll/pair (only learnable while the host is online).
                 macAddress: defaults.string(forKey: "hosts.\(i).mac"),
-                wakeOnLAN: defaults.object(forKey: "hosts.\(i).wol") as? Bool ?? true
+                wakeOnLAN: defaults.object(forKey: "hosts.\(i).wol") as? Bool ?? true,
+                launcherStyle: LauncherStyle.load(for: uuid, defaults: defaults)
             ))
         }
 
@@ -156,7 +161,8 @@ extension AppModel {
     }
 
     /// Refresh the visible PC record immediately; ending a stream need not reactivate the app.
-    func recordLastPlayed(hostID: String, at date: Date = Date(), defaults: UserDefaults = .standard) {
+    func recordLastPlayed(hostID: String, at date: Date = Date(), defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? hostsDefaults
         defaults.set(date, forKey: "glimmer.lastConnected.\(hostID)")
         loadHosts(defaults: defaults)
     }
@@ -174,7 +180,8 @@ extension AppModel {
         return 0
     }
 
-    func setWakeOnLAN(_ host: Host, enabled: Bool, defaults: UserDefaults = .standard) {
+    func setWakeOnLAN(_ host: Host, enabled: Bool, defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? hostsDefaults
         let slot = Self.hostSlot(for: host.id, defaults: defaults)
         guard slot > 0 else { return }
         defaults.set(enabled, forKey: "hosts.\(slot).wol")
@@ -183,7 +190,8 @@ extension AppModel {
 
     /// Backfill/refresh a host's MAC from a successful /serverinfo. Zeroed or
     /// empty MACs are rejected so a bad refresh never clobbers a real one.
-    func updateHostMac(hostID: String, mac: String?, defaults: UserDefaults = .standard) {
+    func updateHostMac(hostID: String, mac: String?, defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? hostsDefaults
         guard let normalized = WakeOnLAN.normalizeMac(mac) else { return }
         let slot = Self.hostSlot(for: hostID, defaults: defaults)
         guard slot > 0 else { return }
@@ -198,7 +206,8 @@ extension AppModel {
     /// matching the moonlight-qt schema. An empty/whitespace name clears the
     /// override (the tile falls back to the real hostname). Keyed by UUID like
     /// `unpair`, since hostname can differ from displayName for renamed hosts.
-    func renameHost(_ host: Host, to newName: String, defaults: UserDefaults = .standard) {
+    func renameHost(_ host: Host, to newName: String, defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? hostsDefaults
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         let count = defaults.integer(forKey: "hosts.size")
         guard count > 0 else { return }
@@ -233,7 +242,8 @@ extension AppModel {
     func saveHost(uuid: String, hostname: String, address: String,
                   serverCertPEM: String?, appVersion: String?,
                   apps: [PairedApp], macAddress: String? = nil,
-                  defaults: UserDefaults = .standard, supportBase: URL? = nil) throws {
+                  defaults: UserDefaults? = nil, supportBase: URL? = nil) throws {
+        let defaults = defaults ?? hostsDefaults
         // Commit the file pin first so a failed write cannot leave a conflicting hint.
         if let pem = serverCertPEM {
             try PinnedCertStore.store(pem: pem, forHostID: uuid, defaults: defaults, base: supportBase)
@@ -357,11 +367,7 @@ extension AppModel {
     /// Only a private-range IPv4 literal moves with a DHCP lease. A hostname or a
     /// Tailscale or public address is the user's stable choice, so it's never healed.
     nonisolated static func canHealAddress(_ address: String) -> Bool {
-        guard let raw = IPv4Address(address)?.rawValue else { return false }
-        let octets = Array(raw)
-        let (first, second) = (octets[0], octets[1])
-        return first == 10 || (first == 172 && (16...31).contains(second))
-            || (first == 192 && second == 168) || (first == 169 && second == 254)
+        HostAddressRecovery.canHeal(address)
     }
 
     /// A PC on a new DHCP lease still answers mDNS. Browse for up to `seconds` for an
@@ -370,42 +376,18 @@ extension AppModel {
     @discardableResult
     func healAddress(of host: Host, within seconds: Double) async -> Bool {
         guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
-        var probe = nativeServerInfo(for: host)
-        let saved = probe.address
-        guard probe.serverCertPEM != nil, Self.canHealAddress(saved) else { return false }
-        let discovery = HostDiscovery(ipv4Only: true)
-        let session = await discovery.start()
-        let deadline = Task {
-            try? await Task.sleep(for: .seconds(seconds))
-            await discovery.stop()
-        }
-        var moved: String?
-        // Every change to the list re-checks it, so a PC still booting gets another try.
-        search: for await found in session.stream {
-            for address in Set(found.hosts.map(\.host)) where address != saved && IPv4Address(address) != nil {
-                guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
-                probe.address = address
-                let client = makeNetwork(probe)
-                let answer = try? await client.fetchServerInfo()
-                await client.shutdown()
-                guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
-                if answer?.uniqueId == host.id {
-                    moved = address
-                    break search
-                }
-            }
-        }
-        deadline.cancel()
-        await discovery.stop()
-        guard let moved else { return false }
-        return await saveHealedAddress(of: host, moved: moved, saved: saved, port: probe.httpPort)
+        let probe = nativeServerInfo(for: host)
+        guard let moved = await HostAddressRecovery.find(probe, within: seconds, makeNetwork: makeNetwork),
+              !Task.isCancelled, !hostPolling.systemSleeping else { return false }
+        return await saveHealedAddress(of: host, moved: moved.address, saved: probe.address, port: probe.httpPort)
     }
 
     /// A second LAN interface can answer discovery too; replace only an unreachable address.
     func saveHealedAddress(
-        of host: Host, moved: String, saved: String, port: Int, defaults: UserDefaults = .standard,
+        of host: Host, moved: String, saved: String, port: Int, defaults: UserDefaults? = nil,
         probe: @Sendable (String, Int, Int) async -> HostReachability.Outcome = HostReachability.measureRTT
     ) async -> Bool {
+        let defaults = defaults ?? hostsDefaults
         guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
         let result = await probe(saved, port, 2_000)
         guard !Task.isCancelled, !hostPolling.systemSleeping, result == .unreachable,
@@ -415,8 +397,8 @@ extension AppModel {
         return true
     }
 
-    func selectHost(_ host: Host, defaults: UserDefaults = .standard) {
-        guard !isStreaming else { return }
+    func selectHost(_ host: Host, defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? hostsDefaults
         // A prior PC's red banner would name the wrong machine after a switch.
         nativeStreamError = nil
         defaults.set(host.id, forKey: "glimmer.selectedHostID")
@@ -428,6 +410,7 @@ extension AppModel {
     /// moves only on a real address change, since monitor() drops the PHY samples.
     func selectionChanged(from old: Host?) {
         if old?.id != selectedHost?.id {
+            hostUnreachableStreak = 0
             hostLiveStatus = nil
             wakeFailedHostID = nil
             wakeFailureReason = nil
@@ -438,28 +421,23 @@ extension AppModel {
 
     // MARK: - Unpair / cert recovery
 
-    /// Drop a paired host from local storage. This is the user-visible
-    /// inverse of `pair(hostnameOrIP:pin:)` - we wipe the UserDefaults
-    /// entries that `loadHosts` reads, plus any pinned cert keyed by
-    /// uniqueId, plus the per-host last-connected timestamp. We do NOT call
-    /// the host's `/unpair` endpoint here: the host treats our client cert
-    /// as the pairing token, so dropping it on our side is enough for our
-    /// purposes. If the host still lists us, the user can clear that from
-    /// the host's own UI; a stale entry there is harmless without our key.
-    /// Forget a host and leave the client in a fully clean state for it.
-    /// Deliberately idempotent / bulletproof: every cleanup keyed by the host
-    /// id runs UNCONDITIONALLY (pinned cert, last-connected, selection), and we
-    /// wipe ALL matching UserDefaults slots, not just the first - so a partial,
-    /// duplicated, or corrupt record (e.g. left over from the namespace
-    /// migration) still ends up gone. Safe to call repeatedly; a no-op once the
-    /// host is already clean.
-    func unpair(_ host: Host, defaults: UserDefaults = .standard, supportBase: URL? = nil) {
+    /// Delete trust before metadata so a failed removal leaves the PC available for retry.
+    /// Clear every matching slot, including duplicates and partial legacy records.
+    @discardableResult
+    func unpair(_ host: Host, defaults: UserDefaults? = nil,
+                supportBase: URL? = nil) throws -> Task<Void, Never> {
+        let defaults = defaults ?? hostsDefaults
 
         // --- Unconditional, id-keyed cleanup (runs even if no slot matches) ---
         // File-store + legacy UserDefaults pinned cert.
-        PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
+        let supportBase = supportBase ?? self.supportBase
+        try PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
         defaults.removeObject(forKey: "glimmer.lastConnected.\(host.id)")
         HostCodecPreference.forget(hostID: host.id, defaults: defaults)
+        LauncherStyle.forget(pcID: host.id, defaults: defaults)
+        let artCache = supportBase == nil || supportBase == self.supportBase
+            ? launcherArtCache : LauncherArtCache(base: supportBase)
+        let clearingArt = Task { await artCache.remove(pcID: host.id) }
         if defaults.string(forKey: "glimmer.selectedHostID") == host.id {
             defaults.removeObject(forKey: "glimmer.selectedHostID")
         }
@@ -495,5 +473,6 @@ extension AppModel {
         }
 
         loadHosts(defaults: defaults)
+        return clearingArt
     }
 }

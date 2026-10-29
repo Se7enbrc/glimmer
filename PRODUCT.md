@@ -8,8 +8,8 @@ ios
 
 ## Users
 
-People with a Mac and a gaming PC running Sunshine who want to play their PC
-games on the Mac. They use it in two scenes:
+People with a Mac, iPhone or iPad and a gaming PC running Sunshine who want to
+play their PC games on those devices. On the Mac, they use it in two scenes:
 
 - at a desk on Ethernet, with the Mac as the PC's screen;
 - away from the desk, usually on the couch with a MacBook on Wi-Fi.
@@ -51,17 +51,46 @@ that inspired Glimmer; it is not the protocol's name.
 - Install from the Homebrew cask or the notarized DMG; the app updates itself
   with Sparkle.
 
+## iPhone and iPad
+
+The iPhone and iPad app requires iOS or iPadOS 26 or later. It shares the Mac
+app's Swift engine and uses SwiftUI and UIKit for pairing, the launcher and
+streaming. Menus work in portrait or landscape. iPhone streams use landscape;
+iPad streams use their window in any orientation, including narrow windows. Both
+use the same ordered choices: Native, 1080p 60 and 1080p 120. Native uses the
+window's pixel size as its target and chooses the closest mode listed in
+`docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
+display's refresh limit and share the same codec, HDR and quality rules. A
+connected external display can show the picture while the device keeps the
+controls. Both support physical controllers, hardware keyboards, mice and
+trackpads. Controller mouse mode shares right-handed and left-handed presets and
+custom bindings. Stream from PC, Stop Streaming and Quit App on PC are available
+in Shortcuts; launch and stop links use the same format as the Mac.
+Disconnecting quits the game on the PC by default. “Leave games running when you
+disconnect” enables continuation for games and PCs that handle a screen-size
+change. Running games offer Resume or Continue here and an explicit Quit action
+on both platforms.
+
+Video fills the window, cropping edges when the aspect changes. Once a window
+resize settles, the stream moves to the new window's listed mode through a
+resume-only change; rotation keeps the format. No resize quits or relaunches the
+game. The [window streaming contract](docs/IPAD_WINDOW_STREAMING.md) explains
+mode selection, the 90-mode budget and PC setup requirements.
+
+Distribution is internal TestFlight only so far, with no App Store release. tvOS
+and visionOS are possible future ports.
+
 ## Capabilities and Constraints
 
-- macOS 26 or later, Apple Silicon only. The platform value above is `ios`
+- macOS 15.7 or later, Apple Silicon only. The platform value above is `ios`
   because the schema has no macOS value; it selects Apple HIG native guidance.
-  Glimmer is a Mac app, so the macOS HIG applies and the iPhone-specific
-  guidance (touch targets, tab bars, safe areas, edge swipes) does not.
+  The macOS HIG governs the Mac app; iPhone and iPad guidance (touch targets,
+  tab bars, safe areas, edge swipes) governs the iOS app.
 - Works against a current, unmodified Sunshine. No feature may require a patched
   PC.
 - No analytics, tracking or third-party network calls. Glimmer talks only to the
   user's PC, the local network for discovery and Wake on LAN, and its update
-  feed.
+  feed and update downloads.
 - The renderer is AVSampleBufferDisplayLayer, not Metal. Fullscreen covers the
   whole screen, notch included, and supports macOS Game Mode; the player changes
   Game Mode in the system Game Overlay.
@@ -79,7 +108,9 @@ that inspired Glimmer; it is not the protocol's name.
 
 ## Evidence on Hand
 
-- `README.md`: features and install; `docs/assets/launcher.png`: the launcher.
+- `README.md`: features and install; `docs/assets/launcher-art-*.png`: the
+  launcher art (rendered from the site); `docs/assets/launcher.png`: a real
+  screenshot.
 - `CHANGELOG.md`: every release as plain-language bullets.
 - `docs/PROFILING.md` and per-session telemetry under `~/Library/Logs/Glimmer`
   back the tuning claims.

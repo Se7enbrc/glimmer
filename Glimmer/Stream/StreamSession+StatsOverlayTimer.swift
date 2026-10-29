@@ -1,64 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamSession+StatsOverlayTimer.swift
-//
-//  The 4 Hz stats-overlay timer; its body is `StatsOverlayRefresh.tick`, a function
-//  of the decoder, overlay and pill, so tests drive one tick at a time.
-//
+// The 4 Hz stats-overlay timer has a directly testable tick, independent of the run loop.
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os
 
 extension StreamSession {
 
-    /// Refresh the overlay at 4 Hz. Capture FPS rolls across four samples;
-    /// pipeline rates retain their independent one-second measurement window.
-    func startStatsOverlayTimer(
-        statsRowsProvider: @escaping @MainActor () -> Set<StatsRow.Kind>,
-        statsThresholdsProvider: @escaping @MainActor () -> StatsThresholds
-    ) async {
-        let dec = videoDecoder
-        let win = window
-        let inp = input
-        await MainActor.run {
-            self.statsOverlayTimer?.invalidate()
-            // Scheduled inside `MainActor.run`, so it fires on the main run loop
-            // where the decoder and window live.
-            let clock = self.clock
-            let refresh = StatsOverlayRefresh(now: { Double(clock.uptimeNanos()) / 1_000_000_000 })
-            let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
-                MainActor.assumeIsolated {
-                    guard let dec, let win else { return }
-                    refresh.tick(
-                        dec: dec, overlay: win.statsOverlay, banner: win.networkBanner, input: inp,
-                        rows: statsRowsProvider, thresholds: statsThresholdsProvider)
-                }
-            }
-            // 30 ms lets the run loop coalesce the timer, well under half the interval.
-            timer.tolerance = 0.03
-            self.statsOverlayTimer = timer
-        }
-    }
-
-    /// One snapshot for the menu bar's Connection Details, plus the overlay state.
-    func menuBarDetails() async -> (snapshot: StreamStatsSnapshot, overlayShown: Bool)? {
+    func menuBarDetails() async
+        -> (snapshot: StreamStatsSnapshot, overlayShown: Bool, resolution: (width: Int, height: Int))? {
         guard let dec = videoDecoder else { return nil }
         return await MainActor.run {
             var snap = dec.statsSnapshot(minWindowSeconds: 1.0)
             if let rtt = dec.telemetryEstimatedRtt() { snap.rttMs = rtt.rttMs }
-            return (snap, dec.statsOverlayEnabled)
+            return (snap, dec.statsOverlayEnabled, (Int(dec.streamWidth), Int(dec.streamHeight)))
         }
     }
 
-    func setStatsOverlayCorner(_ corner: StatsOverlayCorner) async {
-        guard let win = window else { return }
-        await MainActor.run { win.statsOverlay.corner = corner }
-    }
-
-    /// The current session's overlay, the same switch the keyboard toggle drives.
     func setStatsOverlay(_ shown: Bool) async {
         guard let dec = videoDecoder else { return }
         await MainActor.run { dec.statsOverlayEnabled = shown }
@@ -68,12 +29,50 @@ extension StreamSession {
 /// One 4 Hz overlay refresh, with the per-tick memory the pill and audit carry.
 /// Runs on the main run loop and reads only cached ~1s windows or cheap gauges.
 @MainActor
+final class MacSessionStats {
+    let window: StreamWindow
+    let input: InputForwarder
+    let decoder: VideoDecoder
+    let clock: SessionClock
+    let rows: @MainActor () -> Set<StatsRow.Kind>
+    let thresholds: @MainActor () -> StatsThresholds
+    var timer: Timer?
+
+    init(window: StreamWindow, input: InputForwarder, decoder: VideoDecoder, clock: SessionClock,
+         rows: @escaping @MainActor () -> Set<StatsRow.Kind>, thresholds: @escaping @MainActor () -> StatsThresholds) {
+        self.window = window
+        self.input = input
+        self.decoder = decoder
+        self.clock = clock
+        self.rows = rows
+        self.thresholds = thresholds
+    }
+
+    func start() {
+        stop()
+        let clock = self.clock
+        let refresh = StatsOverlayRefresh(now: { Double(clock.uptimeNanos()) / 1_000_000_000 })
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                refresh.tick(dec: self.decoder, overlay: self.window.statsOverlay, banner: self.window.networkBanner, input: self.input,
+                    rows: self.rows, thresholds: self.thresholds, visible: self.window.window.occlusionState.contains(.visible))
+            }
+        }
+        timer?.tolerance = 0.03
+    }
+
+    func stop() { timer?.invalidate(); timer = nil }
+}
+
+@MainActor
 final class StatsOverlayRefresh {
     // Capture FPS rolls across ticks; raw pipeline rates keep their own 1 s window.
     static let fpsWindowSeconds = 1.0
     let hitch: PerceivedHitchBox
     private let gateAudit: LinkGateAuditBox
     private let history = StreamHistoryFeed()
+    private var backdropDiagnostic = ""
 
     init(now: @escaping @MainActor () -> CFTimeInterval = CACurrentMediaTime) {
         hitch = PerceivedHitchBox(now: now)
@@ -83,18 +82,24 @@ final class StatsOverlayRefresh {
     /// The pill updates every tick, HUD or not; the HUD's enrichment, row set and
     /// thresholds are read only while it's shown, so a Settings flip lands next tick.
     func tick(
-        dec: VideoDecoder, overlay: StatsOverlayLayer, banner: StreamBannerLayer, input: InputForwarder?,
-        rows: @MainActor () -> Set<StatsRow.Kind>, thresholds: @MainActor () -> StatsThresholds
+        dec: VideoDecoder, overlay: StatsOverlayLayer, banner: StreamBanner, input: InputForwarder?,
+        rows: @MainActor () -> Set<StatsRow.Kind>, thresholds: @MainActor () -> StatsThresholds,
+        visible: Bool = true
     ) {
-        gateAudit.tick(streamRtt: dec.telemetryEstimatedRtt()?.rttMs)
+        let rtt = dec.telemetryEstimatedRtt()
+        gateAudit.tick(streamRtt: rtt?.rttMs)
         var snap = dec.statsSnapshot(minWindowSeconds: Self.fpsWindowSeconds)
         history.tick(mbps: snap.measuredBitrateMbps, fps: snap.receivedFps,
-                     rttMs: dec.telemetryEstimatedRtt()?.rttMs)
+                     rttMs: rtt?.rttMs)
         // Perceived present hitching, not env_state (link contention anti-correlates with felt stutter).
         banner.setSustained(hitch.perceivedHitch(snap: snap), text: "Stream stuttering")
-        guard dec.statsOverlayEnabled else { return }
+        guard visible, dec.statsOverlayEnabled else {
+            dec.hudBackdropRect = .zero
+            if !backdropDiagnostic.isEmpty { logBackdropChanges(dec: dec, overlay: overlay) }
+            return
+        }
         // The decoder's live backend survives a silent reconnect; nil renders "-".
-        if let rttInfo = dec.telemetryEstimatedRtt() {
+        if let rttInfo = rtt {
             snap.rttMs = rttInfo.rttMs
             snap.rttVarianceMs = rttInfo.varianceMs
         }
@@ -115,6 +120,19 @@ final class StatsOverlayRefresh {
         // The decoder samples the picture under the column for the HUD's ink.
         dec.hudBackdropRect = overlay.backdropSampleRect
         if let luminance = dec.hudBackdropLuminance { overlay.updateBackdropLuminance(luminance) }
+        logBackdropChanges(dec: dec, overlay: overlay)
+    }
+
+    private func logBackdropChanges(dec: VideoDecoder, overlay: StatsOverlayLayer) {
+        let state = dec.hudBackdropState
+        let format = state.pixelFormat.map { dec.fourCCString(from: $0) } ?? "none"
+        let transfer = state.transfer ?? "none"
+        let status = state.luminance == nil ? "waiting" : (overlay.usesDarkInk ? "dark ink" : "light ink")
+        let diagnostic = "rect=\(state.rect) format=\(format) transfer=\(transfer) state=\(status)"
+        guard diagnostic != backdropDiagnostic else { return }
+        backdropDiagnostic = diagnostic
+        let luminance = state.luminance.map { String(format: "%.3f", $0) } ?? "none"
+        Diag.info("HUD backdrop: \(diagnostic) luminance=\(luminance)", "Stream")
     }
 }
 

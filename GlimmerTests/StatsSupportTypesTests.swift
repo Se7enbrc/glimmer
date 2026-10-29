@@ -6,6 +6,7 @@
 //  Overlay presets and corners, stream history, trace metrics, resource labels, display samples.
 //
 
+import GlimmerEngine
 import Darwin
 import Foundation
 import Testing

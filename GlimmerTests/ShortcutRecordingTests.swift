@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ShortcutRecordingTests.swift
-//
-//  The recorder rules: a keyboard shortcut can't be ⇧ alone, a main-menu
-//  shortcut, or a copy of another one, and a controller chord needs two buttons.
-//
+// Keyboard recording avoids reserved keys; the controller stop chord stays fixed.
 
+import GlimmerEngine
 import AppKit
 import Testing
 @testable import Glimmer
@@ -81,9 +77,11 @@ struct ShortcutRecordingTests {
         #expect(problem(chord(ctrl: true, alt: true, "1")) == nil)
     }
 
-    @Test func controllerChordNeedsTwoButtons() {
-        #expect(!ChordCaptureSheet.canSave([]))
-        #expect(!ChordCaptureSheet.canSave([.r2]))
-        #expect(ChordCaptureSheet.canSave([.l3, .r3]))
+    @Test func controllerStopRequiresAllFourFixedButtons() {
+        let required: Set<ControllerButton> = [.l1, .r1, .options, .create]
+        #expect(ControllerChord.satisfied(.startSelectL1R1, custom: [], held: required))
+        for missing in required {
+            #expect(ControllerChord.satisfied(.startSelectL1R1, custom: [], held: required.subtracting([missing])) == false)
+        }
     }
 }

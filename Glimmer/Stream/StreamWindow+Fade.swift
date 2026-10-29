@@ -3,45 +3,43 @@
 
 // First-frame fade-in and close after the native Space has finished exiting.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import QuartzCore
 
 extension StreamWindow {
 
-    /// Animate the window from invisible (alphaValue 0) to fully visible
-    /// over 350ms using the same ease-in-out timing macOS uses for app
-    /// activation. Called by the session owner when VideoDecoder produces
-    /// its first decoded frame. Idempotent - only runs once per show()
-    /// (guarded by `awaitingFirstFrameFadeIn`), so mid-stream re-fires of
-    /// the first-frame event (resolution change, decoder flush) don't
-    /// re-animate an already-visible window.
+    /// First-picture gating prevents an empty black window during connection.
+    /// Later decoder flushes never replay the entrance.
     public func fadeInOnFirstFrame() {
         // didClose: the first frame can land inside the close fade.
         guard awaitingFirstFrameFadeIn, !didClose else { return }
+        if !isBorderlessCover, streamDelegate.closeState.transition != .idle {
+            guard !pendingFirstFrameReveal else { return }
+            pendingFirstFrameReveal = true
+            // AppKit can drop settlement delivery; never strand a decoded picture behind alpha zero.
+            scheduleCoverSettlement(1.5) { [weak self] in
+                guard let self, self.pendingFirstFrameReveal else { return }
+                self.revealFirstFrame()
+            }
+            return
+        }
+        revealFirstFrame()
+    }
+
+    private func revealFirstFrame() {
+        guard awaitingFirstFrameFadeIn, !didClose else { return }
+        pendingFirstFrameReveal = false
         awaitingFirstFrameFadeIn = false
         if !userBackgrounded { takePointerOnFirstFrame() }
-        // The window is at level `mainMenuWindow + 1` (notch path) or in a
-        // fullscreen Space (safe-area path), so as alphaValue ramps 0 → 1
-        // it visually covers the menu bar (level 24) and the Dock (level
-        // ~20). We DEFER hiding them via `NSApp.presentationOptions` until
-        // AFTER the fade completes: setting those flags is instant in the
-        // compositor, so doing it at fade-start leaves a one-vsync window
-        // where the bars are gone but the window is still at ~0 alpha -
-        // that's the "bare-desktop flash" the user was seeing. Post-fade
-        // the flags become a no-op user-side because the now-opaque
-        // window is already covering everything they hide.
+        // Hide the bars only after the picture covers them, avoiding a bare-desktop flash.
         let win = window
         let cover = coversNotch
-        // Under Reduce Motion, snap to visible instead of the 350ms fade -
-        // the fade is exactly the kind of large-surface opacity ramp the
-        // setting exists to suppress. We still defer presentationOptions to
-        // after alpha is set so the menu bar / Dock never visibly vanish
-        // against a transparent window (the "bare-desktop flash").
         if coverTransition(.firstFrame) == .slide, !userBackgrounded {
             slideCover(entering: true) { [weak self] in
                 self?.applyPresentationOptions(coversNotch: cover)
-                self?.refreshPresentationVisibility()
+                self?.refreshPresentationVisibility(reason: .firstFrameRevealCompleted)
             }
             // Commit the offscreen start before the window turns visible, so
             // the picture never shows unslid for a frame.
@@ -49,24 +47,22 @@ extension StreamWindow {
             win.alphaValue = 1.0
             return
         }
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            win.alphaValue = 1.0
-            applyPresentationOptions(coversNotch: cover)
-            refreshPresentationVisibility()
-            return
-        }
+        presentationRevealInProgress = true
+        let generation = coverSlideGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.35
+            ctx.duration = Motion.short
             ctx.allowsImplicitAnimation = true
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             win.animator().alphaValue = 1.0
         }, completionHandler: {
             // runAnimationGroup delivers the completion on the main run loop,
             // so we are already on the MainActor - assumeIsolated bridges the
             // SDK's non-isolated @Sendable handler back to MainActor state.
             MainActor.assumeIsolated {
+                guard !self.didClose, self.coverSlideGeneration == generation else { return }
+                self.presentationRevealInProgress = false
                 self.applyPresentationOptions(coversNotch: cover)
-                self.refreshPresentationVisibility()
+                self.refreshPresentationVisibility(reason: .firstFrameRevealCompleted)
             }
         })
     }
@@ -75,7 +71,7 @@ extension StreamWindow {
     /// full-screen cover: a late fade-in completion or a backgrounded window
     /// must not hide the menu bar under the launcher. Window mode keeps both.
     func applyPresentationOptions(coversNotch cover: Bool) {
-        guard displayMode == .fullScreen, !didClose, !userBackgrounded,
+        guard displayMode == .fullScreen, !didClose, !userBackgrounded, !presentationRevealInProgress,
               NSApp.isActive, window.isKeyWindow, window.isVisible else { return }
         // AppKit negotiates Space options on entry; never replace them mid-transition.
         guard cover || window.styleMask.contains(.fullScreen) else { return }
@@ -101,6 +97,7 @@ extension StreamWindow {
     public func close() {
         guard !didClose else { return }
         didClose = true
+        for notice in notices { notice.removeWithStream() }
         window.ignoresMouseEvents = true
         setCursorHidden(false)
         removeCloseObservers()
@@ -160,18 +157,19 @@ extension StreamWindow {
 
     private func fadeThenExitSpace() {
         let win = window
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            win.alphaValue = 0
-            win.toggleFullScreen(nil)
-            return
-        }
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.15
+            ctx.duration = Motion.short
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             win.animator().alphaValue = 0
         }, completionHandler: {
             MainActor.assumeIsolated { win.toggleFullScreen(nil) }
         })
+    }
+
+    /// Backgrounding starts the retreat; only actual invisibility makes its close immediate.
+    nonisolated static func closeTransition(cover: CoverTransition, visible: Bool, alpha: CGFloat) -> CoverTransition {
+        guard visible, alpha > 0 else { return .snap }
+        return cover == .slide ? .slide : .fade
     }
 
     private func fadeOutForClose() {
@@ -181,23 +179,46 @@ extension StreamWindow {
             previousPresentationOptions = nil
         }
         let win = window
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || win.alphaValue == 0 {
+        // The borderless cover leaves the way it came in, unless it is already off screen.
+        switch Self.closeTransition(cover: coverTransition(.close), visible: win.isVisible, alpha: win.alphaValue) {
+        case .slide:
+            slideCover(entering: false, closing: true) { [weak self] in self?.finishClose() }
+            return
+        case .snap:
             win.alphaValue = 0.0
             finishClose()
             return
+        case .fade:
+            break
         }
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.25
+            ctx.duration = Motion.short
             ctx.allowsImplicitAnimation = true
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             win.animator().alphaValue = 0.0
+            // Notices are separate windows, so they fade with the stream explicitly.
+            for notice in self.notices { notice.noticeWindow?.animator().alphaValue = 0 }
         }, completionHandler: {
             MainActor.assumeIsolated { self.finishClose() }
         })
     }
 
+    /// The launcher receipt starts its hold after the stream has actually left the screen.
+    func waitForVisualClose() async {
+        guard didClose, !visualCloseFinished else { return }
+        await withCheckedContinuation { visualCloseWaiters.append($0) }
+    }
+
+    func completeVisualClose() {
+        visualCloseFinished = true
+        let waiters = visualCloseWaiters
+        visualCloseWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
     /// Neither the last frame nor the window may disappear while AppKit still owns its Space.
     private func finishClose() {
+        for notice in notices { notice.removeWithStream() }
         window.orderOut(nil)
         window.close()
         displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true) { }
@@ -206,5 +227,6 @@ extension StreamWindow {
         if let main = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title == "Glimmer" }) {
             main.makeKeyAndOrderFront(nil)
         }
+        completeVisualClose()
     }
 }

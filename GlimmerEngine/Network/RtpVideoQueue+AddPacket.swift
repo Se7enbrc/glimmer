@@ -1,0 +1,354 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
+//
+//  RtpVideoQueue+AddPacket.swift
+//  RTP packet assembly on the single receive thread shared with reconstruction.
+import Foundation
+
+extension RtpVideoQueue {
+
+    // MARK: - RtpvAddPacket (RtpVideoQueue.c:543-804)
+
+    /// The decoded NV-header fields a single datagram contributes to the add path,
+    /// parsed once at the top of `addPacket` and threaded through its helpers.
+    private struct NvFields {
+        let frameIndex: UInt32
+        let fecIndex: UInt32
+        let fecCurrentBlockNumber: UInt8
+        let multiFecBlocks: UInt8
+        let fecInfo: UInt32
+    }
+
+    /// Outcome of the new-frame / new-FEC-block transition handling: whether the
+    /// caller should keep going with the just-validated buffer window, or return
+    /// early with a terminal `AddResult` (a reorder-hold `.queued`, or a dropped-
+    /// frame `.rejected`).
+    private enum TransitionOutcome {
+        case proceed
+        case finished(AddResult)
+    }
+
+    func addPacket(_ rtp: ParsedRtp, receiveTimeUs: UInt64,
+                   allowHold: Bool = true) -> AddResult {
+        let bytes = rtp.bytes
+        let seq = rtp.seq
+        let timestamp = rtp.timestamp
+
+        // Reject packets too small for the NV header.
+        guard let frameIndex = rtp.frameIndex else {
+            return .rejected
+        }
+
+        // Reuse the frame index already parsed for receive accounting.
+        let nv = rtp.dataOffset
+        let fecInfo = le32(bytes, nv + 12)
+        let multiFecBlocks = bytes[nv + 11]
+        let fields = NvFields(
+            frameIndex: frameIndex,
+            fecIndex: (fecInfo & 0x3FF000) >> 12,
+            fecCurrentBlockNumber: (multiFecBlocks >> 4) & 0x3,
+            multiFecBlocks: multiFecBlocks,
+            fecInfo: fecInfo)
+
+        // A completed frame leaves currentFrameNumber at the next expected frame.
+        // Its first packet opens a new sequence window even after a long dropout.
+        let awaitingNextFrame = pending.isEmpty && completed.isEmpty
+        if Self.isBefore16(seq, nextContiguousSequenceNumber),
+           !Self.isBefore32(currentFrameNumber, fields.frameIndex), !awaitingNextFrame {
+            return .rejected
+        }
+
+        // Keep the upstream non-modular cooldown: a timestamp wrap must fail
+        // closed, retaining the hold until a new OOS observation resets its clock.
+        // A wrapping subtraction would instead clear protection on a reordering link.
+        if receivedOosData {
+            let presentationUs = (UInt64(timestamp) * 1000) / 90
+            if presentationUs > lastOosPresentationUs + Self.speculativeRfiCooldownUs {
+                receivedOosData = false
+            }
+        }
+
+        // Reject frames behind our current frame number.
+        if Self.isBefore32(fields.frameIndex, currentFrameNumber) {
+            return .rejected
+        }
+
+        // A deferred next-frame packet is held ONLY to give the
+        // CURRENT frame's late shards time to land. If the incoming datagram is
+        // NOT for the current frame (it's another later frame, or even the
+        // deferred frame's own next packet), the hold can no longer help - flush
+        // the deferred packet first so frame N's loss is declared and N+1 opens
+        // in order BEFORE we process this datagram. This is what keeps the
+        // one-deep slot from ever stranding the deferred SOF. A packet that DOES
+        // belong to the current frame (frameIndex == currentFrameNumber, the late
+        // shard we're waiting for) is left to complete N, then the completion
+        // path replays the deferred packet.
+        if deferredDatagram != nil, fields.frameIndex != currentFrameNumber {
+            replayDeferredDatagram()
+        }
+
+        if fields.frameIndex == currentFrameNumber
+            && fields.fecCurrentBlockNumber < multiFecCurrentBlockNumber {
+            return .rejected
+        }
+
+        // New frame / new FEC block?
+        if pending.isEmpty || currentFrameNumber != fields.frameIndex
+            || multiFecCurrentBlockNumber != fields.fecCurrentBlockNumber {
+            switch handleFrameTransition(rtp, fields: fields, receiveTimeUs: receiveTimeUs,
+                                         allowHold: allowHold) {
+            case .proceed: break
+            case .finished(let result): return result
+            }
+        }
+
+        // Reject packets above the FEC window.
+        if Self.isBefore16(bufferHighestSequenceNumber, seq) {
+            return .rejected
+        }
+
+        let isParity = !Self.isBefore16(seq, bufferFirstParitySequenceNumber)
+        let entry = Entry(bytes: bytes, length: rtp.length, seq: seq, ts: timestamp,
+                          ssrc: rtp.ssrc, header: rtp.header, isParity: isParity)
+        if !queuePacket(entry, isFecRecovery: false) {
+            return .rejected
+        }
+        if isParity {
+            receivedParityPackets += 1
+        } else {
+            receivedDataPackets += 1
+        }
+
+        // Try to reconstruct + submit the frame.
+        if reconstructFrame() == 0 {
+            completeFecBlockOrFrame()
+        }
+
+        return .queued
+    }
+
+    /// Handle the new-frame / new-FEC-block transition (RtpVideoQueue.c:583-744):
+    /// the bounded cross-frame reorder hold, the unrecoverable-frame reporting +
+    /// drop paths, and - when we genuinely advance - the per-frame buffer-window
+    /// reset. Returns `.proceed` to continue the add with the freshly opened
+    /// window, or `.finished` with the terminal result (a reorder hold `.queued`
+    /// or a dropped frame `.rejected`).
+    private func handleFrameTransition(_ rtp: ParsedRtp, fields: NvFields,
+                                       receiveTimeUs: UInt64, allowHold: Bool) -> TransitionOutcome {
+        let frameIndex = fields.frameIndex
+
+        // BOUNDED CROSS-FRAME REORDER HOLD. The next frame's first
+        // packet has arrived while the current frame is still incomplete. On
+        // a link we've SEEN reorder (receivedOosData), the current frame's
+        // late tail/EOF shards are probably microseconds away and FEC can
+        // still complete it - so defer this next-frame packet for a bounded
+        // window instead of immediately declaring loss. Strictly gated:
+        //   * receivedOosData          - only on a proven-reordering link
+        //   * currentFrameNumber != frameIndex && !pending.isEmpty
+        //                              - genuinely "next frame started, this
+        //                                frame incomplete" (not a new FEC
+        //                                block of the same frame)
+        //   * isFecRecoveryStillPossible - FEC can still recover with the
+        //                                parity we expect (never hold a frame
+        //                                that's already unrecoverable)
+        //   * deferredDatagram == nil  - one-deep: a SECOND new frame forces
+        //                                immediate loss (no unbounded stall)
+        //   * within reorderWindowUs   - time bound from the frame's first
+        //                                receive
+        // A held packet returns .queued WITHOUT advancing currentFrameNumber;
+        // it's replayed once the late shard lands (the next datagram re-drives
+        // addPacket) or the window elapses (flushDeferredIfWindowElapsed).
+        if allowHold,
+           receivedOosData,
+           !pending.isEmpty,
+           currentFrameNumber != frameIndex,
+           deferredDatagram == nil,
+           isFecRecoveryStillPossible(),
+           receiveTimeUs &- bufferFirstRecvTimeUs < Self.reorderWindowUs {
+            deferredDatagram = (rtp.bytes, receiveTimeUs)
+            TelemetryCounters.shared.reorderHoldTakenTotal.increment()
+            return .finished(.queued)
+        }
+
+        if !pending.isEmpty {
+            // Handle multi-FEC mid-frame block loss.
+            if multiFecLastBlockNumber != 0 {
+                Diag.warn("NativeVideo unrecoverable frame \(currentFrameNumber) "
+                    + "(block \(multiFecCurrentBlockNumber + 1)/\(multiFecLastBlockNumber + 1)): "
+                    + "\(receivedDataPackets)+\(receivedParityPackets) < \(bufferDataPackets) needed", Self.cat)
+                if currentFrameNumber == frameIndex {
+                    TelemetryCounters.shared.unrecoverableFrameTotal.increment()
+                    purgeAll()
+                    if !reportedLostFrame {
+                        depacketizer.queueLostFrame(Int(currentFrameNumber))
+                    }
+                    // The report covered this frame only; the next one's loss must still be heard.
+                    currentFrameNumber &+= 1
+                    multiFecCurrentBlockNumber = 0
+                    reportedLostFrame = false
+                    return .finished(.rejected)
+                }
+            } else {
+                Diag.warn("NativeVideo unrecoverable frame \(currentFrameNumber): "
+                    + "\(receivedDataPackets)+\(receivedParityPackets)=\(pending.count) < \(bufferDataPackets) needed",
+                        Self.cat)
+                TelemetryCounters.shared.unrecoverableFrameTotal.increment()
+            }
+        }
+
+        let expectedFecBlock: UInt8 = (currentFrameNumber == frameIndex) ? multiFecCurrentBlockNumber : 0
+        if fields.fecCurrentBlockNumber != expectedFecBlock {
+            Diag.warn("NativeVideo unrecoverable frame \(frameIndex): lost FEC blocks "
+                + "\(expectedFecBlock + 1)..\(fields.fecCurrentBlockNumber)", Self.cat)
+            TelemetryCounters.shared.unrecoverableFrameTotal.increment()
+            purgeAll()
+            if !reportedLostFrame {
+                depacketizer.queueLostFrame(Int(currentFrameNumber))
+            }
+            currentFrameNumber = frameIndex &+ 1
+            multiFecCurrentBlockNumber = 0
+            reportedLostFrame = false
+            return .finished(.rejected)
+        }
+
+        // Discard pending from previous FEC block.
+        pending.removeAll(keepingCapacity: true)
+        // Discard completed from a previous frame.
+        if currentFrameNumber != frameIndex {
+            completed.removeAll(keepingCapacity: true)
+            // Advancing to a NEW frame: reset the per-frame FEC-recovery latch
+            // (a recovery in a previous frame's earlier block must not leak into
+            // this frame's metric if that frame was dropped before submitting).
+            #if os(macOS)
+            currentFrameNeededFec = false
+            #endif
+
+            // Whole-frame loss detection (non-contiguous frameIndex).
+            if currentFrameNumber &+ 1 != frameIndex || !reportedLostFrame {
+                depacketizer.queueLostFrame(Int(frameIndex) - 1)
+            }
+        }
+
+        openFrameWindow(rtp, fields: fields, receiveTimeUs: receiveTimeUs)
+        return .proceed
+    }
+
+    /// Reset the per-frame buffer-window state for the frame/FEC block we're now
+    /// accumulating (RtpVideoQueue.c:746-767): sequence-number bounds derived from
+    /// the fecInfo data/parity split, the per-frame received-packet counters, and
+    /// the multi-FEC block bookkeeping.
+    private func openFrameWindow(_ rtp: ParsedRtp, fields: NvFields, receiveTimeUs: UInt64) {
+        let fecInfo = fields.fecInfo
+        currentFrameNumber = fields.frameIndex
+
+        bufferFirstRecvTimeUs = receiveTimeUs
+        bufferLowestSequenceNumber = Self.u16(Int(rtp.seq) - Int(fields.fecIndex))
+        nextContiguousSequenceNumber = bufferLowestSequenceNumber
+        receivedDataPackets = 0
+        receivedParityPackets = 0
+        useFastQueuePath = true
+        reportedLostFrame = false
+        fecFailedDataCount = -1
+        bufferDataPackets = Int((fecInfo & 0xFFC00000) >> 22)
+        fecPercentage = Int((fecInfo & 0xFF0) >> 4)
+        bufferParityPackets = (bufferDataPackets * fecPercentage + 99) / 100
+        bufferFirstParitySequenceNumber = Self.u16(Int(bufferLowestSequenceNumber) + bufferDataPackets)
+        bufferHighestSequenceNumber = Self.u16(Int(bufferFirstParitySequenceNumber) + bufferParityPackets - 1)
+        multiFecCurrentBlockNumber = fields.fecCurrentBlockNumber
+        multiFecLastBlockNumber = (fields.multiFecBlocks >> 6) & 0x3
+    }
+
+    /// A reconstruct succeeded: stage the complete FEC block, then either advance
+    /// to the next multi-FEC block or submit the now-complete frame and open the
+    /// next one (RtpVideoQueue.c:795-803, plus the deferred replay).
+    private func completeFecBlockOrFrame() {
+        stageCompleteFecBlock()
+
+        if multiFecCurrentBlockNumber < multiFecLastBlockNumber {
+            multiFecCurrentBlockNumber += 1
+        } else {
+            submitCompletedFrame()
+            currentFrameNumber &+= 1
+            multiFecCurrentBlockNumber = 0
+            // The held current frame just completed via its late
+            // shard. Replay the deferred next-frame packet now so the next
+            // frame opens normally - strict in-order submit is preserved (we
+            // never reorder frames into the depacketizer; we only delayed the
+            // loss DECISION). Replay drives addPacket re-entrantly, but the
+            // one-deep slot is cleared first so depth is bounded to 1.
+            if deferredDatagram != nil { TelemetryCounters.shared.reorderHoldRescuedTotal.increment() }
+            replayDeferredDatagram()
+        }
+    }
+
+    // MARK: - Reorder-hold helpers
+
+    /// FEC could still recover the current frame: the data deficit is within the
+    /// parity we expect to receive for this block. Never hold a frame that's
+    /// already mathematically unrecoverable - that's genuine loss, declare it.
+    private func isFecRecoveryStillPossible() -> Bool {
+        // Need fecPercentage > 0 (otherwise no parity can ever fill the gap) and
+        // the count of still-missing DATA packets must not exceed the parity we
+        // expect for the block.
+        guard bufferParityPackets > 0 else { return false }
+        let dataDeficit = bufferDataPackets - receivedDataPackets
+        return dataDeficit <= bufferParityPackets
+    }
+
+    /// Replay a deferred next-frame datagram (the held cross-frame-reorder
+    /// packet). Clears the slot BEFORE re-driving addPacket so the re-entrant
+    /// call can't re-defer the same bytes (depth bounded to 1).
+    func replayDeferredDatagram() {
+        guard let held = deferredDatagram else { return }
+        deferredDatagram = nil
+        dispatchDatagram(held.bytes, receiveTimeUs: held.receiveTimeUs, isReplay: true)
+    }
+
+    /// If a deferred next-frame packet is outstanding and the current frame's
+    /// reorder window has elapsed, replay it now. Called at the top of
+    /// addRawDatagram so the late tail shard gets at most `reorderWindowUs` of
+    /// grace; once the window is up the deferred packet re-drives addPacket and
+    /// the unmodified loss path declares the (genuinely lost) current frame.
+    func flushDeferredIfWindowElapsed(nowUs: UInt64) {
+        guard deferredDatagram != nil else { return }
+        if nowUs &- bufferFirstRecvTimeUs >= Self.reorderWindowUs {
+            replayDeferredDatagram()
+        }
+    }
+
+    // MARK: - queuePacket (c:111-182)
+
+    func queuePacket(_ newEntry: Entry, isFecRecovery: Bool) -> Bool {
+        if useFastQueuePath && newEntry.sequenceNumber == nextContiguousSequenceNumber {
+            nextContiguousSequenceNumber = Self.u16(Int(newEntry.sequenceNumber) + 1)
+        } else {
+            // Check for duplicates / out-of-sequence. While we walk pending,
+            // detect genuine REORDER: any already-queued entry whose seq comes
+            // AFTER the new entry's seq means this packet arrived late/out of
+            // order. Latch receivedOosData so the cross-frame reorder hold turns
+            // on for this (reordering) link (RtpVideoQueue.c:139-141,162-170).
+            // A shard FEC rebuilt sits behind its parity by construction and
+            // says nothing about the wire, so it never latches (as upstream).
+            for entry in pending {
+                if entry.sequenceNumber == newEntry.sequenceNumber {
+                    return false
+                }
+                if !isFecRecovery, Self.isBefore16(newEntry.sequenceNumber, entry.sequenceNumber) {
+                    receivedOosData = true
+                    lastOosPresentationUs = newEntry.presentationTimeUs
+                }
+            }
+            useFastQueuePath = false
+        }
+        pending.append(newEntry)
+        return true
+    }
+
+    private func purgeAll() {
+        pending.removeAll(keepingCapacity: true)
+        completed.removeAll(keepingCapacity: true)
+    }
+}

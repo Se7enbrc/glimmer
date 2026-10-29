@@ -6,6 +6,7 @@
 //  The 1 Hz capture driven by a scripted source and private counters, into a temp directory.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -70,7 +71,8 @@ final class TelemetryCaptureTests {
             pacingLiveness: { pacing }, inFlightDecodeBacklog: { 4 },
             refreshWindow: { FramePacer.RefreshWindowSnapshot(minHz: 59.5, avgHz: 60, maxHz: 120, changed: true) },
             displayProbe: { nil }, displayMode: "window",
-            stream: StreamTelemetryConfig(width: 2560, height: 1440, fps: 120, codec: "HEVC", bitrate: nil))
+            stream: StreamTelemetryConfig(width: 2560, height: 1440, fps: 120, codec: "HEVC", bitrate: nil),
+            capture: MacTelemetryCapture.make())
     }
 
     private func exporter(in dir: URL, counters: TelemetryCounters = TelemetryCounters()) -> TelemetryExporter {
@@ -78,19 +80,35 @@ final class TelemetryCaptureTests {
         return TelemetryExporter(source: source(), serverName: Self.pcName, outputDirectory: dir, counters: counters)
     }
 
-    private func capture(_ exporter: TelemetryExporter) throws -> (TelemetrySnapshot, TelemetrySnapshot.Extras) {
-        exporter.workQueue.sync { exporter.capture() }
-        return try #require(exporter.workQueue.sync { exporter.latestSample })
+    private func capture(
+        _ exporter: TelemetryExporter, now: DispatchTime = .now()
+    ) throws -> (TelemetrySnapshot, TelemetrySnapshot.Extras) {
+        exporter.workQueue.sync { exporter.capture(now: now) }
     }
 
     // MARK: - Seam
 
+    @Test func publicSessionRecordingRequiresOptInAndLocalDirectory() throws {
+        let source = source()
+        let remote = try #require(URL(string: "https://example.invalid/diagnostics"))
+        for services in [SessionServices.recording(directory: dir, enabled: false),
+                         SessionServices.recording(directory: nil, enabled: true),
+                         SessionServices.recording(directory: remote, enabled: true)] {
+            #expect(services.makeExporter(source, Self.pcName) == nil)
+        }
+        let services = SessionServices.recording(directory: dir, enabled: true)
+        let exporter = try #require(services.makeExporter(source, Self.pcName))
+        #expect(exporter.outputDirectory == dir)
+        #expect(exporter.ndjsonURL == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
     @Test func gatedConstructionKeepsProductionDirectoryAndCounters() throws {
-        let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName, enabled: true)
+        let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName,
+                                                   outputDirectory: MacTelemetryCapture.logsDirectory, enabled: true)
         let exporter = try #require(made)
-        #expect(exporter.outputDirectory == TelemetryExporter.logsDirectory)
+        #expect(exporter.outputDirectory == MacTelemetryCapture.logsDirectory)
         #expect(exporter.counters === TelemetryCounters.shared)
-        #expect(exporter.latestSample == nil)
         #expect(exporter.ndjsonURL == nil)
     }
 
@@ -150,13 +168,13 @@ final class TelemetryCaptureTests {
         #expect(audio.packetsTotal == 50 && audio.lossRate == nil)
     }
 
-    @Test func secondTickDerivesRatesFromTheDeltas() async throws {
+    @Test func secondTickDerivesRatesFromTheDeltas() throws {
         let counters = TelemetryCounters()
         counters.videoPacketsTotal.increment(by: 1000)
         counters.audioPacketsTotal.increment(by: 50)
         let exporter = exporter(in: dir, counters: counters)
-        _ = try capture(exporter)
-        try await Task.sleep(for: .milliseconds(80))
+        let start = exporter.connectInstant
+        _ = try capture(exporter, now: start)
         counters.videoPacketsTotal.increment(by: 900)
         counters.videoPacketsLostPreFecTotal.increment(by: 100)
         counters.videoPacketsOutOfOrderTotal.increment(by: 45)
@@ -167,12 +185,12 @@ final class TelemetryCaptureTests {
         counters.audioPacketsLostTotal.increment(by: 5)
         counters.audioFecRecoveredTotal.increment(by: 3)
         counters.corruptionHeuristicTotal.increment(by: 4)
-        let (snap, _) = try capture(exporter)
+        let (snap, _) = try capture(exporter, now: start + .milliseconds(80))
         #expect(snap.preFecLossRate == 100.0 / 1000.0)
         #expect(snap.outOfOrderRate == 45.0 / 900.0)
         #expect(snap.duplicateRate == 9.0 / 900.0)
         #expect(snap.fecRecoveryRate == 5.0 / 50.0)
-        #expect((snap.corruptionPerSecond ?? 0) > 0)
+        #expect(snap.corruptionPerSecond == 50)
         let audio = try #require(snap.audio)
         #expect(audio.packetsTotal == 145)
         #expect(audio.lossRate == 5.0 / 100.0)
@@ -268,14 +286,14 @@ final class TelemetryCaptureTests {
         #expect(exporter.sessionId.count == 16 && exporter.sessionId.allSatisfy(\.isHexDigit))
         let sample = try #require(try ndjsonRows(exporter).last)
         #expect(sample["host"] as? String == pseudonym)
-        #expect(sample["client"] as? String == TelemetryRenderer.clientLabel)
+        #expect(sample["client"] as? String == MacTelemetryCapture.clientLabel)
 
         let reportName = try #require(try FileManager.default.contentsOfDirectory(atPath: dir.path)
             .first { $0.hasPrefix("telemetry-session-") })
         let report = try TelemetryRenderFixtures.row(
             String(contentsOf: dir.appendingPathComponent(reportName), encoding: .utf8))
         #expect(report["host"] as? String == pseudonym)
-        #expect(report["client"] as? String == TelemetryRenderer.clientLabel)
+        #expect(report["client"] as? String == MacTelemetryCapture.clientLabel)
 
         var macName = ProcessInfo.processInfo.hostName
         if macName.hasSuffix(".local") { macName.removeLast(".local".count) }

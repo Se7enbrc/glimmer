@@ -11,24 +11,75 @@
 
 import AppKit
 import QuartzCore
+import SwiftUI
 import Testing
+@testable import GlimmerEngine
 @testable import Glimmer
 
 @MainActor
 struct StreamSignalTests {
+    private let settings = IsolatedDefaults()
 
     @MainActor private final class Spoken {
         var lines: [String] = []
     }
 
-    private func banner(hostWidth: CGFloat = 1_200) -> (StreamBannerLayer, CALayer, Spoken) {
-        let host = CALayer()
-        host.bounds = CGRect(x: 0, y: 0, width: hostWidth, height: 400)
-        let pill = StreamBannerLayer(anchor: .topCenter, accent: NSColor.systemOrange.cgColor)
+    // The stream window stays offscreen, so notices lay out without appearing on the owner's display.
+    private func banner(hostWidth: CGFloat = 1_200) -> (StreamBanner, NSWindow, Spoken) {
+        let host = NSWindow(contentRect: CGRect(x: 0, y: 0, width: hostWidth, height: 400), styleMask: .borderless,
+                            backing: .buffered, defer: true)
+        host.isReleasedWhenClosed = false
+        let pill = StreamBanner(anchor: .topCenter, accent: .systemOrange)
         let spoken = Spoken()
         pill.announce = { spoken.lines.append($0) }
         pill.attach(to: host)
         return (pill, host, spoken)
+    }
+
+    @Test func teardownRemovesNoticesBeforeTheClosingAnimation() {
+        let window = StreamWindow(displayMode: .window)
+        let presentation = SessionPresentation(window)
+        for notice in window.notices {
+            notice.announce = { _ in }
+            notice.setText("Stream stuttering")
+            notice.setVisible(true)
+        }
+        presentation.hideOverlay()
+        #expect(window.notices.allSatisfy { !$0.isVisible && $0.noticeWindow == nil })
+        window.close()
+    }
+
+    @Test func aNoticeExistsOnlyWhileShownAndReshowsDuringItsFade() {
+        let (pill, _, _) = banner()
+        pill.setText("Reconnecting…")
+        #expect(pill.noticeFrame == nil)
+        pill.setVisible(true)
+        #expect(pill.isVisible && pill.noticeFrame != nil)
+        pill.setVisible(false)
+        pill.setVisible(true)
+        #expect(pill.isVisible && pill.noticeFrame != nil)
+    }
+
+    // A notice raised while the stream window was ordered out joins it when the window returns.
+    @Test func aNoticeRaisedWhileHiddenAppearsWhenTheWindowReturns() {
+        let (pill, host, _) = banner()
+        host.setFrameOrigin(CGPoint(x: -30_000, y: -30_000))
+        pill.setText("Reconnecting…")
+        pill.setVisible(true)
+        #expect(!pill.isOnScreenWithStream)
+        host.orderFront(nil)
+        defer { host.orderOut(nil) }
+        pill.relayout()
+        #expect(pill.isOnScreenWithStream)
+    }
+
+    @Test func macOS15UsesTheMaterialFallback() {
+        let (pill, _, _) = banner()
+        pill.glassAvailable = false
+        pill.setText("Reconnecting…")
+        #expect(!pill.content.glass)
+        pill.glassAvailable = true
+        #expect(pill.content.glass)
     }
 
     private let longText = "Weak connection. Lowering quality to 150 Mbps… and then some more words"
@@ -40,16 +91,20 @@ struct StreamSignalTests {
     @Test func aLongPillFitsANarrowHost() {
         let (pill, _, _) = banner(hostWidth: 320)
         pill.setText(longText)
-        #expect(pill.layer.frame.minX >= 16)
-        #expect(pill.layer.frame.maxX <= 304)
+        pill.setVisible(true)
+        let frame = pill.noticeFrame ?? .null
+        #expect(frame.minX >= 16 - 0.5)
+        #expect(frame.maxX <= 304 + 0.5)
     }
 
     /// Short text still sizes to fit and centers.
     @Test func aShortPillSizesToItsText() {
         let (pill, host, _) = banner()
         pill.setText("Reconnecting…")
-        #expect(pill.layer.frame.width < 200)
-        #expect(abs(pill.layer.frame.midX - host.bounds.midX) < 1)
+        pill.setVisible(true)
+        let frame = pill.noticeFrame ?? .null
+        #expect(frame.width < 200)
+        #expect(abs(frame.midX - host.contentLayoutRect.midX) < 1)
     }
 
     /// Text that was laid out full screen re-flows when the same pill is shown
@@ -59,22 +114,27 @@ struct StreamSignalTests {
         pill.setText(longText)
         pill.setVisible(true)
         pill.setVisible(false)
-        host.bounds = CGRect(x: 0, y: 0, width: 320, height: 200)
+        host.setContentSize(CGSize(width: 320, height: 200))
         pill.setVisible(true)
-        #expect(pill.layer.frame.maxX <= 304)
+        #expect((pill.noticeFrame ?? .null).maxX <= 304 + 0.5)
     }
 
     // MARK: Linger hint
 
     /// A pill that stays up earns the way out; a fresh show starts without it.
-    @Test func aStuckPillSaysHowToLeave() async {
+    @Test func aStuckPillSaysHowToLeave() throws {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0
+        var callbacks: [@MainActor () -> Void] = []
+        pill.scheduleLingerDelay = { delay, action in
+            #expect(delay == 5)
+            callbacks.append(action)
+        }
         pill.lingerHint = { "Press ⌃⌥Q to stop streaming" }
         pill.setText("Reconnecting…")
         pill.setVisible(true)
         #expect(pill.displayedText == "Reconnecting…")
-        try? await Task.sleep(for: .milliseconds(50))
+        let linger = try #require(callbacks.first)
+        linger()
         #expect(pill.displayedText == "Reconnecting… · Press ⌃⌥Q to stop streaming")
 
         pill.setText("Waiting for video…")
@@ -82,28 +142,35 @@ struct StreamSignalTests {
 
         pill.setVisible(false)
         pill.setVisible(true)
+        linger()
         #expect(pill.displayedText == "Waiting for video…")
     }
 
     /// A pill hidden before its linger delay never grows the hint.
-    @Test func aHiddenPillDoesNotLinger() async {
+    @Test func aHiddenPillDoesNotLinger() throws {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0.02
+        var callback: (@MainActor () -> Void)?
+        pill.scheduleLingerDelay = { delay, action in
+            #expect(delay == 5)
+            callback = action
+        }
         pill.lingerHint = { "Press ⌃⌥Q to stop streaming" }
         pill.setText("Reconnecting…")
         pill.setVisible(true)
         pill.setVisible(false)
-        try? await Task.sleep(for: .milliseconds(80))
+        let linger = try #require(callback)
+        linger()
         #expect(pill.displayedText == "Reconnecting…")
     }
 
     /// Pills without a hint (the network pill) never change their text.
-    @Test func aPillWithoutAHintNeverGrows() async {
+    @Test func aPillWithoutAHintNeverGrows() {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0
+        var scheduled = false
+        pill.scheduleLingerDelay = { _, _ in scheduled = true }
         pill.setText("Stream stuttering")
         pill.setVisible(true)
-        try? await Task.sleep(for: .milliseconds(50))
+        #expect(!scheduled)
         #expect(pill.displayedText == "Stream stuttering")
     }
 
@@ -168,15 +235,18 @@ struct StreamSignalTests {
     @Test func backgroundBeforeDecoderAdoptionReleasesDisplayAssertion() async {
         let decoder = VideoDecoder()
         decoder.setPresentSuppressed(true)
-        let session = StreamSession()
-        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder)
+        let native = MacSessionServices()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, audioDecoder: AudioDecoder(defaults: settings.defaults),
+            services: native.services(), backend: MacTransport.makeBackend(),
+            makeNetwork: { NetworkClient(server: $0) }, makeBackend: { MacTransport.makeBackend() })
+        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder, native: native)
         #expect(!beforeAdoption)
         #expect(afterAdoption)
         decoder.teardown()
     }
 
     @Test func resettingStallLatchesClearsEveryLatch() async {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         await session.setStallLatchesForTesting()
         await session.resetStallLatches()
         #expect(!session.didLogDecodeOnlyStall)
@@ -225,6 +295,14 @@ struct StreamSignalTests {
         #expect(![traffic, frame, lost, other].contains { $0.localizedCaseInsensitiveContains("host") })
     }
 
+    @Test func aKnownVideoPathAsksForRetryInsteadOfFirewallChanges() {
+        let message = AppModel.streamEndedMessage(code: -100, hostName: "Den PC", hasReceivedVideo: true)
+        #expect(message == "Den PC didn't start sending video. Try again.")
+        #expect(!message.contains("firewall"))
+        #expect(AppModel.streamEndedMessage(code: -100, hostName: "Den PC", hasReceivedVideo: false)
+            .contains("UDP port 47998"))
+    }
+
     // MARK: Stats HUD
 
     /// With Differentiate Without Color on, warning and critical values are
@@ -253,20 +331,131 @@ private extension StreamSession {
 }
 
 extension StreamSession {
-    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder) -> (Bool, Bool) {
+    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder, native: MacSessionServices) -> (Bool, Bool) {
         isStreaming = true
-        powerAssertion = ProcessInfo.processInfo.beginActivity(
-            options: Self.sessionActivityOptions(hidden: false),
-            reason: "Testing stream visibility")
+        beginPowerAssertion()
         defer {
-            if let powerAssertion { ProcessInfo.processInfo.endActivity(powerAssertion) }
-            powerAssertion = nil
+            endPowerAssertion()
             videoDecoder = nil
             isStreaming = false
         }
         refreshPowerAssertion()
-        let beforeAdoption = powerAssertionHidden
+        let beforeAdoption = native.isHidden
         adoptVideoDecoder(decoder)
-        return (beforeAdoption, powerAssertionHidden)
+        return (beforeAdoption, native.isHidden)
+    }
+}
+
+@MainActor
+struct MouseModeBadgeTests {
+    // Closing the stream takes its notices with it: no click-through window outlives the stream.
+    @Test func closingTheStreamRemovesItsNoticeWindows() async throws {
+        let stream = StreamWindow()
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.setText("Stream started")
+        stream.leaveHintBanner.setVisible(true)
+        stream.mouseModeBadge.setVisible(true)
+        #expect(stream.leaveHintBanner.noticeFrame != nil)
+        stream.close()
+        for notice in [stream.leaveHintBanner, stream.mouseModeBadge] {
+            #expect(!notice.isVisible && notice.noticeFrame == nil)
+        }
+    }
+
+    @Test func theBadgeFollowsMouseModeAfterTheNotice() throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.leaveHintBanner.announce = { _ in }
+        var pending: [@MainActor () -> Void] = []
+        stream.scheduleMouseModeBadge = { delay, action in
+            #expect(delay == 2)
+            pending.append(action)
+        }
+        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        stream.setControllerMouseActive(true)
+        #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
+        pending.removeFirst()()
+        #expect(stream.mouseModeBadge.isVisible)
+        #expect(stream.mouseModeBadge.content.accessibilityName == "Mouse mode on")
+        // One pad back in the game while another is still a mouse keeps the badge.
+        stream.showControllerMouseMode("Controller 1 is back in the game.", enabled: false)
+        stream.setControllerMouseActive(true)
+        #expect(stream.mouseModeBadge.isVisible && pending.isEmpty)
+        stream.setControllerMouseActive(false)
+        #expect(!stream.mouseModeBadge.isVisible)
+        // A quick off-on-off never revives a stale badge.
+        stream.setControllerMouseActive(true)
+        stream.setControllerMouseActive(false)
+        for action in pending { action() }
+        #expect(!stream.mouseModeBadge.isVisible)
+    }
+
+    @Test(arguments: StatsOverlayCorner.allCases)
+    func theBadgeNeverCoversTheStatsOrANotice(corner: StatsOverlayCorner) throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.window.setContentSize(CGSize(width: 1280, height: 720))
+        stream.statsOverlay.corner = corner
+        for banner in [stream.leaveHintBanner, stream.networkBanner, stream.reconnectBanner] {
+            banner.announce = { _ in }
+            banner.setText("A long notice that reaches well toward both edges of the stream window")
+            banner.setVisible(true)
+        }
+        stream.mouseModeBadge.setVisible(true)
+        let height = stream.displayView.bounds.height
+        let badge = try #require(stream.mouseModeBadge.noticeFrame)
+        let flipped = CGRect(x: badge.minX, y: height - badge.maxY, width: badge.width, height: badge.height)
+        #expect(stream.mouseModeBadgeObstacles().allSatisfy { !$0.intersects(flipped) }, "\(corner)")
+    }
+
+    // Renders the real stats panel and badge over bright and dark frames on the forced macOS 15 material.
+    @Test(arguments: [false, true])
+    func badgeCaptureBesideTheStatsPanel(dark: Bool) throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.window.setContentSize(CGSize(width: 960, height: 540))
+        var snapshot = StreamStatsSnapshot()
+        snapshot.renderedFps = 119.9
+        snapshot.rttMs = 3.5
+        snapshot.measuredBitrateMbps = 46.2
+        snapshot.videoCodec = "HEVC"
+        stream.statsOverlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 120)
+        stream.statsOverlay.setVisible(true)
+        stream.statsOverlay.layoutInHost(stream.displayLayer)
+        stream.mouseModeBadge.glassAvailable = false
+        stream.mouseModeBadge.setVisible(true)
+        let badge = try #require(stream.mouseModeBadge.noticeFrame)
+        let size = stream.displayView.bounds.size
+        let context = try #require(CGContext(data: nil, width: Int(size.width) * 2, height: Int(size.height) * 2,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.scaleBy(x: 2, y: 2)
+        let colors = dark
+            ? [CGColor(red: 0.05, green: 0.06, blue: 0.12, alpha: 1), CGColor(red: 0.18, green: 0.12, blue: 0.22, alpha: 1)]
+            : [CGColor(red: 0.62, green: 0.82, blue: 0.98, alpha: 1), CGColor(red: 0.98, green: 0.93, blue: 0.80, alpha: 1)]
+        let gradient = try #require(CGGradient(colorsSpace: nil, colors: colors as CFArray, locations: [0, 1]))
+        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
+        let stats = stream.statsOverlay.layer
+        context.saveGState()
+        context.translateBy(x: stats.frame.minX, y: stats.frame.minY)
+        stats.render(in: context)
+        context.restoreGState()
+        let host = NSHostingView(rootView: stream.mouseModeBadge.content)
+        let holder = NSWindow(contentRect: CGRect(origin: .zero, size: badge.size), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        holder.isReleasedWhenClosed = false
+        holder.isOpaque = false
+        holder.backgroundColor = .clear
+        holder.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        holder.contentView = host
+        defer { holder.close() }
+        host.frame = CGRect(origin: .zero, size: badge.size)
+        let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        if let image = rep.cgImage { context.draw(image, in: badge) }
+        let composed = try #require(context.makeImage())
+        let data = try #require(NSBitmapImageRep(cgImage: composed).representation(using: .png, properties: [:]))
+        #expect(!stats.frame.intersects(badge.insetBy(dx: -8, dy: -8)))
+        Attachment.record(data, named: "mac-badge-macos15-\(dark ? "dark" : "light").png")
     }
 }

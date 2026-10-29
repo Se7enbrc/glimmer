@@ -13,10 +13,17 @@
 //  stays there and in AppModel+Streaming+Events.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import os.log
 
 extension AppModel {
+
+    func nativeStreamConfig(for host: Host, app: LibraryApp) -> StreamConfig {
+        var config = nativeStreamConfig(for: host)
+        config.windowTitle = Self.streamWindowTitle(hostName: host.displayName, appName: app.name)
+        return config
+    }
 
     // MARK: - Spec UI accessors
 
@@ -25,19 +32,22 @@ extension AppModel {
     // actually negotiated can differ from what's requested (Intel Macs drop AV1
     // → HEVC), so showing it risks displaying a value that's simply wrong. Users
     // care that it looks good, not which encoder produced it.
-    var streamSpecSummary: String {
-        let mbps = displayBitrateKbps / 1000
+    /// Adaptive quality moves the rate during play, so no fixed number is promised before it starts.
+    func streamSpecSummary(adaptive: Bool) -> String {
         let hdrTag = effectiveHDR ? " · HDR" : ""
-        return "\(effectiveWidth) × \(effectiveHeight) · \(effectiveFPS) Hz\(hdrTag) · \(mbps) Mbps"
+        return "\(effectiveWidth) × \(effectiveHeight) · \(effectiveFPS) Hz\(hdrTag) · \(bitrateLabel(adaptive: adaptive))"
     }
 
-    var streamSpecChips: [String] {
-        let mbps = displayBitrateKbps / 1000
+    func streamSpecChips(adaptive: Bool) -> [String] {
         var chips = [Self.resolutionLabel(width: effectiveWidth, height: effectiveHeight),
                      "\(effectiveFPS) Hz"]
         if effectiveHDR { chips.append("HDR") }
-        chips.append("\(mbps) Mbps")
+        chips.append(bitrateLabel(adaptive: adaptive))
         return chips
+    }
+
+    private func bitrateLabel(adaptive: Bool) -> String {
+        adaptive ? "adaptive bitrate" : "\(displayBitrateKbps / 1000) Mbps"
     }
 
     /// Codec-aware bitrate the spec surfaces show: what the engine actually sends
@@ -58,7 +68,7 @@ extension AppModel {
     /// With no 10-bit format on offer the PC encodes SDR, and the launch
     /// request leaves out hdrMode (sent only when one is offered).
     nonisolated static func videoFormats(_ formats: VideoFormats, hdr: Bool) -> VideoFormats {
-        hdr ? formats : formats.subtracting(VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_MASK_10BIT))
+        StreamQuality.videoFormats(formats, hdr: hdr)
     }
 
     /// The dial is sized for Wi-Fi. Wired end to end (the Mac's route says
@@ -72,7 +82,7 @@ extension AppModel {
     /// bitrateBoostWifi -float N` overrides it without a rebuild.
     nonisolated static let wifiBitrateMultiplier = 1.5
     nonisolated static var wifiBitrateBoost: Double {
-        let value = UserDefaults.standard.double(forKey: "bitrateBoostWifi")
+        let value = PersistentStorage.defaults.double(forKey: "bitrateBoostWifi")
         return value > 0 ? value : wifiBitrateMultiplier
     }
 
@@ -86,18 +96,13 @@ extension AppModel {
     /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
     /// Bandwidth saver is the lighter ask from before the boosts existed.
     nonisolated static func routeAskKbps(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> Int {
-        let cap = decision.mode == .highestQuality ? routeBoost(route).capKbps : maxBitrateKbps
-        return wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
-                               boost: decision.boost, capKbps: cap)
+        RouteBitratePolicy.askKbps(decision, route: route, settings: routeBitrateSettings())
     }
 
     /// The one ask the launch, the spec chip and every reconnect use: after the
     /// radio gate, with the wired boost the measured RTT may still withdraw.
     nonisolated static func routeAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> RouteAsk {
-        RouteAsk(kbps: StreamPathMTU.wifiAskKbps(ask: routeAskKbps(decision, route: route),
-                                                 phyRateMbps: decision.radioGatePhyMbps),
-                 boost: rttWithdrawableBoost(decision, route: route),
-                 route: "\(route)")
+        RouteBitratePolicy.ask(decision, route: route, settings: routeBitrateSettings())
     }
 
     /// Every reconnect asks this: the launch's decision on the route the Mac is on
@@ -116,18 +121,17 @@ extension AppModel {
         _ launch: BitrateDecision, route: HostRouteMonitor.RouteClass, phyRateMbps: Double?,
         selectedHostID: String?, sessionHostID: String
     ) -> RouteAsk? {
-        guard selectedHostID == sessionHostID, route != .unknown else { return nil }
-        return routeAsk(onRoute(launch, route: route, phyRateMbps: phyRateMbps), route: route)
+        RouteBitratePolicy.reconnectAsk(launch, route: route, phyRateMbps: phyRateMbps,
+                                        selectedHostID: selectedHostID, sessionHostID: sessionHostID,
+                                        settings: routeBitrateSettings())
     }
 
     /// `decision` with the route's part filled in: the boost (Highest quality
     /// only) and the radio gate. Its dial, codec and mode stay as decided.
     nonisolated static func onRoute(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass,
                                     phyRateMbps: Double?) -> BitrateDecision {
-        var decision = decision
-        decision.boost = decision.mode == .highestQuality ? routeBoost(route).boost : 1
-        decision.radioGatePhyMbps = phyRateMbps
-        return decision
+        RouteBitratePolicy.onRoute(decision, route: route, phyRateMbps: phyRateMbps,
+                                   settings: routeBitrateSettings())
     }
 
     /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
@@ -143,7 +147,7 @@ extension AppModel {
     /// the wired one, since Wi-Fi has the radio gate instead.
     nonisolated static func rttWithdrawableBoost(_ decision: BitrateDecision,
                                                  route: HostRouteMonitor.RouteClass) -> Double {
-        route == .wired ? decision.boost : 1
+        RouteBitratePolicy.rttWithdrawableBoost(decision, route: route)
     }
 
     /// Boost and cap per route. A tunnel, or a route not resolved yet, keeps the
@@ -151,19 +155,19 @@ extension AppModel {
     nonisolated static func routeBoost(
         _ route: HostRouteMonitor.RouteClass, wifiBoost: Double = wifiBitrateBoost
     ) -> (boost: Double, capKbps: Int) {
-        switch route {
-        case .wired: (wiredBitrateMultiplier, wiredBitrateCapKbps)
-        case .wifi: (wifiBoost, maxBitrateKbps)
-        case .tunnel, .unknown: (1, maxBitrateKbps)
-        }
+        RouteBitratePolicy.boost(route, settings: routeBitrateSettings(wifiBoost: wifiBoost))
     }
 
     /// Pure so the rule is testable: dial × codec × boost, clamped to the floor
     /// and the route's cap.
     nonisolated static func wireBitrateKbps(dial: Int, codecMultiplier: Double, boost: Double, capKbps: Int) -> Int {
-        let scaled = Double(dial) * codecMultiplier * boost
-        let clamped = min(scaled, Double(capKbps))
-        return min(max(5_000, Int(clamped.rounded())), capKbps)
+        RouteBitratePolicy.wireBitrateKbps(dial: dial, codecMultiplier: codecMultiplier, boost: boost, capKbps: capKbps)
+    }
+
+    private nonisolated static func routeBitrateSettings(wifiBoost: Double = wifiBitrateBoost)
+        -> RouteBitratePolicy.Settings {
+        RouteBitratePolicy.Settings(wiredBoost: wiredBitrateMultiplier, wifiBoost: wifiBoost,
+                                    wiredCapKbps: wiredBitrateCapKbps, capKbps: maxBitrateKbps)
     }
 
     // MARK: Streaming

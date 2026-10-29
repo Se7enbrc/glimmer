@@ -18,6 +18,7 @@
 //  Nothing here changes streaming behaviour; it's all observation/opt-in.
 //
 
+import GlimmerEngine
 import AppKit
 import SwiftUI
 
@@ -26,7 +27,9 @@ struct DiagnosticsPane: View {
 
     /// Debug lines reach the in-app log and session file only with this on (a debug
     /// session once ran 30-105k lines an hour). Resolved at session start, like telemetry.
-    @AppStorage("diagFileLogDebug") private var fileLogDebug = false
+    @AppStorage("diagFileLogDebug", store: PersistentStorage.defaults) private var fileLogDebug = false
+    /// Beta builds start with adaptive quality on; turning it off gives a before/after trial.
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
 
     var body: some View {
         // @Bindable shim - surfaces $model.x bindings from the @Observable
@@ -65,9 +68,9 @@ struct DiagnosticsPane: View {
                     Toggle(isOn: $model.telemetryEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Performance telemetry").fontWeight(.medium)
-                            Text("Exposes per-second stream metrics over a local "
-                                + "Prometheus endpoint and an NDJSON log, plus a "
-                                + "richer per-session diagnostic log. Off by default; "
+                            Text("Saves per-second stream metrics in a local NDJSON log, plus a "
+                                + "richer per-session diagnostic log. "
+                                + (DiagnosticBuild.isEnabled ? "On by default in this diagnostic build; " : "Off by default; ")
                                 + "carries only performance numbers, never secrets.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -85,6 +88,16 @@ struct DiagnosticsPane: View {
                         }
                     }
                     .accessibilityLabel("Verbose session log file")
+                    Toggle(isOn: $adaptiveBandwidth) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Adaptive stream quality").fontWeight(.medium)
+                            Text("Lowers the bitrate within seconds when the connection struggles and "
+                                + "raises it again once it recovers. Turn off to compare.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityLabel("Adaptive stream quality")
                     // The exporter (and the file sink's level) snapshot their gates
                     // when a session starts, so a mid-session flip does nothing
                     // until the next stream.
@@ -142,11 +155,11 @@ struct DiagnosticsPane: View {
     /// Show the path with a leading `~` instead of the absolute home so it reads
     /// cleanly and matches how the doc comments refer to it.
     private var abbreviatedLogPath: String {
-        (TelemetryExporter.logsDirectory.path as NSString).abbreviatingWithTildeInPath
+        (MacTelemetryCapture.logsDirectory.path as NSString).abbreviatingWithTildeInPath
     }
 
     private func revealLogDir() {
-        let dir = TelemetryExporter.logsDirectory
+        let dir = MacTelemetryCapture.logsDirectory
         // Create it if it doesn't exist yet (telemetry may never have run) so
         // the reveal lands somewhere instead of silently no-opping.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

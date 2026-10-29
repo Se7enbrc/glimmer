@@ -86,6 +86,8 @@ struct ConnectBanner: View {
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.red)
                     Text(err)
+                        .contentTransition(.opacity)
+                        .animation(Motion.fade, value: err)
                         .textSelection(.enabled)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.primary)
@@ -97,7 +99,7 @@ struct ConnectBanner: View {
                     Button { model.runStreamErrorAction() } label: {
                         Label(action.title, systemImage: action.systemImage)
                     }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .controlSize(.small)
                     .disabled(model.streamErrorHost == nil || model.isStreaming)
                     // The action is disabled with no host selected or mid-
@@ -117,17 +119,14 @@ struct ConnectBanner: View {
                 .padding(.vertical, 10)
                 // Liquid Glass floating-panel chrome with the red stroke on
                 // top - the stroke is the load-bearing severity affordance.
-                .glassEffect(
-                    .regular.tint(Color.red.opacity(0.12)),
-                    in: .rect(cornerRadius: 12)
-                )
+                .glassSurface(in: .rect(cornerRadius: 12), tint: Color.red.opacity(0.12))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(Color.red, lineWidth: 1)
                 }
-                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                .transition(Motion.overlayTransition(reduceMotion: reduceMotion))
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: model.nativeStreamError)
+        .animation(Motion.overlay(reduceMotion: reduceMotion), value: model.nativeStreamError != nil)
     }
 }

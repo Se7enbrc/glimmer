@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  GlimmerIntents.swift
-//
-//  Shortcuts, Siri and Spotlight actions: stream from a PC, wake it, quit its
-//  app. Each one runs the launcher's own entry points, not a copy of them.
-//
-
+import GlimmerEngine
 import AppIntents
 import Foundation
 import Observation
@@ -21,10 +15,17 @@ struct PCEntity: AppEntity, Hashable {
     let id: String
     let name: String
 
+    init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+
+    #if os(macOS)
     init(host: Host) {
         id = host.id
         name = host.displayName
     }
+    #endif
 
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(title: "\(name)", image: .init(systemName: "display"))
@@ -33,7 +34,11 @@ struct PCEntity: AppEntity, Hashable {
 
 struct PCQuery: EnumerableEntityQuery {
     @MainActor func allEntities() async throws -> [PCEntity] {
+        #if os(macOS)
         try await AppModel.forIntent().hosts.map(PCEntity.init)
+        #else
+        try await LauncherModel.forIntent().commandPCs().map { PCEntity(id: $0.id, name: $0.name) }
+        #endif
     }
 
     @MainActor func entities(for identifiers: [String]) async throws -> [PCEntity] {
@@ -44,7 +49,10 @@ struct PCQuery: EnumerableEntityQuery {
 struct StreamIntent: AppIntent {
     static let title: LocalizedStringResource = "Stream from PC"
     static let description = IntentDescription("Opens Glimmer and streams an app from a paired PC.")
-    static let supportedModes: IntentModes = .foreground
+    @available(macOS 26, *)
+    static var supportedModes: IntentModes { .foreground }
+    // The macOS 15 spelling of the same foreground launch.
+    static let openAppWhenRun = true
 
     @Parameter(title: "PC")
     var pc: PCEntity
@@ -59,10 +67,15 @@ struct StreamIntent: AppIntent {
     }
 
     @MainActor func perform() async throws -> some IntentResult {
+        #if os(macOS)
         try await Self.stream(pc, app: app, model: AppModel.forIntent())
+        #else
+        try await LauncherModel.forIntent().streamFromCommand(pc: pc.id, app: app)
+        #endif
         return .result()
     }
 
+    #if os(macOS)
     /// Tests stand in for the status probe, the route wait and the launch.
     @MainActor static func stream(
         _ pc: PCEntity, app: String?, model: AppModel,
@@ -74,12 +87,15 @@ struct StreamIntent: AppIntent {
         let target = app.flatMap(host.app(named:))
         if let app, target == nil { throw PCIntentError.noApp(app, pc: host.displayName) }
         if model.isStreaming {
-            // Asking for the stream already running just shows it, as activating Glimmer may have.
-            guard AppModel.isLiveStream(target, on: host, live: model.lastLaunchAttempt) else {
-                throw PCIntentError.alreadyStreaming
+            if AppModel.isLiveStream(target, on: host, live: model.lastLaunchAttempt) {
+                model.resumeStreamWindow()
+                return
             }
-            model.resumeStreamWindow()
-            return
+            if let target, model.lastLaunchAttempt?.host.id == host.id {
+                launch(model, target, host)
+                return
+            }
+            throw PCIntentError.alreadyStreaming
         }
         if model.selectedHost?.id != host.id { model.selectHost(host) }
         // The Stream button's app is the PC's running one only while a fresh sample
@@ -97,8 +113,10 @@ struct StreamIntent: AppIntent {
         if model.selectedHost?.id != currentHost.id { model.selectHost(currentHost) }
         launch(model, launchApp, currentHost)
     }
+    #endif
 }
 
+#if os(macOS)
 struct WakePCIntent: AppIntent {
     static let title: LocalizedStringResource = "Wake PC"
     static let description = IntentDescription("Sends Wake on LAN to a paired PC and waits until it's ready to stream.")
@@ -126,6 +144,8 @@ struct WakePCIntent: AppIntent {
     }
 }
 
+#endif
+
 struct QuitAppOnPCIntent: AppIntent {
     static let title: LocalizedStringResource = "Quit App on PC"
     static let description = IntentDescription("Quits the app a paired PC is streaming and ends its session.")
@@ -138,30 +158,59 @@ struct QuitAppOnPCIntent: AppIntent {
     }
 
     @MainActor func perform() async throws -> some IntentResult {
+        #if os(macOS)
         let model = try await AppModel.forIntent()
         let host = try model.pairedHost(pc)
         Diag.notice("Quit App on PC from Shortcuts: \(host.displayName, privacy: .private)", "Stream")
-        if model.streamingHostID == host.id, await model.stopOwnStream(source: "Shortcuts") {
-            return .result()
-        }
         do {
             try await model.quitRunningApp(on: host)
         } catch {
             // The launcher's words: a changed certificate says Pair Again…, not "couldn't reach".
             throw PCIntentError.failed(AppModel.quitFailureMessage(for: error, hostName: host.displayName))
         }
+        #else
+        try await LauncherModel.forIntent().quitFromCommand(pc: pc.id, confirmation: false)
+        #endif
         return .result()
     }
+}
+
+struct StopStreamingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Stop Streaming"
+    static let description = IntentDescription("Stops this device's stream using your disconnect setting.")
+
+    @MainActor func perform() async throws -> some IntentResult {
+        #if os(macOS)
+        try await Self.stop(model: AppModel.forIntent())
+        #else
+        let model = try await LauncherModel.forIntent()
+        let result = await model.stopFromCommand()
+        guard result == .stopped else { throw PCIntentError.failed(result.message) }
+        #endif
+        return .result()
+    }
+
+    #if os(macOS)
+    @MainActor static func stop(model: AppModel) async throws {
+        let result = await model.stopActiveStream(source: "Shortcuts")
+        guard result == .stopped else { throw PCIntentError.failed(result.message) }
+    }
+    #endif
 }
 
 struct GlimmerShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: StreamIntent(), phrases: ["Stream \(\.$pc) in \(.applicationName)"],
                     shortTitle: "Stream from PC", systemImageName: "play.fill")
+        AppShortcut(intent: StopStreamingIntent(), phrases: ["Stop streaming in \(.applicationName)"],
+                    shortTitle: "Stop Streaming", systemImageName: "stop.fill")
+        #if os(macOS)
         AppShortcut(intent: WakePCIntent(), phrases: ["Wake \(\.$pc) with \(.applicationName)"],
                     shortTitle: "Wake PC", systemImageName: "power")
+        #endif
     }
 
+    #if os(macOS)
     /// Siri learns PC names from the shortcut parameters, so refresh them when
     /// a PC is paired, renamed or removed. Reloading the same PCs is ignored.
     @MainActor @discardableResult
@@ -171,33 +220,49 @@ struct GlimmerShortcuts: AppShortcutsProvider {
         Task {
             await bootstrap(model).value
             var known: Set<PCEntity>?
-            for await pcs in Observations({ Set(model.hosts.map(PCEntity.init)) }) where pcs != known {
-                known = pcs
-                update()
+            if #available(macOS 26, *) {
+                for await pcs in Observations({ Set(model.hosts.map(PCEntity.init)) }) where pcs != known {
+                    known = pcs
+                    update()
+                }
+            } else {
+                await forEachTrackedValue({ Set(model.hosts.map(PCEntity.init)) }, perform: { pcs in
+                    guard pcs != known else { return }
+                    known = pcs
+                    update()
+                })
             }
         }
     }
+    #endif
 }
 
 enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
-    case notReady, notPaired, alreadyStreaming, notSent
+    case notReady, notPaired, alreadyStreaming
+    #if os(macOS)
+    case notSent
+    case wakeOff(String), noAddress(String), noAnswer(String)
+    #endif
     case noApp(String, pc: String)
-    case wakeOff(String), noAddress(String), noAnswer(String), failed(String)
+    case failed(String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .notReady: "Glimmer is still starting. Try again in a moment."
         case .notPaired: "That PC isn't paired with Glimmer anymore."
-        case .alreadyStreaming: "\(CommandChannel.alreadyStreaming)"
+        case .alreadyStreaming: "\(StreamCommandMatch.alreadyStreaming)"
+        #if os(macOS)
         case .notSent: "\(AppModel.WakeFailureReason.couldNotSend.line)"
-        case let .noApp(app, pc): "\(pc) has no app named \(app)."
         case .wakeOff(let pc): "\(AppModel.wakeOffMessage(pc))"
         case .noAddress(let pc): "\(AppModel.wakeNoMacMessage(pc))"
         case .noAnswer(let pc): "No answer from \(pc). \(AppModel.wakeNoAnswerHint)"
+        #endif
+        case let .noApp(app, pc): "\(pc) has no app named \(app)."
         case .failed(let why): "\(why)"
         }
     }
 
+    #if os(macOS)
     /// Cancellation is handled separately from failures to wake the PC.
     init?(_ outcome: WakeOutcome, pc: String) {
         switch outcome {
@@ -207,8 +272,10 @@ enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
         case .sent, .noAnswer: self = .noAnswer(pc)
         }
     }
+    #endif
 }
 
+#if os(macOS)
 extension AppModel {
     /// The model once launch has loaded the paired PCs.
     static func forIntent() async throws -> AppModel {
@@ -229,3 +296,5 @@ extension AppModel {
         return host
     }
 }
+
+#endif

@@ -8,6 +8,7 @@
 //  mid-stream on one gets its level back at the next launch. Delete next release.
 //
 
+import GlimmerEngine
 import AudioToolbox
 import CoreAudio
 import Foundation
@@ -23,7 +24,7 @@ extension AppModel {
 
     /// Launch-time recovery for a session that died while muted. The record
     /// is consumed either way, so a vanished device can't retry forever.
-    nonisolated static func restoreOrphanedMute(in defaults: UserDefaults = .standard) {
+    nonisolated static func restoreOrphanedMute(in defaults: UserDefaults = PersistentStorage.defaults) {
         guard let output = pendingRestore(in: defaults) else { return }
         defaults.removeObject(forKey: mutePendingRestoreKey)
         guard let device = deviceID(forUID: output.uid) else { return }
@@ -31,7 +32,7 @@ extension AppModel {
         Diag.notice("Audio: restored the output muted by a session that ended early", "Launch")
     }
 
-    nonisolated static func pendingRestore(in defaults: UserDefaults = .standard) -> MutedOutput? {
+    nonisolated static func pendingRestore(in defaults: UserDefaults = PersistentStorage.defaults) -> MutedOutput? {
         guard let data = defaults.data(forKey: mutePendingRestoreKey) else { return nil }
         return try? JSONDecoder().decode(MutedOutput.self, from: data)
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import QuartzCore
 import Testing
@@ -8,6 +9,72 @@ import Testing
 
 @MainActor
 struct StatsOverlayVisibilityTests {
+    @Test func macHUDKeeps2026_10_7SizeAtEveryWindowSize() {
+        for size in [CGSize(width: 667, height: 375), CGSize(width: 1920, height: 1080), .zero,
+                     CGSize(width: 7680, height: 4320)] {
+            #expect(StatsOverlayLayer.viewportScale(in: size) == 1)
+        }
+        // 2026.10.7: three core rows of 54 pt with 3 pt gaps plus the 12 pt cap, 160 pt wide, never scaled up.
+        var snapshot = StreamStatsSnapshot()
+        snapshot.negotiatedBitrateMbps = 50
+        for size in [CGSize(width: 1_920, height: 1_080), CGSize(width: 2_560, height: 1_440),
+                     CGSize(width: 3_840, height: 2_160), CGSize(width: 5_120, height: 2_880)] {
+            let overlay = StatsOverlayLayer()
+            let video = CALayer()
+            video.bounds = CGRect(origin: .zero, size: size)
+            overlay.attach(to: video)
+            overlay.videoSize = size
+            overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
+            #expect(overlay.layer.frame.size == CGSize(width: 160, height: 180), "\(size)")
+            #expect(overlay.layer.frame.minX == 16 && overlay.layer.frame.maxY == size.height - 16, "\(size)")
+            #expect(overlay.resolvedLabelFont.pointSize == NSFont.preferredFont(forTextStyle: .caption2).pointSize)
+        }
+        let area = CGRect(x: 0, y: 0, width: 320, height: 240)
+        for corner in StatsOverlayCorner.allCases {
+            let frame = StatsOverlayLayer.panelFrame(size: CGSize(width: 500, height: 600),
+                                                     in: area, corner: corner, preferredScale: 1.6)
+            #expect(area.insetBy(dx: 16, dy: 16).contains(frame))
+        }
+    }
+
+    @Test func visibleMetricsExposeStableAccessibilityChildrenAndHideWithTheHUD() throws {
+        let view = DisplayContainerView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
+        view.wantsLayer = true
+        let video = try #require(view.layer)
+        let overlay = StatsOverlayLayer()
+        overlay.displayView = view
+        overlay.attach(to: video)
+        var snapshot = StreamStatsSnapshot()
+        snapshot.rttMs = 3.5
+        overlay.update(snapshot: snapshot, enabled: [.latency], targetFps: 60)
+        #expect((view.accessibilityChildren() ?? []).isEmpty)
+        overlay.setVisible(true)
+        let child = try #require(view.accessibilityChildren()?.first as? NSAccessibilityElement)
+        #expect(child.accessibilityLabel() == "Latency")
+        #expect(child.accessibilityValue() as? String == "3.50 ms")
+        snapshot.rttMs = 4.5
+        overlay.update(snapshot: snapshot, enabled: [.latency], targetFps: 60)
+        #expect(view.accessibilityChildren()?.first as? NSAccessibilityElement === child)
+        #expect(child.accessibilityValue() as? String == "4.50 ms")
+        overlay.setVisible(false)
+        #expect((view.accessibilityChildren() ?? []).isEmpty)
+    }
+
+    @Test func visibilityUsesAnExplicitFadeAndInkChangesNeverSnapshotLiveValues() throws {
+        let overlay = StatsOverlayLayer()
+        overlay.setVisible(true)
+        let fade = try #require(overlay.layer.animation(forKey: "visibility") as? CABasicAnimation)
+        #expect(fade.duration == Motion.short)
+        #expect(fade.fromValue as? Float == 0)
+        #expect(fade.toValue as? Int == 1)
+        overlay.updateBackdropLuminance(1)
+        #expect(overlay.layer.animation(forKey: "ink") == nil)
+        overlay.setVisible(false)
+        let hideGeneration = overlay.visibilityGeneration
+        overlay.setVisible(true)
+        overlay.finishHide(generation: hideGeneration)
+        #expect(!overlay.layer.isHidden)
+    }
 
     @Test func bitrateAndCodecShareOneRow() throws {
         var snapshot = StreamStatsSnapshot()
@@ -100,11 +167,11 @@ struct StatsOverlayVisibilityTests {
 
     @Test func inkHysteresisHoldsInTheDeadBandAndRejectsInvalidSamples() {
         for value in [0.48, 0.55, 0.62] {
-            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: false))
-            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: true))
+            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: pow(value, 2.4), currentlyDark: false))
+            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: pow(value, 2.4), currentlyDark: true))
         }
-        #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: 0.621, currentlyDark: false))
-        #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: 0.479, currentlyDark: true))
+        #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: pow(0.621, 2.4), currentlyDark: false))
+        #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: pow(0.479, 2.4), currentlyDark: true))
         for value in [Double.nan, .infinity, -0.1, 1.1] {
             #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: false))
             #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: true))
@@ -216,21 +283,22 @@ struct StatsOverlayVisibilityTests {
             overlay.videoSize = picture
             overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
             let available = StatsOverlayLayer.availableRect(in: video.bounds, videoSize: picture, safeArea: NSEdgeInsets())
+            let (width, height): (CGFloat, CGFloat) = (160, 180)
             for corner in StatsOverlayCorner.allCases {
                 overlay.corner = corner
                 let rect = overlay.backdropSampleRect
                 let expectedX: CGFloat
                 switch corner {
                 case .topLeft, .bottomLeft: expectedX = 16 / available.width
-                case .topCenter, .bottomCenter: expectedX = (available.width - 160) / 2 / available.width
-                case .topRight, .bottomRight: expectedX = (available.width - 176) / available.width
+                case .topCenter, .bottomCenter: expectedX = (available.width - width) / 2 / available.width
+                case .topRight, .bottomRight: expectedX = (available.width - width - 16) / available.width
                 }
                 let isTop = [.topLeft, .topCenter, .topRight].contains(corner)
-                let expectedY = (isTop ? 16 : available.height - 196) / available.height
+                let expectedY = (isTop ? 16 : available.height - height - 16) / available.height
                 #expect(abs(rect.minX - expectedX) < 0.0001)
                 #expect(abs(rect.minY - expectedY) < 0.0001)
-                #expect(abs(rect.width - 160 / available.width) < 0.0001)
-                #expect(abs(rect.height - 180 / available.height) < 0.0001)
+                #expect(abs(rect.width - width / available.width) < 0.0001)
+                #expect(abs(rect.height - height / available.height) < 0.0001)
                 #expect(CGRect(x: 0, y: 0, width: 1, height: 1).contains(rect))
             }
         }
@@ -247,6 +315,54 @@ struct StatsOverlayVisibilityTests {
             #expect(StatsOverlayLayer.panelFrame(size: size, in: bounds, corner: corner)
                     == CGRect(origin: origin, size: size))
         }
+    }
+
+    @Test func tracesWaitForBoundsAndHistoryAndClearTheirPathsWhenCollapsed() {
+        let trace = StatsTrace(metric: .render)
+        trace.draw()
+        let shapes = (trace.layer.sublayers ?? []).compactMap { $0 as? CAShapeLayer }
+        #expect(shapes.allSatisfy { $0.path == nil })
+        trace.layer.bounds = CGRect(x: 0, y: 0, width: 160, height: 17)
+        var snapshot = StreamStatsSnapshot()
+        snapshot.renderedFps = 60
+        for count in 1...StatsTrace.minimumHistory {
+            trace.draw()
+            #expect(shapes.allSatisfy { $0.path == nil }, "no stub before \(count) readings")
+            trace.append(snapshot: snapshot, targetFps: 60, thresholds: .default)
+        }
+        trace.draw()
+        #expect(shapes.allSatisfy { $0.path == nil }, "a perfectly steady reading draws no flat dash")
+        snapshot.renderedFps = 58
+        trace.append(snapshot: snapshot, targetFps: 60, thresholds: .default)
+        trace.draw()
+        #expect(shapes.contains { $0.path?.isEmpty == false })
+        trace.layer.bounds = .zero
+        trace.draw()
+        #expect(shapes.allSatisfy { $0.path == nil })
+    }
+
+    @Test func sampleRectRecoversAcrossAttachmentVideoSizeAndRendererReplacement() {
+        let overlay = StatsOverlayLayer()
+        overlay.update(snapshot: StreamStatsSnapshot(), enabled: [.renderFps], targetFps: 60)
+        overlay.setVisible(true)
+        let video = CALayer()
+        video.bounds = CGRect(x: 0, y: 0, width: 1_280, height: 800)
+        overlay.attach(to: video)
+        #expect(overlay.backdropSampleRect == .zero)
+        overlay.videoSize = CGSize(width: 1_920, height: 1_080)
+        let initial = overlay.backdropSampleRect
+        #expect(!initial.isEmpty)
+        #expect(abs(initial.minY - 16 / 720) < 0.0001)
+        overlay.layer.removeFromSuperlayer()
+        #expect(overlay.backdropSampleRect == .zero)
+        let replacement = CALayer()
+        replacement.bounds = CGRect(x: 0, y: 0, width: 800, height: 1_280)
+        overlay.attach(to: replacement)
+        #expect(!overlay.backdropSampleRect.isEmpty)
+        #expect(overlay.backdropSampleRect != initial)
+        overlay.setVisible(false)
+        overlay.setVisible(true)
+        #expect(CGRect(x: 0, y: 0, width: 1, height: 1).contains(overlay.backdropSampleRect))
     }
 
     @Test func eachCornerRespectsSafeInsetsAndBoundsOrigin() {

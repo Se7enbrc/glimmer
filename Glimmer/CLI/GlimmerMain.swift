@@ -9,6 +9,7 @@
 //  -psn_*, -NS*, Xcode and test arguments) starts the app; hosted tests skip its launch.
 //
 
+import GlimmerEngine
 import AppKit
 import Darwin
 import Foundation
@@ -17,11 +18,29 @@ import Foundation
 @MainActor
 enum GlimmerMain {
     static func main() {
+        #if DEBUG
+        // Launch Services can reopen a test app without its fixture environment.
+        // Refuse before any production model or persistent storage is initialized.
+        if Bundle.main.bundleIdentifier == "io.ugfugl.Glimmer.JourneyHost" {
+            let environment = ProcessInfo.processInfo.environment
+            guard environment["GLIMMER_UI_TESTING"] == "journey",
+                  environment["GLIMMER_JOURNEY_DIRECTORY"] != nil else {
+                FileHandle.standardError.write(Data("The isolated journey host requires its fixture environment.\n".utf8))
+                exit(EX_USAGE)
+            }
+        }
+        #endif
         _ = ResourceTelemetry.mainThreadID   // recorded here, on the main thread
         reexecIfSymlinked()
         guard GlimmerCLI.isInvocation(CommandLine.arguments) else {
+            #if DEBUG
+            if PersistentStorage.isTesting, ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_DIRECTORY"] != nil {
+                JourneyMacApp.main()
+                return
+            }
+            #endif
             // The test host shares the app's defaults domain and must not run its launch.
-            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            if PersistentStorage.isTesting {
                 GlimmerApp.registerDefaults()
                 NSApplication.shared.run()
                 return

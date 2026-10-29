@@ -1,12 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 /// Glimmer must never remove anything it did not just write (#138).
 struct IdentityKeychainCleanupTests {
+    @Test(arguments: [IdentityStorageError.incompleteIdentity, .invalidIdentity])
+    func damagedIdentityExplainsRestorationAcrossMacSurfaces(error: IdentityStorageError) {
+        let expected = StreamFailureCopy.identityNeedsRestore("Den PC")
+        #expect(PairingFailure.from(error, fallback: .unreachable) == .identityNeedsRestore)
+        #expect(PairingFailure.from(error, fallback: .rejected) == .identityNeedsRestore)
+        #expect(PairingFailure.identityNeedsRestore.message(pc: "Den PC") == expected)
+        #expect(GlimmerCLI.pairFailureMessage(.identityNeedsRestore, pc: "Den PC") == expected)
+        #expect(AppModel.connectFailure(for: error, hostName: "Den PC").message == expected)
+    }
+
     @Test func loadingAnIdentityLeavesEarlierBuildsLeftoversAlone() async throws {
         let store = try IsolatedStore("kc-leave")
         defer { store.remove() }

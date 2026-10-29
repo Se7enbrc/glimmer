@@ -9,6 +9,7 @@
 //  escalation and reconnect-while-hidden gate.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing
@@ -517,7 +518,7 @@ struct VideoDecoderRecoveryTests {
         #expect(decoder.reserveDecodeSlot(isIDR: true) == .reserved)
         decoder.releaseInFlightDecode(vtFailed: true)
         #expect(decoder.reserveDecodeSlot(isIDR: false) == .reserved)
-        #expect(decoder.reserveDecodeSlot(isIDR: true) == .reservedForStallRecreate)
+        #expect(decoder.reserveDecodeSlot(isIDR: true, epoch: 1) == .reservedForStallRecreate)
         #expect(decoder.inFlightDecodeBacklog() == 1)
     }
 
@@ -526,6 +527,7 @@ struct VideoDecoderRecoveryTests {
     @Test func gateLiftFloorsTheDarkClock() {
         let decoder = VideoDecoder()
         decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 60
+        _ = decoder.reserveDecodeSlot(isIDR: false)
         decoder.releaseInFlightDecode(vtFailed: true)
         decoder.presentSuppressedLock.lock()
         decoder._decodeGateLiftedAtNanos = DispatchTime.now().uptimeNanoseconds
@@ -536,6 +538,7 @@ struct VideoDecoderRecoveryTests {
     @Test func drainingDecoderAbsorbsBurstPastNominalBound() {
         let decoder = VideoDecoder()
         decoder.inFlightDecodes = decoder.maxInFlightDecodes
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: decoder.maxInFlightDecodes)
         decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime()
         #expect(decoder.reserveDecodeSlot(isIDR: false) == .reserved)
         #expect(decoder.inFlightDecodeBacklog() == decoder.maxInFlightDecodes + 1)
@@ -544,6 +547,7 @@ struct VideoDecoderRecoveryTests {
     @Test func darkDecoderDropsAtNominalBound() {
         let decoder = VideoDecoder()
         decoder.inFlightDecodes = decoder.maxInFlightDecodes
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: decoder.maxInFlightDecodes)
         decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 0.2
         #expect(decoder.reserveDecodeSlot(isIDR: false) == .dropAndFlush)
         #expect(decoder.inFlightDecodeBacklog() == decoder.maxInFlightDecodes)
@@ -552,6 +556,7 @@ struct VideoDecoderRecoveryTests {
     @Test func hardCeilingDropsEvenWhileDecoderDrains() {
         let decoder = VideoDecoder()
         decoder.inFlightDecodes = decoder.maxInFlightDecodeCeiling
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: decoder.maxInFlightDecodeCeiling)
         decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime()
         #expect(decoder.reserveDecodeSlot(isIDR: false) == .dropAndFlush)
         #expect(decoder.inFlightDecodeBacklog() == decoder.maxInFlightDecodeCeiling)

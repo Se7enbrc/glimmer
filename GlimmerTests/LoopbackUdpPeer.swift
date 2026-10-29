@@ -8,6 +8,7 @@
 //  client's datagram came from, as Sunshine does, so receivers keep their ephemeral port.
 //
 
+@testable import GlimmerEngine
 import Darwin
 import Foundation
 import os
@@ -76,16 +77,18 @@ final class EnetLoopbackPeer: Sendable {
     let udp: LoopbackUdpPeer
     /// Echoing a different connectID forges the VERIFY_CONNECT, which the client must refuse.
     private let forgesConnectID: Bool
+    private let startReplies: [[UInt8]]
     private let state = OSAllocatedUnfairLock(initialState: (reliables: [Reliable](), connectData: UInt32?.none))
     /// Signalled once per newly recorded reliable command.
     let reliableArrived = DispatchSemaphore(value: 0)
     private let stopped = ManagedAtomicFlag()
     private let finished = DispatchSemaphore(value: 0)
 
-    init?(forgesConnectID: Bool = false) {
+    init?(forgesConnectID: Bool = false, startReplies: [[UInt8]] = []) {
         guard let udp = LoopbackUdpPeer() else { return nil }
         self.udp = udp
         self.forgesConnectID = forgesConnectID
+        self.startReplies = startReplies
         let thread = Thread { [self] in
             serve()
             finished.signal()
@@ -146,7 +149,11 @@ final class EnetLoopbackPeer: Sendable {
                 recorded.reliables.append(reliable)
                 return true
             }
-            if isNew { reliableArrived.signal() }
+            if isNew {
+                reliableArrived.signal()
+                let index = reliables.count - 1
+                if index < startReplies.count { return [startReplies[index]] }
+            }
         case Enet.cmdSendUnreliable:
             guard reader.take(2) != nil, let length = reader.u16BE(), reader.take(Int(length)) != nil else { return nil }
         case Enet.cmdAcknowledge:

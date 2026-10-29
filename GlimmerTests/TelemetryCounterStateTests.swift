@@ -6,6 +6,7 @@
 //  Counters, gauges, session resets and the connect and audio telemetry state.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -190,9 +191,11 @@ struct TelemetryCounterStateTests {
         #expect(counters.audioFirstPacketMs == first)
     }
 
-    @Test func audioFirstPacketFallsBackToTheStreamStartAnchor() {
+    @Test func audioFirstPacketFallsBackToTheStreamStartAnchor() async throws {
         let counters = TelemetryCounters()
         counters.anchorAudioStreamStart()
+        // The gauge uses zero as its unset sentinel, so the packet must arrive on a later clock tick.
+        try await Task.sleep(for: .milliseconds(1))
         counters.recordAudioFirstPacket()
         #expect((counters.audioFirstPacketMs ?? -1) >= 0)
     }
@@ -350,16 +353,12 @@ struct TelemetryCounterStateTests {
         var empty = HandshakeBreakdown()
         timing.applyLaunchLegs(to: &empty)
         #expect(empty.launchMs == nil)
-        #expect(empty.launchBusyPollCount == nil)
-        timing.recordLaunchLeg(serverinfoMs: 12, launchBusyWaitMs: 300, busyPollCount: 4, launchMs: 80)
-        timing.recordLaunchLeg(serverinfoMs: 99, cancelMs: 7, launchMs: 99, buildMs: 3)
+        timing.recordLaunchLeg(serverinfoMs: 12, launchMs: 80)
+        timing.recordLaunchLeg(serverinfoMs: 99, launchMs: 99, buildMs: 3)
         var filled = HandshakeBreakdown()
         timing.applyLaunchLegs(to: &filled)
         #expect(filled.launchServerinfoMs == 12)
-        #expect(filled.launchBusyWaitMs == 300)
-        #expect(filled.launchBusyPollCount == 4)
         #expect(filled.launchMs == 80)
-        #expect(filled.launchCancelMs == 7)
         #expect(filled.buildMs == 3)
         timing.resetForNewSession()
         var cleared = HandshakeBreakdown()

@@ -9,6 +9,7 @@
 //  and what a session leaves behind when it ends.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import GameController
 import Testing
@@ -376,6 +377,7 @@ struct ControllerArrivalTests {
     /// its removal went into a link that had already died.
     @Test func aPadThatLeftIsRetired() throws {
         let forwarder = InputForwarder()
+        forwarder.backend = InputRecordingBackend()
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()
         forwarder.setReady(true)

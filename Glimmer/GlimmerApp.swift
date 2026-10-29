@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import ServiceManagement
 import SwiftUI
@@ -51,20 +52,13 @@ struct GlimmerApp: App {
         registerDefaults()
     }
 
-    /// Defaults for prefs whose readers use bare `UserDefaults.bool(forKey:)`.
-    /// REGISTERED, never written - a registration sits under the persistent
-    /// domain, so a user's own choice still wins and toggling back to the
-    /// default doesn't leave a stray key behind.
-    ///
-    /// Every value here must equal what the code effectively falls back to
-    /// today (`bool(forKey:)` on an absent key is false), so adding a key
-    /// changes nothing now. The point is that the default becomes a stated,
-    /// changeable fact in ONE place: flipping one of these to `true` later
-    /// reaches EXISTING users, where a hard-coded `false` fallback only ever
-    /// reached fresh installs.
+    /// Registration supplies defaults without overwriting or materializing saved choices.
     @MainActor
-    static func registerDefaults(defaults: UserDefaults = .standard) {
+    static func registerDefaults(defaults: UserDefaults = PersistentStorage.defaults,
+                                 diagnosticBuild: Bool = DiagnosticBuild.isEnabled) {
         defaults.register(defaults: [
+            "SUEnableAutomaticChecks": true,
+            "SUScheduledCheckInterval": 86_400,
             // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
             // system pointer acceleration while the stream window is focused so
             // forwarded mouse deltas are raw 1:1; the non-UI gate reads it via
@@ -83,11 +77,11 @@ struct GlimmerApp: App {
             // Fire the present tick on a private high-QoS run loop (not .main)
             // so a busy main thread can't starve the CADisplayLink callback.
             // Flip false for an instant fallback to the main-runloop tick.
-            FramePacer.tickOffMainDefaultsKey: true,
+            MacPacer.tickOffMainDefaultsKey: true,
             // Give that tick thread Mach time-constraint (real-time) scheduling
             // so the CPU can't preempt it under load. Flip false to fall back to
             // plain userInteractive (the pre-realtime behavior) without a rebuild.
-            PacerTickThread.realtimeDefaultsKey: true,
+            MacPacer.realtimeDefaultsKey: true,
             // AppModel's own bare-bool reads. All OFF today - the Mac keeps its
             // volume during a stream, raw HID stays behind its explicit opt-in
             // (it needs Input Monitoring), the auto-offer hasn't been answered,
@@ -96,8 +90,11 @@ struct GlimmerApp: App {
             "muteMacWhileStreaming": false,
             "rawHIDControllerEnabled": false,
             "rawHIDPromptAnswered": false,
-            "showDiagnostics": false,
-            "telemetryEnabled": false,
+            "showDiagnostics": diagnosticBuild,
+            "telemetryEnabled": diagnosticBuild,
+            // Beta only: diagnostic builds and Macs enrolled in release candidates.
+            AdaptiveBandwidth.defaultsKey: diagnosticBuild
+                || defaults.string(forKey: StreamAwareUpdateAlerts.updateChannelPreferenceKey) == "rc",
             // "Show the stream": full screen unless the user picks Window. The
             // registered value keeps the raw read and AppModel's declared
             // default in agreement (see StreamDisplayMode.defaultMode).
@@ -115,10 +112,10 @@ struct GlimmerApp: App {
                 // 532pt content + 24pt margins per side = 580. This MUST equal the
                 // connect surface's real width (its .horizontal padding): a floor
                 // below it leaves the window a range to be dragged through.
-                .frame(minWidth: 580)
+                .frame(minWidth: LauncherLayout.windowWidth)
                 // Frosted Liquid Glass is the launcher's surface: see-through enough to show
                 // colour behind it, blurred enough that text behind turns to colour.
-                .containerBackground(for: .window) { Color.clear.glassEffect(.regular, in: .rect) }
+                .glassWindowBackground()
         }
         .windowStyle(.hiddenTitleBar)
         // Exactly its content, never draggable bigger: nothing in the launcher grows, so a
@@ -150,7 +147,11 @@ struct GlimmerApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineToolInstaller.install() }
             }
-            CommandMenu("Stream") { StreamMenu(model: model) }
+            CommandMenu("Stream") {
+                StreamMenu(model: model)
+                Button("Controller layout…") { MacControllerLayouts.active?.showControls() }
+                    .disabled(!model.isStreaming)
+            }
         }
 
         Settings {
@@ -245,8 +246,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A stream started from the menu bar needs the Dock icon; its end
             // may leave nothing to come back to. The first value is launch state.
             Task { [weak self] in
-                for await _ in Observations({ mgr.isStreaming }).dropFirst() {
-                    self?.refreshActivationPolicy()
+                if #available(macOS 26, *) {
+                    for await _ in Observations({ mgr.isStreaming }).dropFirst() {
+                        self?.refreshActivationPolicy()
+                    }
+                } else {
+                    var launch = true
+                    await forEachTrackedValue({ mgr.isStreaming }, perform: { _ in
+                        if launch { launch = false } else { self?.refreshActivationPolicy() }
+                    })
                 }
             }
         }
@@ -290,6 +298,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     #endif
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let model = model ?? Self.boundManager else { return }
+        Task {
+            await model.startBootstrap().value
+            for url in urls { model.handleCommandURL(url) }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep the menu bar item alive when all windows close.
         false
@@ -309,13 +325,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so the SYSTEM-WIDE pointer-acceleration override would survive process exit.
         // Restore it synchronously (idempotent; no-op when nothing is overridden).
         restorePointer()
-        // A live (or connecting) session must reach the host's /cancel before
-        // the process exits. Returning .terminateNow after kicking off an async
-        // stop let the process die first and left Sunshine holding a phantom
-        // session that blocked the next /launch (issue #84). Defer the quit,
-        // run the stop bounded (a hung host can't pin Cmd-Q past the bound),
-        // then reply. No session object yet (the stream Task hasn't spun up)
-        // means nothing has been asked of the host - quit now.
+        // App termination joins the session's chosen disconnect policy before exiting.
+        // Bound teardown so an unreachable PC cannot hold Cmd-Q indefinitely.
         guard TerminationGate.reply(hasSession: model?.nativeSession != nil) == .terminateLater,
               let session = model?.nativeSession else {
             return .terminateNow
@@ -324,8 +335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let bound = session.terminationStopBoundSeconds
             let finished = await TerminationGate.runBounded(seconds: bound) { await stop(session) }
             Diag.notice(finished
-                ? "Quit: stream stopped and the host session cancelled"
-                : "Quit: host didn't acknowledge /cancel within \(Int(bound))s - exiting anyway", "Stream")
+                ? "Quit: stream cleanup finished"
+                : "Quit: stream cleanup did not finish within \(Int(bound))s - exiting anyway", "Stream")
             reply()
         }
         return .terminateLater

@@ -96,6 +96,8 @@ class ReportModeTests(FixtureTestCase):
         with patch.object(REPORT.subprocess, "run", side_effect=run) as called:
             summary = REPORT.swift()
         self.assertIn("| App (`Glimmer.debug.dylib`) | 50.00% (5/10) | 50.00% (1/2)", summary)
+        self.assertIn("| Engine | not measured (0 counted) | 50.00% (1/2)", summary)
+        self.assertTrue((self.root / "out/swift/llvm-engine.json").exists())
         self.assertIn("| Login item | not measured (0 counted) | not executed", summary)
         self.assertTrue(any("-ignore-filename-regex=/DerivedSources/" in c for c in (x.args[0] for x in called.call_args_list)))
         self.assertTrue((self.root / "out/swift/llvm-helper.json").exists())

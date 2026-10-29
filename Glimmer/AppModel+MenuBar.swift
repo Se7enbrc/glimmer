@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+MenuBar.swift
-//
-//  What the menu bar reads and the few actions only it needs: icon state, the
-//  first row, the selected PC as the launcher reads it, the pads, Connection
-//  Details (refreshed while the menu is open), stop, overlay, pairing, takeover.
-//
+// The menu bar reads launcher state and shares its actions with automation.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController
@@ -20,7 +15,7 @@ extension AppModel {
     }
 
     var menuBarAccessibilityLabel: String {
-        MenuBarPresentation.accessibilityLabel(state: menuBarIconState, hostName: selectedHost?.displayName)
+        MenuBarPresentation.accessibilityLabel(state: menuBarIconState, hostName: streamingHost?.displayName ?? selectedHost?.displayName)
     }
 
     var menuBarPrimaryAction: MenuBarPrimaryAction {
@@ -35,11 +30,14 @@ extension AppModel {
     }
 
     var menuBarModeLine: String {
-        MenuBarPresentation.modeLine(width: effectiveWidth, height: effectiveHeight, fps: effectiveFPS, hdr: nativeHDRActive)
+        guard let resolution = menuResolution, let fps = menuDetails?.configuredFps,
+              fps.isFinite, fps > 0, fps < Double(Int.max) else { return "" }
+        return MenuBarPresentation.modeLine(width: resolution.width, height: resolution.height,
+                                            fps: Int(fps), hdr: nativeHDRActive)
     }
 
     var menuBarMetrics: [MenuBarMetric] {
-        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(hostRoute.routeClass))
+        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(streamRoute.routeClass))
     }
 
     /// The header while connecting: the phase's own stage copy.
@@ -54,11 +52,19 @@ extension AppModel {
     }
 
     /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
-    func stopStreamFromMenu(source: String = "the menu bar") {
-        guard let session = nativeSession, !menuStopInProgress else { return }
+    @discardableResult
+    func stopStreamFromMenu(source: String = "the menu bar") -> Task<Void, Never>? {
+        cancelPendingCommandStream()
+        guard !menuStopInProgress, nativeSession != nil || nativeStreamTask != nil else { return nil }
+        let session = nativeSession
+        let ending = nativeStreamTask
         menuStopInProgress = true
+        ending?.cancel()
         Diag.notice("Stop Streaming from \(source)", "Stream")
-        Task { await session.stop() }
+        return Task {
+            await session?.stop()
+            if session == nil { await ending?.value }
+        }
     }
 
     func toggleStatsOverlayFromMenu() {
@@ -66,12 +72,6 @@ extension AppModel {
         let next = !statsOverlayShown
         statsOverlayShown = next
         Task { await session.setStatsOverlay(next) }
-    }
-
-    /// Opens the launcher's pair sheet: Pair Again… for `host`, or Pair a PC… for nil.
-    func requestPairing(for host: Host?) {
-        pairSheetHost = host
-        pairSheetShown = true
     }
 
     /// Refresh Connection Details about once a second while the menu is open.
@@ -94,15 +94,32 @@ extension AppModel {
     private func refreshMenuBarDetails() {
         let pads = readMenuBarControllers()
         if pads != menuBarControllers { menuBarControllers = pads }
-        guard isStreaming, let session = nativeSession else { menuDetails = nil; return }
+        guard isStreaming, let session = nativeSession else {
+            menuDetails = nil
+            menuResolution = nil
+            return
+        }
         Task { [weak self] in
             let details = await session.menuBarDetails()
-            await MainActor.run {
-                guard let self else { return }
-                self.menuDetails = details?.snapshot
-                if let overlay = details?.overlayShown { self.statsOverlayShown = overlay }
-            }
+            self?.applyMenuBarDetails(details, from: session)
         }
+    }
+
+    func prepareMenuBarDetails(width: Int, height: Int, fps: Int) {
+        menuResolution = (width, height)
+        var initialDetails = StreamStatsSnapshot()
+        initialDetails.configuredFps = Double(fps)
+        menuDetails = initialDetails
+    }
+
+    typealias LiveMenuDetails = (snapshot: StreamStatsSnapshot, overlayShown: Bool,
+                                resolution: (width: Int, height: Int))
+
+    func applyMenuBarDetails(_ details: LiveMenuDetails?, from session: StreamSession) {
+        guard isStreaming, nativeSession === session else { return }
+        menuDetails = details?.snapshot
+        menuResolution = details?.resolution
+        if let overlay = details?.overlayShown { statsOverlayShown = overlay }
     }
 
     /// Every pad the Mac sees, with a battery reading where one exists. Reads
@@ -110,14 +127,17 @@ extension AppModel {
     private func readMenuBarControllers() -> [MenuBarController] {
         let pads = GCController.controllers().map { controller in
             let name = controller.vendorName ?? "Controller"
+            let sourceID = "gc:\(ObjectIdentifier(controller))"
             if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery {
-                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging)
+                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging, sourceID: sourceID)
             }
             let reading = controller.battery.flatMap(ControllerBattery.uiReading)
-            return MenuBarController(name: name, percent: reading?.percent, charging: reading?.charging == true)
+            return MenuBarController(name: name, percent: reading?.percent,
+                                     charging: reading?.charging == true, sourceID: sourceID)
         }
         let raw = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }.map {
-            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init), charging: false)
+            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init),
+                              charging: false, sourceID: "hid:\($0.id)")
         }
         return MenuBarPresentation.controllers(gameController: pads, rawHID: raw)
     }
@@ -128,9 +148,10 @@ extension AppModel {
     func presentTakeoverAlertIfNeeded() {
         guard let pending = pendingTakeover, !mainWindowVisible else { return }
         let alert = NSAlert()
-        alert.messageText = TakeoverDialogCopy.title(occupantApp: pending.occupantApp, hostName: pending.host.displayName)
+        alert.messageText = TakeoverDialogCopy.title(occupantApp: pending.occupantApp, targetApp: pending.app.name)
         alert.informativeText = TakeoverDialogCopy.message
-        alert.addButton(withTitle: "Quit and Stream").hasDestructiveAction = true
+        alert.addButton(withTitle: "Quit \(pending.occupantApp ?? "the running app") and start \(pending.app.name)")
+            .hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
         NSApp.activate()
         if alert.runModal() == .alertFirstButtonReturn {

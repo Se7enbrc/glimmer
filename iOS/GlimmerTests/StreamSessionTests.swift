@@ -1,0 +1,580 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+import AVFoundation
+import GlimmerEngine
+import SwiftUI
+import Testing
+import UIKit
+@testable import Glimmer
+
+@Suite(.serialized)
+@MainActor
+struct StreamSessionTests {
+    @Test func touchStaysEnabledWithControllerAndAfterRecovery() async throws {
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model()
+        let controller = StreamViewController(model: model, close: {})
+        controller.loadViewIfNeeded()
+        model.start(surface: controller.surface)
+        model.receive(fixture.update(.firstFrame))
+        let touch = try #require(controller.touchCapture)
+        #expect(touch.primaryTap.isEnabled && touch.pointerPan.isEnabled)
+        model.receive(fixture.update(.input(.controllersActive(true))))
+        #expect(touch.primaryTap.isEnabled && touch.pointerPan.isEnabled)
+        model.showControls()
+        #expect(!touch.primaryTap.isEnabled)
+        model.resumeInput()
+        #expect(touch.primaryTap.isEnabled)
+        model.receive(fixture.update(.reconnecting))
+        #expect(!touch.primaryTap.isEnabled)
+        model.receive(fixture.update(.reconnected))
+        #expect(touch.primaryTap.isEnabled)
+        model.stop()
+        await model.waitUntilStopped()
+        #expect(!touch.primaryTap.isEnabled)
+    }
+
+    @Test func connectedControllerStartsCleanAndHotplugRestoresInputWithoutOverridingManualControls() async {
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        #expect(!model.inputFocused)
+        model.receive(fixture.update(.firstFrame))
+        #expect(model.controllerConnected && model.inputFocused && !model.controlsVisible)
+        fixture.connectionChanged?(false)
+        #expect(model.inputFocused && !model.controlsVisible)
+        fixture.connectionChanged?(true)
+        #expect(model.inputFocused && !model.controlsVisible)
+        model.showControls()
+        fixture.connectionChanged?(false)
+        fixture.connectionChanged?(true)
+        #expect(model.controlsVisible && !model.inputFocused)
+        model.resumeInput()
+        model.receive(fixture.update(.reconnecting))
+        #expect(!model.inputFocused)
+        model.receive(fixture.update(.reconnected))
+        #expect(model.inputFocused && !model.controlsVisible)
+        model.stop()
+        await model.waitUntilStopped()
+        fixture.connectionChanged?(true)
+        #expect(!model.controllerConnected && !model.inputFocused)
+    }
+
+    @Test func controllerMouseNoticeFollowsMenuEventsAndNeverReopensTheOverlay() async throws {
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        let registration = try #require(connection.input.registerController(
+            ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])))
+        model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
+        #expect(model.controllerMouseActive && model.inputFocused && !model.controlsVisible)
+        #expect(model.controllerModeMessage == "Controller is now a mouse.")
+        #expect(model.controllerModeSymbol == ControllerMouseMapping.modeSymbol(enabled: true))
+        #expect(!model.showsMouseBadge)
+        try await Task.sleep(for: .seconds(2.2))
+        #expect(model.showsMouseBadge && model.controllerModeMessage == nil)
+        model.receive(fixture.update(.input(.controllersActive(false))))
+        #expect(model.controllerMouseActive)
+        model.receive(fixture.update(.input(.mouseMode(registration, enabled: false))))
+        #expect(!model.controllerMouseActive && model.controllerModeMessage == "Controller is back in the game.")
+        #expect(model.controllerModeSymbol == ControllerMouseMapping.modeSymbol(enabled: false))
+        #expect(!model.showsMouseBadge)
+        model.stop()
+        await model.waitUntilStopped()
+        model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
+        #expect(!model.controllerMouseActive && model.controllerModeMessage == nil)
+        await connection.stop()
+    }
+
+    @Test func realPreparedPlaybackCanStopBeforeStartWithoutContactingPC() async throws {
+        var quiesces = 0
+        let scene = try await testWindowScene()
+        let window = UIWindow(windowScene: scene)
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
+        window.addSubview(surface)
+        defer { surface.removeFromSuperview() }
+        var pacingStarts = 0
+        let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface,
+                                               startPacing: { _, _, _ in pacingStarts += 1 },
+                                               quiesce: { quiesces += 1 })
+        let expected = try testLaunch().profile.resolve(surface: surface)
+        #expect(playback.format == expected)
+        await playback.stop()
+        await playback.stop()
+        #expect(quiesces == 1)
+        #expect(playback.input?.registerController(
+            ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])) == nil)
+        var stopped = 0
+        for await update in playback.events {
+            #expect(update.sessionID == playback.id)
+            if case .stopped = update.event { stopped += 1 }
+        }
+        #expect(stopped == 1)
+        await #expect(throws: CancellationError.self) { try await playback.start() }
+        #expect(pacingStarts == 0)
+        #expect(quiesces == 1)
+    }
+
+    @Test func unavailableDisplayEndsBeforeMediaOrIdleTimerChanges() {
+        var writes: [Bool] = []
+        let activity = AppDisplayActivity(development: true) { writes.append($0) }
+        activity.update(.active, streamActive: false)
+        let model = StreamSessionModel(launch: testLaunch())
+        model.start(surface: StreamSurface())
+        #expect(model.phase.isEnded)
+        #expect(model.streamInput == nil && model.requestedFormat == nil)
+        #expect(writes == [true])
+        model.start(surface: StreamSurface())
+        #expect(writes == [true])
+    }
+
+    @Test func controlsAndTemporaryInactivityOwnInputFocus() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        var focus: [Bool] = []
+        model.inputCaptureChanged = { focus.append($0) }
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        #expect(!model.controlsVisible)
+        #expect(model.inputFocused)
+        model.showControls()
+        #expect(!model.inputFocused)
+        model.resumeInput()
+        model.availabilityChanged(active: false, background: false, protectedDataAvailable: true)
+        #expect(!model.inputFocused)
+        model.resumeInput()
+        #expect(!model.inputFocused)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        #expect(model.inputFocused)
+        model.stop()
+        await model.waitUntilStopped()
+        #expect(focus == [true, false, true, false, true, false, false])
+    }
+
+    @Test func sceneSuppressionForwardsAvailabilityInputs() async throws {
+        let fixture = PlaybackFixture()
+        // Without granted background time, leaving disconnects and the return is never forwarded.
+        fixture.backgroundCalls = .init(begin: { _ in .init(rawValue: 42) }, end: { _ in },
+                                         now: { 0 }, sleep: { throw CancellationError() })
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
+        let hidden = try #require(fixture.visibilityInputs.last)
+        #expect(hidden.reason == .sceneAvailability && hidden.appActive == false && hidden.background == true)
+        #expect(hidden.protectedDataAvailable == true && hidden.returnedInTime == true)
+        #expect(fixture.visibility.last == false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        #expect(fixture.visibilityInputs.last?.appActive == true && fixture.visibility.last == true)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func videoHasAccessibleShowControlsAction() {
+        let model = PlaybackFixture().model()
+        let controller = StreamViewController(model: model, close: {})
+        controller.loadViewIfNeeded()
+        #expect(controller.surface.accessibilityCustomActions?.map(\.name) == ["Show controls"])
+        #expect(controller.controllerUserInteractionEnabled)
+    }
+
+    @Test func onlyMatchingFirstFramePromotesStream() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.connectionEstablished))
+        #expect(model.phase == .connecting)
+        model.receive(.init(sessionID: UUID(), attemptID: UUID(), event: .firstFrame))
+        #expect(model.phase == .connecting)
+        model.receive(fixture.update(.firstFrame))
+        #expect(model.phase == .streaming)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func shutdownWaitsForTransportAndCannotUndoReactivatedAppKeepAwake() async {
+        let fixture = PlaybackFixture()
+        var idleDisabled = false
+        let activity = AppDisplayActivity(development: true) { idleDisabled = $0 }
+        activity.update(.active, streamActive: false)
+        let gate = StreamTestGate()
+        fixture.stop = { await gate.wait() }
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        #expect(idleDisabled)
+        model.stop()
+        activity.update(.background, streamActive: true)
+        #expect(!idleDisabled)
+        activity.update(.active, streamActive: true)
+        #expect(model.phase == .stopping)
+        #expect(fixture.completedStops == 0)
+        model.receive(fixture.update(.firstFrame))
+        model.start(surface: StreamSurface())
+        #expect(model.phase == .stopping)
+        #expect(fixture.makes == 1)
+        await gate.release()
+        await model.waitUntilStopped()
+        #expect(fixture.completedStops == 1)
+        activity.update(.active, streamActive: false)
+        #expect(idleDisabled)
+        #expect(model.phase.isEnded)
+        model.stop()
+        #expect(fixture.completedStops == 1)
+    }
+
+    @Test func controllerDisconnectDismissesAfterTeardownWithoutConfirmation() async {
+        let fixture = PlaybackFixture()
+        let gate = StreamTestGate()
+        fixture.stop = { await gate.wait() }
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.receive(fixture.update(.input(.stopRequested)))
+        #expect(model.dismissWhenStopped && model.phase == .stopping)
+        #expect(!model.inputFocused)
+        await gate.release()
+        await model.waitUntilStopped()
+        #expect(model.phase.isEnded && fixture.completedStops == 1)
+    }
+
+    @Test func sessionStatusUsesCanonicalEventsAndLeavesHDRToEngine() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(.init(sessionID: UUID(), attemptID: UUID(), event: .audioFailed("old")))
+        #expect(!model.audioUnavailable)
+        model.receive(fixture.update(.audioFailed("unavailable")))
+        model.receive(fixture.update(.connectionStatus(.poor)))
+        model.receive(fixture.update(.hdrModeChanged(false)))
+        #expect(model.audioUnavailable)
+        #expect(model.connectionPoor)
+        model.stop()
+        model.receive(fixture.update(.connectionStatus(.good)))
+        await model.waitUntilStopped()
+        #expect(model.connectionPoor)
+    }
+
+    @Test func recoveryKeepsPresentationAndReacquiresInputOnlyOnCanonicalLiveEvent() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.resumeInput()
+        #expect(model.inputFocused)
+        fixture.quiesce?()
+        #expect(!model.inputFocused)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.resumeInput()
+        #expect(!model.inputFocused)
+        model.receive(fixture.update(.reconnecting))
+        #expect(model.phase == .reconnecting && !model.inputFocused)
+        #expect(fixture.completedStops == 0 && fixture.makes == 1)
+        model.receive(fixture.update(.connectionEstablished))
+        #expect(model.phase == .reconnecting)
+        model.receive(fixture.update(.reconnected))
+        #expect(model.phase == .streaming && model.inputFocused)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func requestedCaptionAdoptsTheStartedModeAndAdaptiveStartRate() async {
+        let fixture = PlaybackFixture()
+        fixture.started = StreamStart(format: StreamFormat(width: 1920, height: 1080, fps: 60), startKbps: 9_000)
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        #expect(model.requestedStartKbps == nil)
+        for _ in 0..<1_000 where model.requestedStartKbps == nil { await Task.yield() }
+        #expect(model.requestedFormat == StreamFormat(width: 1920, height: 1080, fps: 60))
+        #expect(model.requestedStartKbps == 9_000)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func qualityAdjustmentHoldsLikeRecoveryAndAnnouncesOnce() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        var spoken: [String] = []
+        model.announce = { spoken.append($0) }
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.resumeInput()
+        for _ in 0..<2 { model.receive(fixture.update(.adjustingQuality)) }
+        #expect(model.phase == .reconnecting && model.adjustingQuality && !model.inputFocused)
+        #expect(spoken == [StreamSession.adjustingQualityText])
+        model.receive(fixture.update(.reconnected))
+        #expect(model.phase == .streaming && !model.adjustingQuality && model.inputFocused)
+        model.receive(fixture.update(.reconnecting))
+        #expect(model.phase == .reconnecting && !model.adjustingQuality && spoken.count == 1)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func canonicalVideoHoldIsInformationalAndDoesNotSuspendInput() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.resumeInput()
+        model.receive(fixture.update(.waitingForVideo(true)))
+        #expect(model.waitingForVideo && model.phase == .streaming && model.inputFocused)
+        #expect(fixture.completedStops == 0)
+        model.receive(fixture.update(.waitingForVideo(false)))
+        #expect(!model.waitingForVideo && model.phase == .streaming && model.inputFocused)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func terminalEventRestoresNativeStateWithoutStartingAnotherStop() {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.connectionTerminated(errorCode: -1)))
+        #expect(model.phase == .stopping)
+        model.receive(fixture.update(.stopped))
+        #expect(model.phase.isEnded)
+        #expect(fixture.completedStops == 0)
+        model.stop()
+        #expect(fixture.completedStops == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func blockedPortSurvivesStartFailureEventOrdering(eventsFirst: Bool) async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        fixture.start = {
+            if eventsFirst {
+                await MainActor.run {
+                    model.receive(fixture.update(.stageFailed(name: "RTSP", errorCode: -1)))
+                    model.receive(fixture.update(.stopped))
+                }
+            }
+            throw StreamError.streamPortsBlocked(proto: "TCP", port: 48010)
+        }
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        if !eventsFirst {
+            model.receive(fixture.update(.stageFailed(name: "RTSP", errorCode: -1)))
+            model.receive(fixture.update(.stopped))
+        }
+        #expect(model.phase == .ended("Test PC answered, but the stream couldn't get through. "
+            + "Check that the PC's firewall allows TCP 48010."))
+    }
+
+    @Test func protectedContentReasonSurvivesStoppedAndLateStartError() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        fixture.start = {
+            await MainActor.run {
+                model.receive(fixture.update(.connectionTerminated(
+                    errorCode: Int32(bitPattern: 0x800E_9302))))
+                model.receive(fixture.update(.stopped))
+            }
+            throw StreamError.sessionFailed(-1)
+        }
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Test PC stopped the stream: "
+            + "the app is showing protected content, which can't be streamed. Close it on the PC, then try again."))
+    }
+
+    @Test func exhaustedReconnectRetainsItsConnectionReason() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        model.receive(fixture.update(.firstFrame))
+        model.receive(fixture.update(.reconnecting))
+        model.receive(fixture.update(.connectionTerminated(errorCode: 0,
+            error: .streamPortsBlocked(proto: "TCP", port: 48010))))
+        model.receive(fixture.update(.stopped))
+        #expect(model.phase == .ended("Test PC answered, but the stream couldn't get through. "
+            + "Check that the PC's firewall allows TCP 48010."))
+    }
+
+    @Test func pairingFailureUsesIOSRecoveryAndNamesPC() async {
+        let fixture = PlaybackFixture()
+        fixture.start = { throw StreamConnection.Failure.pairingRequired }
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Couldn't use the saved pairing with Test PC. "
+            + "In Settings → PCs, forget the PC and pair again."))
+    }
+
+    @Test func cancelledStartDoesNotSuggestConnectionRecovery() async {
+        let fixture = PlaybackFixture()
+        fixture.start = { throw CancellationError() }
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Disconnected from Test PC."))
+    }
+
+    @Test func explicitDisconnectWinsOverLateStartFailure() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        fixture.start = {
+            await MainActor.run {
+                model.receive(fixture.update(.stageFailed(name: "RTSP", errorCode: -1)))
+                model.disconnect()
+            }
+            await model.waitUntilStopped()
+            throw StreamError.streamPortsBlocked(proto: "TCP", port: 48010)
+        }
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Disconnected from Test PC."))
+    }
+
+    @Test func failedDisplayLayerReplacementRebindsRenderer() {
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 852, height: 393))
+        let failedLayer = surface.displayLayer
+        var boundLayer: AVSampleBufferDisplayLayer? = failedLayer
+        let replacement = surface.replaceDisplayLayer { boundLayer = $0 }
+        #expect(replacement !== failedLayer)
+        #expect(boundLayer === replacement)
+        #expect(surface.displayLayer === replacement)
+        #expect(replacement.superlayer === surface.layer)
+        #expect(failedLayer.superlayer == nil)
+        #expect(replacement.videoGravity == .resizeAspectFill)
+        #expect(replacement.frame == surface.bounds && surface.clipsToBounds)
+    }
+
+    @Test func streamSurfaceFillsVideoAndSupportsWindowOrientations() {
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
+        surface.layoutIfNeeded()
+        #expect(surface.displayLayer.frame == surface.bounds)
+        #expect(surface.displayLayer.videoGravity == .resizeAspectFill)
+        #expect(surface.clipsToBounds)
+        let model = PlaybackFixture().model()
+        let controller = StreamViewController(model: model, close: {})
+        #expect(controller.supportedInterfaceOrientations
+            == AppDelegate.streamOrientations(for: controller.traitCollection.userInterfaceIdiom))
+        #expect(controller.prefersStatusBarHidden)
+        #expect(controller.prefersHomeIndicatorAutoHidden)
+        controller.startWhenReady()
+        #expect(model.phase == .idle)
+    }
+}
+
+@MainActor
+final class PlaybackFixture {
+    let id = UUID()
+    var makes = 0
+    var format: StreamFormat?
+    var visibility: [Bool] = []
+    var visibilityInputs: [VideoDecoder.PresentationVisibility] = []
+    var focusHistory: [Bool] = []
+    var statsHistory: [Bool] = []
+    var completedStops = 0
+    var quiesce: (@MainActor @Sendable () -> Void)?
+    var controllerConnected = false
+    var connectionChanged: (@MainActor (Bool) -> Void)?
+    var backgroundCalls = StreamBackgroundGrace.Calls(begin: { _ in .invalid }, end: { _ in })
+    var start: @Sendable () async throws -> Void = {}
+    var started: StreamStart?
+    var stop: @Sendable () async -> Void = {}
+    let events = AsyncStream<StreamSession.Update>.makeStream()
+
+    func update(_ event: StreamEvent) -> StreamSession.Update {
+        .init(sessionID: id, attemptID: UUID(), event: event)
+    }
+
+    func model(launch: StreamLaunch = testLaunch(),
+               menuVisibility: StreamMenuVisibility = StreamMenuVisibility()) -> StreamSessionModel {
+        StreamSessionModel(launch: launch, menuVisibility: menuVisibility,
+                           backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
+                           makePlayback: { [self] _, _, quiesce in
+            makes += 1
+            self.quiesce = quiesce
+            let start = start, started = started
+            return StreamPlayback(id: id, events: events.stream, start: { try await start(); return started },
+                                  stop: { [self] in
+                await stop()
+                await MainActor.run { completedStops += 1 }
+            }, screenChanged: {},
+               focusInput: { [self] in focusHistory.append($0) }, format: format,
+               setVisible: { [self] visible, inputs in
+                   visibility.append(visible)
+                   visibilityInputs.append(inputs)
+               },
+               observeControllers: { [self] changed in
+                connectionChanged = changed
+                changed(controllerConnected)
+            }, showStats: { [self] in statsHistory.append($0) })
+        })
+    }
+}
+
+actor StreamTestGate {
+    private var released = false
+    private var entered = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        entered = true
+        for waiter in enteredWaiters { waiter.resume() }
+        enteredWaiters = []
+        if released { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+    func release() {
+        released = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
+    }
+}
+
+@MainActor
+func testWindowScene() async throws -> UIWindowScene {
+    let activations = NotificationCenter.default.notifications(named: UIScene.didActivateNotification).map { _ in () }
+    func application() -> UIWindowScene? {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.session.role == .windowApplication }
+    }
+    if let scene = application() { return scene }
+    for await _ in activations {
+        if let scene = application() { return scene }
+    }
+    throw CancellationError()
+}
+
+// Renders the real mode notice in a Simulator window over bright and dark frames, in both appearances.
+@MainActor
+struct StreamNoticeCaptureTests {
+    @Test(arguments: [false, true])
+    func noticeRendersOverLightAndDarkPictures(dark: Bool) throws {
+        let colors: [Color] = dark
+            ? [Color(red: 0.05, green: 0.06, blue: 0.12), Color(red: 0.18, green: 0.12, blue: 0.22)]
+            : [Color(red: 0.62, green: 0.82, blue: 0.98), Color(red: 0.98, green: 0.93, blue: 0.80)]
+        let root = ZStack {
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
+            StreamNoticeView(text: "Controller is now a mouse.",
+                             symbol: ControllerMouseMapping.modeSymbol(enabled: true))
+        }
+        .environment(\.colorScheme, dark ? .dark : .light)
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 393, height: 160)
+        window.overrideUserInterfaceStyle = dark ? .dark : .light
+        window.rootViewController = UIHostingController(rootView: root)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        window.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let data = try #require(image.pngData())
+        #expect(data.count > 1_000)
+        Attachment.record(data, named: "ios-mode-indicator-\(dark ? "dark" : "light").png")
+    }
+}

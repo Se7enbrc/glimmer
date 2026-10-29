@@ -13,11 +13,14 @@
 //  Also hosts PINTiles + FloatingWindowLevel, both used only here.
 //
 
+import GlimmerEngine
 import AppKit
 import Network
 import SwiftUI
 
 struct PairSheet: View {
+    @FocusState private var controllerFocus: LauncherFocus?
+    @State private var focusCells: [LauncherFocus] = []
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
@@ -29,6 +32,7 @@ struct PairSheet: View {
     /// move to the PIN/handshake step.
     @State private var chosen: Bool
 
+    @State private var successAppeared = false
     @State private var pairedHost: Host?
     @State private var pairingAttempt: PairingAttempt?
     @State private var pairingTask: Task<Void, Never>?
@@ -69,8 +73,11 @@ struct PairSheet: View {
 
             if paired {
                 successBody
+                if let pairedHost, LauncherStyle.offersChoice(apps: pairedHost.apps) {
+                    PairLauncherChoice(host: pairedHost, focus: $controllerFocus)
+                }
             } else if !chosen {
-                HostChooser(selected: { addr, name in
+                HostChooser(focus: $controllerFocus, selected: { addr, name in
                     hostnameOrIP = addr
                     pcName = name
                     chosen = true
@@ -81,11 +88,25 @@ struct PairSheet: View {
 
             footer
         }
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: chosen)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: paired)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: pairingFailed)
         .padding(28)
         .frame(width: 480)
         // Float above all other Glimmer windows so the PIN being read off isn't
         // hidden behind the launcher or Settings. Reverts on dismiss.
-        .background(FloatingWindowLevel())
+        .background(FloatingWindowLevel { model.pairSheetWindow = $0 })
+        .background {
+            LauncherControllerWindow(controller: model.launcherController, handle: navigatePairing, isSheet: true)
+                .frame(width: 0, height: 0)
+        }
+        .onPreferenceChange(LauncherFocusCells.self) { cells in
+            guard cells != focusCells else { return }
+            focusCells = cells
+            model.launcherController.resetInput()
+            if let controllerFocus, !cells.contains(controllerFocus) { self.controllerFocus = cells.first }
+        }
+        .sensoryFeedback(.success, trigger: paired)
         .onDisappear { cancelPairing() }
     }
 
@@ -100,7 +121,9 @@ struct PairSheet: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.green)
-                .symbolEffect(.bounce, value: reduceMotion ? false : paired)
+                .symbolEffect(.bounce, value: reduceMotion ? false : successAppeared)
+                .task { successAppeared = true }
+                .onDisappear { successAppeared = false }
             Text("\(pairedHost?.displayName ?? pcLabel) is ready to stream.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -108,15 +131,7 @@ struct PairSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .sensoryFeedback(.success, trigger: paired)
-        // Auto-close after a brief beat so the check + haptic register; select
-        // the freshly-paired host so the launcher lands on it.
-        .task(id: paired) {
-            guard paired else { return }
-            // No auto-dismiss: the success screen shows Done / "Stream Now" buttons,
-            // and a 900ms auto-close made them unclickable. The user dismisses it.
-            selectPairedHost()
-        }
+        // No auto-dismiss: Done and Stream Now must stay available until the user chooses.
     }
 
     @ViewBuilder private var pinBody: some View {
@@ -125,6 +140,7 @@ struct PairSheet: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
             PINTiles(pin: pin)
+                .transaction { $0.animation = nil }
                 .onAppear {
                     if pin.isEmpty { pin = model.generatePairingPIN() }
                     // Showing the code IS the start of pairing - the handshake
@@ -138,6 +154,7 @@ struct PairSheet: View {
             Button("Open Sunshine on This Mac") { model.openSunshinePINPage(forHost: trimmedHost) }
                 .buttonStyle(.link)
                 .font(.footnote)
+                .pairingFocus($controllerFocus, .help) { model.openSunshinePINPage(forHost: trimmedHost) }
             Text("Sunshine uses its own certificate, so your browser asks you to confirm before opening it.")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
@@ -157,7 +174,7 @@ struct PairSheet: View {
                 Spacer()
             }
             .padding(12)
-            .glassEffect(.regular, in: .rect(cornerRadius: 10))
+            .glassSurface(in: .rect(cornerRadius: 10))
         }
     }
 
@@ -175,39 +192,68 @@ struct PairSheet: View {
             if paired {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .pairingFocus($controllerFocus, .done) { dismiss() }
                 Spacer()
-                Button("Stream Now") {
-                    selectPairedHost()
-                    model.streamDefaultApp()
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(StreamButtonStyle())
+                Button("Stream Now", action: streamPairedHost)
+                    .pairingFocus($controllerFocus, .stream, activate: streamPairedHost)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(StreamButtonStyle())
             } else if !chosen {
                 Spacer()
                 Button("Cancel") { cancelPairing(); dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .pairingFocus($controllerFocus, .cancel) { cancelPairing(); dismiss() }
             } else {
                 Spacer()
-                Button("Back") {
-                    cancelPairing()
-                    chosen = false
-                    rePairName = nil
-                    pin = ""
-                }
+                Button("Back", action: backToChooser)
+                    .pairingFocus($controllerFocus, .back, activate: backToChooser)
                 Button("Cancel") { cancelPairing(); dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .pairingFocus($controllerFocus, .cancel) { cancelPairing(); dismiss() }
                 // Pairing starts with the code; a retry gets a fresh one.
                 if pairingFailed {
-                    Button("Try Again") {
-                        pin = model.generatePairingPIN()
-                        startPairing()
-                    }
-                    .buttonStyle(StreamButtonStyle())
-                    .keyboardShortcut(.defaultAction)
+                    Button("Try Again", action: retryPairing)
+                        .pairingFocus($controllerFocus, .retry, activate: retryPairing)
+                        .buttonStyle(StreamButtonStyle())
+                        .keyboardShortcut(.defaultAction)
                 }
             }
         }
+    }
+
+    private func navigatePairing(_ command: LauncherCommand) {
+        if command == .dismiss { cancelPairing(); dismiss(); return }
+        guard model.launcherControllerNavigating else {
+            model.launcherControllerNavigating = true
+            DispatchQueue.main.async { navigatePairing(command) }
+            return
+        }
+        if command == .activate {
+            guard controllerFocus != .pairing(.address) else { return }
+            if controllerFocus == nil { controllerFocus = focusCells.first } else {
+                model.launcherController.postKey(.activate)
+            }
+        } else {
+            controllerFocus = PairingNavigation.destination(from: controllerFocus, command: command, cells: focusCells)
+        }
+    }
+
+    private func streamPairedHost() {
+        selectPairedHost()
+        model.streamDefaultApp()
+        dismiss()
+    }
+
+    private func backToChooser() {
+        cancelPairing()
+        chosen = false
+        rePairName = nil
+        pin = ""
+    }
+
+    private func retryPairing() {
+        pin = model.generatePairingPIN()
+        startPairing()
     }
 
     private func startPairing() {
@@ -219,6 +265,7 @@ struct PairSheet: View {
             let host = await model.pair(attempt: attempt, pin: pin)
             guard attempt.accepts(pairingAttempt, address: trimmedHost, cancelled: Task.isCancelled) else { return }
             pairedHost = host
+            selectPairedHost()
             pairingTask = nil
         }
     }
@@ -231,7 +278,9 @@ struct PairSheet: View {
     }
 
     private func selectPairedHost() {
-        if let pairedHost { model.selectHost(pairedHost) }
+        if let pairedHost, let current = model.hosts.first(where: { $0.id == pairedHost.id }) {
+            model.selectHost(current, defaults: model.hostsDefaults)
+        }
     }
 }
 
@@ -241,6 +290,8 @@ struct PairSheet: View {
 /// row (or submitting the manual field) hands the address, and the name when
 /// discovery knew one, back via `selected`, which advances to the PIN step.
 private struct HostChooser: View {
+    let focus: FocusState<LauncherFocus?>.Binding
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let selected: (_ address: String, _ name: String?) -> Void
     @State private var found: [HostDiscovery.Discovered] = []
     /// macOS refused Glimmer Local Network access, so nothing can be found.
@@ -309,9 +360,10 @@ private struct HostChooser: View {
                             }
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                            .glassSurface(in: .rect(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
+                        .pairingFocus(focus, .pc(host.id)) { selected(host.host, host.displayName) }
                     }
                 }
             }
@@ -324,11 +376,15 @@ private struct HostChooser: View {
                     HStack {
                         TextField("e.g. tower.local or 192.168.1.10", text: $manual)
                             .accessibilityLabel("PC name or address")
+                            .focused(focus, equals: .pairing(.address))
+                            .preference(key: LauncherFocusCells.self, value: [.pairing(.address)])
                             .textFieldStyle(.roundedBorder)
+                            .transaction { $0.animation = nil }
                             .disableAutocorrection(true)
                             .onSubmit { submitManual() }
                         Button("Continue") { submitManual() }
                             .buttonStyle(StreamButtonStyle())
+                            .pairingFocus(focus, .continuePairing, activate: submitManual)
                             .disabled(manualAddress == nil)
                     }
                     if manualAddress == nil, !manual.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -346,8 +402,13 @@ private struct HostChooser: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tint)
+                .pairingFocus(focus, .manual) { showManual = true }
             }
         }
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: found.map(\.id))
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: showManual)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: denied)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: discoveryStalled)
         .task {
             // Stream discovered hosts until the view goes away. HostDiscovery
             // is an actor; start() is actor-isolated so we await it, then
@@ -377,6 +438,7 @@ private struct HostChooser: View {
             if let url = Self.localNetworkSettings {
                 Link("Open Local Network Settings", destination: url)
                     .font(.callout)
+                    .pairingFocus(focus, .settings) { NSWorkspace.shared.open(url) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -396,6 +458,7 @@ private struct HostChooser: View {
             if let url = Self.hostSetupGuide {
                 Link("Set Up Your PC", destination: url)
                     .font(.footnote)
+                    .pairingFocus(focus, .guide) { NSWorkspace.shared.open(url) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -413,13 +476,18 @@ private struct HostChooser: View {
 /// Raises its hosting NSWindow to `.floating` while present so the pairing
 /// sheet stays above the launcher + Settings windows.
 private struct FloatingWindowLevel: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { view.window?.level = .floating }
+        DispatchQueue.main.async {
+            if let window = view.window { window.level = .floating; onWindow(window) }
+        }
         return view
     }
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { nsView.window?.level = .floating }
+        DispatchQueue.main.async {
+            if let window = nsView.window { window.level = .floating; onWindow(window) }
+        }
     }
 }
 
@@ -432,16 +500,13 @@ private struct PINTiles: View {
     let pin: String
     var body: some View {
         let digits = pin.padding(toLength: 4, withPad: " ", startingAt: 0)
-        GlassEffectContainer(spacing: 10) {
+        GlassGroup(spacing: 10) {
             HStack(spacing: 10) {
                 ForEach(Array(digits.enumerated()), id: \.offset) { _, ch in
                     Text(String(ch).trimmingCharacters(in: .whitespaces))
                         .font(.system(size: 44, weight: .semibold, design: .monospaced))
                         .frame(maxWidth: .infinity, minHeight: 78)
-                        .glassEffect(
-                            .regular.tint(Color.accentColor.opacity(0.12)),
-                            in: .rect(cornerRadius: 14)
-                        )
+                        .glassSurface(in: .rect(cornerRadius: 14), tint: Color.accentColor.opacity(0.12))
                         .allowsHitTesting(false)
                 }
             }

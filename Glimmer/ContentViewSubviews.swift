@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ContentViewSubviews.swift
-//
-//  Host-hero pieces split out of ContentView.swift: the app-icon and
-//  spec-chip rows, plus the empty-pairing and stream-ended states.
-//
-
+import GlimmerEngine
 import Accessibility
 import AppKit
 import SwiftUI
@@ -15,27 +9,49 @@ import SwiftUI
 struct AppIconsRow: View {
     let apps: [LibraryApp]
     let host: Host
+    let focus: FocusState<LauncherFocus?>.Binding
     /// The connect is on screen (past the 400 ms hold), so the app being launched shows it.
     var connectingShown = false
-    @Environment(AppModel.self) private var model
-
+    @Environment(AppModel.self) var model
     /// Two columns of large app buttons fill the window's width with two apps or
     /// four; past four the last cell is the overflow menu.
     private static let maxInlineTiles = 4
     private static let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     /// The apps that get a button of their own; the rest are in the overflow menu.
-    static func inlineApps(_ apps: [LibraryApp]) -> [LibraryApp] {
-        apps.count <= maxInlineTiles ? apps : Array(apps.prefix(maxInlineTiles - 1))
+    static func inlineApps(_ apps: [LibraryApp], runningAppID: Int? = nil) -> [LibraryApp] {
+        guard apps.count > maxInlineTiles else { return apps }
+        let visible = Array(apps.prefix(maxInlineTiles - 1))
+        guard let running = apps.first(where: { $0.id == runningAppID }),
+              !visible.contains(where: { $0.id == running.id }) else { return visible }
+        return Array(visible.dropLast()) + [running]
     }
 
-    private var inlineApps: [LibraryApp] { Self.inlineApps(apps) }
+    private var inlineApps: [LibraryApp] { Self.inlineApps(apps, runningAppID: model.runningApp(on: host)?.id) }
 
-    private var overflowApps: [LibraryApp] {
-        apps.count <= Self.maxInlineTiles ? [] : Array(apps.dropFirst(Self.maxInlineTiles - 1))
+    static func overflowApps(_ apps: [LibraryApp], runningAppID: Int? = nil) -> [LibraryApp] {
+        let visible = Set(inlineApps(apps, runningAppID: runningAppID).map(\.id))
+        return apps.filter { !visible.contains($0.id) }
     }
+
+    private var overflowApps: [LibraryApp] { Self.overflowApps(apps, runningAppID: model.runningApp(on: host)?.id) }
 
     var body: some View {
+        Group {
+            if model.launcherStyle == .covers { coverGrid } else { buttonGrid }
+        }
+        .preference(key: LauncherFocusCells.self, value: navigationCells)
+    }
+
+    private var navigationCells: [LauncherFocus] {
+        guard model.readinessReason(for: host) == nil else { return [] }
+        let visible = model.launcherStyle == .covers ? apps : inlineApps
+        var cells = visible.map { LauncherFocus.app($0.id) }
+        if model.launcherStyle == .buttons, !overflowApps.isEmpty { cells.append(.overflow) }
+        return cells
+    }
+
+    private var buttonGrid: some View {
         // No GlassEffectContainer: it composites its glass above the app buttons' labels.
         LazyVGrid(columns: Self.columns, spacing: 10) {
             ForEach(inlineApps) { app in
@@ -47,9 +63,6 @@ struct AppIconsRow: View {
                 overflowMenu
             }
         }
-        // Each app button is disabled (and dimmed by its style) while a session exists;
-        // the overflow menu stays openable mid-session, since looking launches nothing.
-        .animation(.snappy(duration: 0.3), value: model.isStreaming)
     }
 
     /// Return streams the Start with app while the PC is ready; otherwise the
@@ -61,14 +74,15 @@ struct AppIconsRow: View {
 
     /// What the app that is launching or streaming shows on its own button, so the status
     /// stays on the chip and no second button appears: progress, the way out, the way back.
-    private enum TileState {
-        case ready, connecting, reconnecting, hiddenStream
+    enum TileState {
+        case ready, connecting, reconnecting, hiddenStream, running
 
         var shortcut: KeyboardShortcut? {
             switch self {
             case .ready: nil
             case .connecting, .reconnecting: .cancelAction   // Return never cancels (users mash it)
             case .hiddenStream: .defaultAction
+            case .running: nil
             }
         }
 
@@ -77,7 +91,7 @@ struct AppIconsRow: View {
             case .ready: nil
             case .connecting: "Cancel the connection"
             case .reconnecting: "End the stream"
-            case .hiddenStream: "Back to the stream"
+            case .hiddenStream, .running: "Resume stream"
             }
         }
 
@@ -86,75 +100,102 @@ struct AppIconsRow: View {
             case .ready: ("", "")
             case .connecting: ("Connecting", "Cancels the connection")
             case .reconnecting: ("Reconnecting", "Ends the stream")
-            case .hiddenStream: ("Streaming", "Returns to the stream")
+            case .hiddenStream, .running: ("Running", "Resume stream")
             }
         }
     }
 
+    func tileState(_ app: LibraryApp) -> TileState {
+        Self.tileState(app, on: host, model: model, connectingShown: connectingShown)
+    }
+
     /// A hidden stream wins, as the Stream button's roles do; a (re)connect shows once past the hold.
-    private func tileState(_ app: LibraryApp) -> TileState {
+    static func tileState(_ app: LibraryApp, on host: Host, model: AppModel,
+                          connectingShown: Bool) -> TileState {
+        let idle: TileState = model.launcherAppIsRunning(app, on: host) ? .running : .ready
         guard let attempt = model.lastLaunchAttempt, attempt.app.id == app.id,
-              attempt.host.id == host.id else { return .ready }
+              attempt.host.id == host.id else { return idle }
         if model.isStreaming, model.nativeStreamBackgrounded { return .hiddenStream }
-        guard connectingShown, case .connecting = model.streamPhase else { return .ready }
+        guard connectingShown, case .connecting = model.streamPhase else { return idle }
         return model.isReconnecting ? .reconnecting : .connecting
     }
 
-    /// Icon, name, and a quiet play glyph: a click streams this app at once. A hidden stream's
-    /// tile says where it goes instead, so the way back doesn't look like the way in.
-    private func tileLabel(systemImage: String, title: String, trailing: String, trailingText: String? = nil,
+    private func tileLabel(icon: Image, title: String, running: Bool = false,
                            launching: Bool = false) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .frame(width: 28, height: 28)
-            Text(title)
-                .font(.headline)
-                .lineLimit(1)
+            icon.font(.system(size: 20, weight: .semibold)).frame(width: 28, height: 28)
+            Text(title).font(.headline).lineLimit(1)
+                .overlay(alignment: .topLeading) {
+                    if running {
+                        Text("Click to resume").font(.footnote).opacity(0.85)
+                            .fixedSize().offset(y: 18).accessibilityHidden(true)
+                    }
+                }
             Spacer(minLength: 0)
             if launching {
-                // Dark so the spinner draws light on the violet in both appearances.
                 ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
-            } else if let trailingText {
-                Text(trailingText)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .fixedSize()
             } else {
-                Image(systemName: trailing)
-                    .font(.footnote.weight(.bold))
-                    .opacity(0.75)
+                Image(systemName: "play.fill").font(.footnote.weight(.bold))
+                    .opacity(running ? 0 : 0.75)
             }
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 60)
-        .contentShape(Rectangle())
+        .overlay(alignment: .topTrailing) {
+            if running { RunningTileBadge().padding(RunningTileBadge.cornerInset) }
+        }
+        .contentShape(.rect(cornerRadius: 14))
     }
 
-    private func appTile(_ app: LibraryApp) -> some View {
+    func appTile(_ app: LibraryApp, revision: String = "") -> some View {
         let state = tileState(app)
-        return Button {
-            switch state {
-            case .ready: model.requestStream(app: app, on: host)
-            case .connecting: model.cancelConnect()
-            // A reconnect is a live stream, so its way out ends it rather than cancelling.
-            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
-            case .hiddenStream: model.resumeStreamWindow()
+        return Button { activate(app) } label: {
+            if model.launcherStyle == .covers {
+                coverLabel(app, revision: revision, connecting: state == .connecting || state == .reconnecting)
+            } else {
+                tileLabel(icon: app.icon, title: app.name, running: isRunning(app),
+                          launching: state == .connecting || state == .reconnecting)
             }
-        } label: {
-            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill",
-                      trailingText: state == .hiddenStream ? "Back to Stream" : nil,
-                      launching: state == .connecting || state == .reconnecting)
         }
-        .buttonStyle(AppTileStyle())
+        .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
+        .modifier(LauncherControlFocus(focus: focus, target: .app(app.id), activate: { activate(app) }))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
-        // Only the streaming app stays live while a stream exists; the others can't start one.
-        .disabled(model.isStreaming && state == .ready)
-        .help(state.help ?? (model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)"))
+        // A different app remains selectable so its named replacement can be confirmed.
+        .disabled(model.menuStopInProgress || (model.readinessReason(for: host) != nil && state == .ready))
+        .help(model.readinessReason(for: host) ?? state.help ?? "Stream \(app.name)")
         // One name, not glyph + name + play glyph read in turn.
-        .accessibilityLabel(app.name)
-        .accessibilityValue(state.spoken.value)
-        .accessibilityHint(state.spoken.hint)
+        .accessibilityLabel(isRunning(app) ? "\(app.name), running. Resume stream" : app.name)
+        .accessibilityValue(isRunning(app) ? "" : state.spoken.value)
+        .accessibilityHint(isRunning(app) ? "" : model.readinessReason(for: host) ?? state.spoken.hint)
+        .accessibilityActions {
+            if isRunning(app) {
+                Button("Resume") { model.requestStream(app: app, on: host) }
+                Button("Quit \(app.name)…") { model.requestQuitGame(on: host, app: app) }
+            }
+        }
+        .overlay {
+            if isRunning(app) {
+                RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(0.25), lineWidth: 1)
+                    .padding(-3).allowsHitTesting(false)
+            }
+        }
+        .modifier(ControllerLayoutAppMenu(host: host, app: app))
+    }
+
+    private func activate(_ app: LibraryApp) {
+        Self.activate(app, on: host, model: model, connectingShown: connectingShown)
+    }
+
+    static func activate(_ app: LibraryApp, on host: Host, model: AppModel, connectingShown: Bool) {
+        switch tileState(app, on: host, model: model, connectingShown: connectingShown) {
+        case .ready, .running:
+            guard model.readinessReason(for: host) == nil else { return }
+            model.requestStream(app: app, on: host)
+        case .connecting: model.cancelConnect()
+        // A reconnect is a live stream, so its way out ends it rather than cancelling.
+        case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
+        case .hiddenStream: model.resumeStreamWindow()
+        }
     }
 
     private var overflowMenu: some View {
@@ -163,34 +204,35 @@ struct AppIconsRow: View {
                 Button {
                     model.requestStream(app: app, on: host)
                 } label: {
-                    // macOS 27 hides a plain menu-item symbol image by default;
-                    // these items name an app, so force the icon back on.
-                    Label(app.name, systemImage: app.systemImage)
-                        .labelStyle(.titleAndIcon)
+                    Label { Text(app.name) } icon: { app.icon }
                 }
-                .disabled(model.isStreaming)
+                .disabled(model.menuStopInProgress || model.readinessReason(for: host) != nil)
+                .help(model.readinessReason(for: host) ?? "Stream \(app.name)")
             }
         } label: {
-            tileLabel(systemImage: "ellipsis", title: "\(overflowApps.count) more", trailing: "chevron.down")
+            Label("\(overflowApps.count) more apps", systemImage: "ellipsis")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .contentShape(.rect(cornerRadius: 14))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        // Glass, not violet: it opens a list rather than streaming.
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
-        .help(model.isStreaming
-            ? "Finish the current stream first"
-            : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
-        .accessibilityLabel("\(overflowApps.count) more apps")
-        .accessibilityHint("Shows the rest of this PC's apps")
+        .glassSurface(in: .rect(cornerRadius: 14), interactive: true)
+        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
+        .accessibilityLabel("\(overflowApps.count) more apps on \(host.displayName)")
+        .accessibilityHint("Opens the remaining apps for this PC.")
     }
 }
 
 struct SpecChipsRow: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptive = false
 
     var body: some View {
         // Facts, not controls: one secondary line, so nothing here looks pressable.
-        Text(model.streamSpecChips.joined(separator: " · "))
+        Text(model.streamSpecChips(adaptive: adaptive).joined(separator: " · "))
+            .contentTransition(.opacity)
+            .animation(Motion.fade, value: model.selectedHost?.id)
             .font(.body)
             .foregroundStyle(.secondary)
     }
@@ -199,44 +241,19 @@ struct SpecChipsRow: View {
 // MARK: - Empty pairing state
 
 struct EmptyPairingState: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Owned by MainWindow so its `.sheet` survives the swap to ConnectSurface
-    /// the moment pairing fills `model.hosts` - see MainWindow.showPair.
-    @Binding var showPair: Bool
+    let focus: FocusState<LauncherFocus?>.Binding
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // No leading/trailing Spacers: they centred this state inside a window
         // taller than itself, and the window now sizes to its content, so there
         // is no extra height to centre within - only height they would invent.
         VStack(spacing: 26) {
-            ZStack {
-                // Floating glass medallion behind the hero symbol -
-                // accent-tinted so it picks up the system tint.
-                Circle()
-                    .frame(width: 144, height: 144)
-                    .glassEffect(
-                        .regular.tint(Color.accentColor.opacity(0.18)),
-                        in: .circle
-                    )
-                    .overlay {
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.22),
-                                        Color.white.opacity(0.04)
-                                    ],
-                                    startPoint: .top, endPoint: .bottom
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-                Image(systemName: "display.and.arrow.down")
-                    .font(.system(size: 60, weight: .light))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.tint)
-                    .symbolEffect(.pulse.byLayer, options: .repeating, isActive: !reduceMotion)
-            }
+            Image(systemName: "display")
+                .font(.system(size: 60, weight: .light))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+                .frame(width: 144, height: 144)
 
             VStack(spacing: 10) {
                 Text("Let's find your gaming PC")
@@ -250,13 +267,15 @@ struct EmptyPairingState: View {
             }
 
             Button {
-                showPair = true
+                model.requestPairing(for: nil)
             } label: {
                 Label("Pair a PC…", systemImage: "plus.circle.fill")
                     .frame(minWidth: 260)
             }
             .buttonStyle(StreamButtonStyle())
             .controlSize(.large)
+            .modifier(LauncherControlFocus(focus: focus, target: .state) { model.requestPairing(for: nil) })
+            .preference(key: LauncherFocusCells.self, value: [.state])
         }
         .padding(40)
         .fixedSize(horizontal: false, vertical: true)
@@ -294,8 +313,8 @@ struct StreamEndedToast: View {
                 .background(.thinMaterial, in: Capsule())
                 .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-                // One element, one sentence for assistive tech.
+                .transition(Motion.overlayTransition(reduceMotion: reduceMotion))
+                // Announce the receipt as one sentence.
                 .accessibilityElement(children: .combine)
                 // Keyed on the receipt so a back-to-back end re-arms the hold
                 // for the new content; the flag reset in stream() is the other
@@ -317,7 +336,7 @@ struct StreamEndedToast: View {
                 }
             }
         }
-        .animation(.snappy(duration: 0.30, extraBounce: reduceMotion ? 0 : 0.1),
+        .animation(Motion.overlay(reduceMotion: reduceMotion),
                    value: model.streamEndedToastVisible)
     }
 }

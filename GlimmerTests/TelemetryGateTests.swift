@@ -1,13 +1,52 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
-import Network
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct TelemetryGateTests {
+    @Test func updateDefaultsAreRegisteredAndExplicitChoicesWin() throws {
+        let name = "UpdateDefaults." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        GlimmerApp.registerDefaults(defaults: defaults)
+        #expect(defaults.bool(forKey: "SUEnableAutomaticChecks"))
+        #expect(defaults.double(forKey: "SUScheduledCheckInterval") == 86_400)
+        #expect(defaults.persistentDomain(forName: name)?.isEmpty != false)
+        defaults.set(false, forKey: "SUEnableAutomaticChecks")
+        defaults.set(172_800, forKey: "SUScheduledCheckInterval")
+        GlimmerApp.registerDefaults(defaults: defaults)
+        #expect(defaults.bool(forKey: "SUEnableAutomaticChecks") == false)
+        #expect(defaults.double(forKey: "SUScheduledCheckInterval") == 172_800)
+    }
+
+    @Test func diagnosticDefaultsDoNotPersistOrOverrideAnExplicitOptOut() throws {
+        let name = "DiagnosticDefaults." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: true)
+        #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
+        #expect(TelemetryGate.diagnosticsVisible(defaults: defaults))
+        #expect(defaults.persistentDomain(forName: name)?.isEmpty != false)
+        defaults.set(false, forKey: "telemetryEnabled")
+        GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: true)
+        #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
+        defaults.removeObject(forKey: "telemetryEnabled")
+        GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: false)
+        #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
+    }
+
+    @Test func diagnosticMarkerRequiresAnExplicitValue() {
+        #expect(DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": "YES"]))
+        #expect(DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": true]))
+        #expect(!DiagnosticBuild.enabled(info: [:]))
+        #expect(!DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": "NO"]))
+        #expect(!DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": "$(GLIMMER_DIAGNOSTIC_BUILD)"]))
+    }
+
     private func withFreshDefaults(_ body: (UserDefaults) throws -> Void) throws {
         let name = "TelemetryGateTests." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: name))
@@ -20,9 +59,6 @@ struct TelemetryGateTests {
         try withFreshDefaults { defaults in
             #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
             #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
-            let parameters = TelemetryExporter.listenerParameters(listenOnLAN: TelemetryGate.listensOnLAN(defaults: defaults))
-            #expect(parameters.requiredInterfaceType == .loopback)
         }
     }
 
@@ -31,7 +67,6 @@ struct TelemetryGateTests {
         try withFreshDefaults { defaults in
             #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: value) == (value == "1"))
             #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
         }
     }
 
@@ -41,30 +76,14 @@ struct TelemetryGateTests {
             defaults.set(true, forKey: "telemetryEnabled")
             #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: value))
             #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
         }
     }
 
-    @Test func revealingDiagnosticsDoesNotEnableCollectionOrLAN() throws {
+    @Test func revealingDiagnosticsDoesNotEnableCollection() throws {
         try withFreshDefaults { defaults in
             defaults.set(true, forKey: "showDiagnostics")
             #expect(TelemetryGate.diagnosticsVisible(defaults: defaults))
             #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
-        }
-    }
-
-    @Test func lanBindingRequiresASeparatePreference() throws {
-        try withFreshDefaults { defaults in
-            defaults.set(true, forKey: "telemetryEnabled")
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
-            defaults.set(true, forKey: TelemetryExporter.lanBindDefaultsKey)
-            #expect(TelemetryGate.listensOnLAN(defaults: defaults))
-            let parameters = TelemetryExporter.listenerParameters(listenOnLAN: TelemetryGate.listensOnLAN(defaults: defaults))
-            #expect(parameters.requiredInterfaceType != .loopback)
-            defaults.set(false, forKey: "telemetryEnabled")
-            #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
-            #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
         }
     }
 }

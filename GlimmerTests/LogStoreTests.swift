@@ -7,6 +7,7 @@
 //  The troubleshooting ring: wrap order, the pinned session opening, and which levels it keeps.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

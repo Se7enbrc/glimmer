@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+#if os(macOS)
+import Foundation
+
+extension TelemetryRenderer {
+    package static func ndjsonAudioPipeline(
+        _ builder: inout NDJSONBuilder,
+        _ snapshot: AudioPipelineTelemetry.Snapshot?
+    ) {
+        guard let snapshot else { return }
+        let bounds = snapshot.receiveGap.boundsMs.map(jsonNumber).joined(separator: ",")
+        builder.fields.append("\"audio_timing_bounds_ms\":[\(bounds)]")
+        for (name, stage) in audioPipelineStages(snapshot) where stage.hasObservations {
+            builder.add("\(name)_p50_ms", histogramQuantile(0.50, stage: stage))
+            builder.add("\(name)_p95_ms", histogramQuantile(0.95, stage: stage))
+            builder.add("\(name)_p99_ms", histogramQuantile(0.99, stage: stage))
+            builder.addCount("\(name)_count", stage.observationCount)
+            builder.add("\(name)_sum_ms", stage.sumMs)
+            let buckets = stage.buckets.map(String.init).joined(separator: ",")
+            builder.fields.append("\"\(name)_buckets\":[\(buckets)]")
+        }
+        builder.add("audio_render_cushion_min_ms", snapshot.window.minimumRenderCushionMs)
+        builder.add("audio_output_silent_s", snapshot.window.outputSilentSeconds)
+        builder.add("audio_output_probe_result", snapshot.window.outputProbeResult.map(Double.init))
+        if let audible = snapshot.window.outputProbeInputAudible {
+            builder.addBool("audio_output_probe_input_audible", audible)
+        }
+        builder.add("audio_output_latency_ms", snapshot.window.outputLatencyMs)
+        builder.add("audio_device_recovery_ms", snapshot.window.deviceRecoveryMs)
+        builder.addCount("audio_near_misses_window", snapshot.window.nearMisses)
+        builder.addBool("audio_decode_realtime", snapshot.window.realtime)
+        for (name, count) in audioPipelineCounts(snapshot) { builder.addCount(name, count) }
+    }
+
+    private static func audioPipelineStages(
+        _ snapshot: AudioPipelineTelemetry.Snapshot
+    ) -> [(String, LatencyHistogramSnapshot.Stage)] {
+        [("audio_receive_gap", snapshot.receiveGap), ("audio_decode_schedule", snapshot.decodeSchedule),
+         ("audio_state_lock_wait", snapshot.stateLockWait), ("audio_queue_wait", snapshot.queueWait)]
+    }
+
+    private static func audioPipelineCounts(_ snapshot: AudioPipelineTelemetry.Snapshot) -> [(String, UInt64)] {
+        [("audio_render_underrun_total", snapshot.window.renderUnderruns),
+         ("audio_worker_overflow_total", snapshot.queueOverflow),
+         ("audio_pcm_pool_exhausted_total", snapshot.poolExhausted),
+         ("audio_reconfiguration_drop_total", snapshot.reconfigurationDrops),
+         ("audio_received_datagrams_total", snapshot.receivedDatagrams),
+         ("audio_processed_datagrams_total", snapshot.processedDatagrams),
+         ("audio_decrypt_ok_total", snapshot.decryptOK),
+         ("audio_decrypt_failed_total", snapshot.decryptFailed),
+         ("audio_decoded_frames_total", snapshot.decodedFrames),
+         ("audio_rendered_frames_total", snapshot.renderedFrames)]
+    }
+}
+
+#endif

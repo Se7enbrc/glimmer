@@ -4,6 +4,7 @@
 // What the decode and prime paths hand the player, recorded through `schedulePlayout`:
 // buffer order, frame counts, zeroed backfill silence and the cushion target behind it.
 
+@testable import GlimmerEngine
 import AVFAudio
 import Foundation
 import Testing
@@ -11,6 +12,7 @@ import Testing
 
 @Suite(.serialized)
 struct AudioPlayoutScheduleTests {
+    private let settings = IsolatedDefaults()
 
     /// One real 5 ms stereo CELT packet at Sunshine's settings (from OpusDecoderTests).
     private static let packet = "ec7f4bd60777985d8731b747622a18fd2b679a2e9def04904278899d9136b906038d671fa4e046bc58abc93cb740be"
@@ -21,7 +23,7 @@ struct AudioPlayoutScheduleTests {
         struct Entry { let frames: Int; let silent: Bool; let complete: @Sendable () -> Void }
         var entries: [Entry] = []
 
-        func record(_ buffer: AVAudioPCMBuffer, _ complete: @escaping @Sendable () -> Void) {
+        func record(_ buffer: AVAudioPCMBuffer, _: Bool, _ complete: @escaping @Sendable () -> Void) {
             let frames = Int(buffer.frameLength)
             let channels = (0..<Int(buffer.format.channelCount)).compactMap { buffer.floatChannelData?[$0] }
             let silent = channels.allSatisfy { channel in (0..<frames).allSatisfy { channel[$0] == 0 } }
@@ -31,13 +33,14 @@ struct AudioPlayoutScheduleTests {
 
     /// A decoder whose player is the recorder. The prime edge is pinned shut so no engine starts.
     private func harness() throws -> (AudioDecoder, Recorder, AVAudioFormat) {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         let recorder = Recorder()
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
         decoder.schedulePlayout = recorder.record
         decoder.decoder = OpusDecoder(sampleRate: 48_000, channels: 2, streams: 1, coupledStreams: 1,
                                       mapping: [0, 1], samplesPerFrame: 240)
         decoder.inputFormat = format
+        decoder.preparePCMStorage(format: format)
         decoder.primeEdgeRetryAtNanos = .max
         return (decoder, recorder, format)
     }
@@ -56,6 +59,7 @@ struct AudioPlayoutScheduleTests {
         // Playback ran and drained: the next packet re-arms a re-prime and grows the target a step.
         decoder.primed = true
         first.complete()
+        decoder.meterCompleteOnePlayout(frames: UInt64(first.frames), confirmedUnderrun: true)
         #expect(decoder.playoutDrained)
         decoder.decodeAndPlayPLC()
         #expect(recorder.entries.map(\.frames).dropFirst() == [240])
@@ -71,6 +75,7 @@ struct AudioPlayoutScheduleTests {
         #expect(tail.map(\.silent) == [false, true])
         #expect(decoder.pendingSilenceFrames == UInt64(frames(ms: decoder.playoutTargetMs - aheadMs)))
         tail.last?.complete()
+        decoder.meterCompleteOnePlayout(frames: UInt64(tail.last?.frames ?? 0), isSilence: true)
         #expect(decoder.pendingSilenceFrames == 0)
     }
 

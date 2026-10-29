@@ -1,20 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  HUDBackdropLuminanceTests.swift
-//
-//  The HUD backdrop sampler: range and bit-depth decoding, rect placement, and the 4 Hz gate.
-//
+// Real pixel buffers catch format and transfer mismatches that synthetic planes cannot.
 
 import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Foundation
+import os
 import Testing
+@testable import GlimmerEngine
 @testable import Glimmer
 
 struct HUDBackdropLuminanceTests {
+    @Test @MainActor func chromeSamplingDoesNotRequireStatsCollection() {
+        let configuration = StreamConnection.Configuration(width: 64, height: 64, fps: 60,
+                                                            bitrateKbps: 20_000, videoFormats: .h264)
+        let decoder = VideoDecoder(configuration: configuration, displayInfo: { nil })
+        defer { decoder.teardown() }
+        decoder.overlayChromeEnabled = true
+        #expect(decoder.hudBackdropState.overlayEnabled && !decoder.statsOverlayEnabled)
+        decoder.statsOverlayEnabled = true
+        decoder.statsOverlayEnabled = false
+        #expect(decoder.hudBackdropState.overlayEnabled)
+        decoder.overlayChromeEnabled = false
+        #expect(!decoder.hudBackdropState.overlayEnabled && decoder.hudBackdropLuminance == nil)
+    }
 
     private static let width = 64
     private static let height = 32
@@ -117,7 +128,9 @@ struct HUDBackdropLuminanceTests {
     ]
 
     /// A bi-planar buffer whose luma plane holds `code` everywhere; 10-bit codes sit in the high bits.
-    private func pixelBuffer(_ format: OSType, code: UInt16, pq: Bool = false) throws -> CVPixelBuffer {
+    private func pixelBuffer(
+        _ format: OSType, code: UInt16, pq: Bool = false, hlg: Bool = false
+    ) throws -> CVPixelBuffer {
         var buffer: CVPixelBuffer?
         let attrs = [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary
         #expect(CVPixelBufferCreate(nil, Self.width, Self.height, format, attrs, &buffer) == kCVReturnSuccess)
@@ -139,6 +152,10 @@ struct HUDBackdropLuminanceTests {
             CVBufferSetAttachment(
                 pixels, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ,
                 .shouldPropagate)
+        }
+        if hlg {
+            CVBufferSetAttachment(pixels, kCVImageBufferTransferFunctionKey,
+                                  kCVImageBufferTransferFunction_ITU_R_2100_HLG, .shouldPropagate)
         }
         return pixels
     }
@@ -168,11 +185,12 @@ struct HUDBackdropLuminanceTests {
         #expect(pq > 0.01 && pq < 0.05)
     }
 
-    @Test func singlePlaneBufferIsNotSampled() throws {
+    @Test(arguments: [kCVPixelFormatType_32BGRA, kCVPixelFormatType_422YpCbCr16BiPlanarVideoRange])
+    func unsupportedPlaneLayoutsAreNotSampled(format: OSType) throws {
         var buffer: CVPixelBuffer?
-        CVPixelBufferCreate(nil, Self.width, Self.height, kCVPixelFormatType_32BGRA, nil, &buffer)
-        let bgra = try #require(buffer)
-        #expect(VideoDecoder.backdropLuminance(of: bgra, in: whole) == nil)
+        try #require(CVPixelBufferCreate(nil, Self.width, Self.height, format, nil, &buffer) == kCVReturnSuccess)
+        let pixels = try #require(buffer)
+        #expect(VideoDecoder.backdropLuminance(of: pixels, in: whole) == nil)
     }
 
     private func sample(_ pixels: CVPixelBuffer) throws -> CMSampleBuffer {
@@ -203,6 +221,26 @@ struct HUDBackdropLuminanceTests {
         #expect(decoder.hudBackdropLuminance == nil)
     }
 
+    @Test @MainActor func chromeAloneSamplesOncePerSecondAndReportsEachReading() throws {
+        let decoder = VideoDecoder()
+        let readings = OSAllocatedUnfairLock<[Double]>(initialState: [])
+        decoder.observeBackdrop { value in readings.withLock { $0.append(value) } }
+        decoder.overlayChromeEnabled = true
+        #expect(decoder.hudBackdropState.intervalNanos == VideoDecoder.chromeSampleIntervalNanos)
+        decoder.statsOverlayEnabled = true
+        #expect(decoder.hudBackdropState.intervalNanos == VideoDecoder.backdropSampleIntervalNanos)
+        decoder.statsOverlayEnabled = false
+        decoder.hudBackdropRect = whole
+        let white = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 235))
+        decoder.sampleHUDBackdrop(white)
+        decoder.sampleHUDBackdrop(white)
+        #expect(readings.withLock { $0.count } == 1)
+        #expect(!VideoDecoder.backdropSampleDue(now: 900_000_000, last: 1,
+                                                interval: VideoDecoder.chromeSampleIntervalNanos))
+        decoder.observeBackdrop(nil)
+        decoder.overlayChromeEnabled = false
+    }
+
     @Test @MainActor func presentPathHoldsTheSampleUntilTheNextQuarterSecond() throws {
         let decoder = VideoDecoder()
         decoder.statsOverlayEnabled = true
@@ -216,5 +254,58 @@ struct HUDBackdropLuminanceTests {
 
         decoder.statsOverlayEnabled = false
         #expect(decoder.hudBackdropLuminance == nil)
+        decoder.statsOverlayEnabled = true
+        decoder.sampleHUDBackdrop(black)
+        #expect(try #require(decoder.hudBackdropLuminance) < 0.001)
+    }
+
+    @Test func diffuseBrightScenesUseDarkInkAcrossTransfers() throws {
+        // 70% SDR, 100-nit PQ and 75% HLG are bright diffuse surfaces, not peak highlights.
+        let fixtures: [(OSType, UInt16, String)] = [
+            (kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, 169, "sdr"),
+            (kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange, 677, "sdr"),
+            (kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange, 509, "pq"),
+            (kCVPixelFormatType_420YpCbCr10BiPlanarFullRange, 520, "pq"),
+            (kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange, 721, "hlg"),
+            (kCVPixelFormatType_420YpCbCr10BiPlanarFullRange, 767, "hlg")
+        ]
+        for (format, code, transfer) in fixtures {
+            let pq = transfer == "pq"
+            let hlg = transfer == "hlg"
+            let bright = try pixelBuffer(format, code: code, pq: pq, hlg: hlg)
+            let luminance = try #require(VideoDecoder.backdropLuminance(of: bright, in: whole))
+            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: luminance, currentlyDark: false))
+            let darkCode: UInt16 = Self.tenBit.contains(format) ? 128 : 32
+            let dark = try pixelBuffer(format, code: darkCode, pq: pq, hlg: hlg)
+            let dim = try #require(VideoDecoder.backdropLuminance(of: dark, in: whole))
+            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: dim, currentlyDark: true))
+        }
+    }
+
+    @Test func hlgUsesReferenceDisplayGammaAndDiffuseWhite() throws {
+        let format = kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        let white = try pixelBuffer(format, code: 721, hlg: true)
+        let middle = try pixelBuffer(format, code: 502, hlg: true)
+        let whiteValue = try #require(VideoDecoder.backdropLuminance(of: white, in: whole))
+        let middleValue = try #require(VideoDecoder.backdropLuminance(of: middle, in: whole))
+        #expect(whiteValue > 0.99)
+        #expect(abs(middleValue - 0.2497) < 0.001)
+    }
+
+    @Test @MainActor func changedRectInvalidatesAndResamplesWithoutWaiting() throws {
+        let decoder = VideoDecoder()
+        decoder.statsOverlayEnabled = true
+        decoder.hudBackdropRect = whole
+        let white = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 235))
+        let black = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 16))
+        decoder.sampleHUDBackdrop(white)
+        decoder.hudBackdropRect = CGRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        #expect(decoder.hudBackdropLuminance == nil)
+        decoder.sampleHUDBackdrop(black)
+        #expect(try #require(decoder.hudBackdropLuminance) < 0.001)
+        decoder.hudBackdropRect = .zero
+        decoder.hudBackdropRect = whole
+        decoder.sampleHUDBackdrop(white)
+        #expect(try #require(decoder.hudBackdropLuminance) > 0.999)
     }
 }

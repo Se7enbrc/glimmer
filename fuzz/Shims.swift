@@ -11,7 +11,7 @@
 import Foundation
 
 /// Splits a fuzz input into datagrams: [clock step][length, 2 bytes BE][bytes].
-func datagrams(_ input: UnsafeRawBufferPointer) -> [(stepUs: UInt64, bytes: [UInt8])] {
+package func datagrams(_ input: UnsafeRawBufferPointer) -> [(stepUs: UInt64, bytes: [UInt8])] {
     var out: [(UInt64, [UInt8])] = []
     var cursor = 0
     while cursor + 3 <= input.count {
@@ -29,6 +29,11 @@ enum Diag {
     static func notice(_ message: String, _ category: String) {}
     static func warn(_ message: String, _ category: String) {}
     static func error(_ message: String, _ category: String) {}
+}
+
+enum AudioDiagnostics {
+    static func notice(_ message: @autoclosure () -> String, _ category: String) {}
+    static func warn(_ message: @autoclosure () -> String, _ category: String) {}
 }
 
 /// Every `TelemetryCounters.shared.<name>Total` resolves to one no-op counter.
@@ -78,10 +83,7 @@ enum TelemetryRenderer {
     static func jsonNumber(_ value: Double) -> String { "\(value)" }
 }
 
-/// Named by StreamingBackend; the audio receiver that defines it needs Network.
-public protocol NativeAudioSink: AnyObject, Sendable {}
-
-final class EnvSignalController: Sendable {
-    static let shared = EnvSignalController()
+final class TransportRoute: Sendable {
+    static let shared = TransportRoute()
     let streamLink = "unknown"
 }

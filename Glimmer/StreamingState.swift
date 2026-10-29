@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import GlimmerEngine
 
 // MARK: - PairingPhase
 
@@ -27,14 +28,7 @@ enum PairingPhase: Equatable {
 
 /// Why a pairing attempt ended. A wrong PIN and a bad host signature share
 /// `.rejected` and its wording; `.busy` is Sunshine holding another open request.
-enum PairingFailure: Error, Equatable {
-    case invalidAddress
-    case unreachable
-    case gameStream
-    case timedOut
-    case busy
-    case rejected
-
+extension PairingFailure {
     static let addressHint = "Enter a PC name like tower.local or an IP address like 192.168.1.10."
 
     func message(pc: String) -> String {
@@ -46,6 +40,7 @@ enum PairingFailure: Error, Equatable {
         case .busy:
             return "\(pc) is busy with another pairing request. "
                 + "Cancel it on Sunshine's PIN page or wait a few minutes, then choose Try Again."
+        case .identityNeedsRestore: return StreamFailureCopy.identityNeedsRestore(pc)
         case .rejected: return "\(pc) didn't accept the pairing. Choose Try Again to get a new code."
         }
     }

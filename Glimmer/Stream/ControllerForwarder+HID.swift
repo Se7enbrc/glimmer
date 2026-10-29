@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 
 extension InputForwarder {
@@ -14,18 +15,18 @@ extension InputForwarder {
         let manager = HIDGamepadManager.shared
         manager.onAttach = { [weak self] pad in self?.attachHID(pad) }
         manager.onDetach = { [weak self] pad in self?.detachHID(pad) }
-        manager.onReport = { [weak self] pad in self?.pushHID(pad) }
         manager.retain()
         for pad in manager.devices.values { attachHID(pad) }
     }
 
     func attachHID(_ pad: HIDGamepadDevice) {
         guard attachedHIDControllers[pad.id] == nil else { return }
-        guard let slot = (0..<UInt8(16)).first(where: { gamepadMask & (1 << $0) == 0 }) else {
+        guard let slot = inputCore.reserveControllerSlot() else {
             Diag.notice("HID attach refused: all 16 slots occupied (\(pad.name))", "Controller")
             return
         }
-        gamepadMask |= UInt16(1) << slot
+        publishInputSnapshot()
+        registerNintendoController(slot: slot, type: NintendoControllerType.identify(pad))
         var caps = ControllerBattery.shared.register(slot: slot, hid: pad)
         if pad.mapping.hasAnalogTriggers { caps |= UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS) }
         if pad.rumble.available { caps |= UInt16(StreamProtocol.LI_CCAP_RUMBLE) }
@@ -33,32 +34,51 @@ extension InputForwarder {
         let arrival = ControllerArrival(type: pad.mapping.controllerType,
                                         supportedButtons: pad.mapping.supportedButtons, caps: caps)
         attachedHIDControllers[pad.id] = AttachedHIDController(slot: slot, device: pad, arrival: arrival)
+        if isReady { sendArrival(slot: slot, arrival) }
+        let token = UUID()
+        inputCore.withLock { inputCore.hidRegistrations[slot] = token }
+        pad.capture.setStreamHandler(indexes: pad.layoutExtras.map(\.index)) { [inputCore] sample, timestamp in
+            inputCore.receiveHID(slot: slot, token: token, buttons: Int32(bitPattern: sample.buttons),
+                                 analog: sample.gamepadAnalog, capturedAt: timestamp, extras: sample.extras)
+        }
         HIDGamepadManager.shared.register(slot: slot, pad: pad)
-        if isReady { sendArrival(slot: slot, arrival); pushHID(pad) }
+        if let state = attachedHIDControllers[pad.id] { controllerLayouts?.configureHID(state) }
+        if isReady { pushHID(pad) }
     }
 
     func pushHID(_ pad: HIDGamepadDevice) {
         guard let attached = attachedHIDControllers[pad.id] else { return }
-        pushHID(slot: attached.slot, state: pad.state) { [weak pad] in pad?.state }
+        if inputCore.withLock({ inputCore.layouts?.states[Int(attached.slot)] != nil }) {
+            let sample = pad.capture.layoutSample(indexes: pad.layoutExtras.map(\.index))
+            inputCore.receive(slot: attached.slot, buttons: Int32(bitPattern: sample.buttons),
+                              analog: sample.gamepadAnalog, extras: sample.extras)
+            return
+        }
+        pushHID(slot: attached.slot, state: pad.state) { [weak pad] in
+            pad?.state
+        }
     }
 
     /// The pad's decoded state as values; `readState` re-reads it for the quit-chord dwell.
     func pushHID(slot: UInt8, state: (buttons: Int32, analog: GamepadAnalog),
                  readState: @escaping @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
         guard forwardsControllerEvents else { return }
-        if matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
-                                      rightTrigger: state.analog.rightTrigger) {
-            armQuitChordDwell(slot: slot, readState: readState)
-            return
-        }
-        if quitChordDwellSlot == slot { cancelQuitChordDwell(reason: "HID chord released") }
-        let result = backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                                                  buttons: state.buttons, analog: state.analog) ?? -2
-        record("LiSendMultiControllerEvent(HID)", result)
+        publishInputSnapshot()
+        let result = inputCore.receive(slot: slot, buttons: state.buttons, analog: state.analog)
+        if result == .chord { armQuitChordDwell(slot: slot, readState: readState) }
     }
 
     func detachHID(_ pad: HIDGamepadDevice, sendFinal: Bool = true) {
         guard let attached = attachedHIDControllers.removeValue(forKey: pad.id) else { return }
+        inputCore.withLock {
+            inputCore.hidRegistrations[attached.slot] = nil
+            inputCore.removeLayout(slot: attached.slot)
+            inputCore.current[attached.slot] = nil
+            inputCore.updateChord(slot: attached.slot, held: false, invalidate: true)
+        }
+        pad.capture.setHandler(nil)
+        nintendoControllerTypes[attached.slot] = nil
+        resetControllerMouse(slot: attached.slot)
         gamepadMask &= ~(UInt16(1) << attached.slot)
         HIDGamepadManager.shared.unregister(slot: attached.slot)
         ControllerBattery.shared.unregister(slot: attached.slot)
@@ -72,7 +92,6 @@ extension InputForwarder {
         let manager = HIDGamepadManager.shared
         manager.onAttach = nil
         manager.onDetach = nil
-        manager.onReport = nil
         manager.release()
     }
 }

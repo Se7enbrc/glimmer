@@ -8,11 +8,13 @@
 //  parse, how a PC is found, and how results read and exit.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct GlimmerCLITests {
+    private let settings = IsolatedDefaults()
 
     private func host(_ name: String, id: String, address: String?, custom: String? = nil) -> Glimmer.Host {
         Host(id: id, name: name, customName: custom, localAddress: address, manualAddress: address,
@@ -50,6 +52,7 @@ struct GlimmerCLITests {
     }
 
     @Test func badArgumentsAreUsageErrors() {
+        #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["diagnostics", "capture", "123"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["pair", "tower.local", "--pin", "12a4"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["pair", "tower.local", "--pin"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["pair", "tower.local", "--pin", "١٢٣٤"]) }
@@ -57,6 +60,15 @@ struct GlimmerCLITests {
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["quit"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["wake", "Tower", "Den"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["lsit"]) }
+    }
+
+    @Test func diagnosticCommandsRequireExplicitIdentityAndDestination() throws {
+        let capture = try GlimmerCLI.parse(["diagnostics", "capture", "123", "/tmp/capture"])
+        #expect(capture.verb == .diagnostics)
+        #expect(capture.arguments == ["capture", "123", "/tmp/capture"])
+        let bundle = try GlimmerCLI.parse(["diagnostics", "bundle", "0123456789abcdef", "/tmp/evidence"])
+        #expect(bundle.arguments == ["bundle", "0123456789abcdef", "/tmp/evidence"])
+        #expect(GlimmerCLI.isInvocation(["Glimmer", "diagnostics", "capture", "123", "/tmp/capture"]))
     }
 
     @Test func aPCMatchesByNameIdOrAddressIgnoringCase() {
@@ -115,8 +127,8 @@ struct GlimmerCLITests {
                                                   capturedAt: now), now: now).fullLabel
         }
         #expect(status(.idle, rtt: 3) == "Ready · 3 ms")
-        #expect(status(.streamingApp(name: "A Very Long Game Title Indeed")) == "A Very Long Game Title Indeed running")
-        #expect(status(.streamingUnknownApp(id: 9)) == "App running")
+        #expect(status(.streamingApp(name: "A Very Long Game Title Indeed"), rtt: 3) == "Ready · 3 ms")
+        #expect(status(.streamingUnknownApp(id: 9)) == "Ready")
         #expect(status(.asleep, rtt: 9) == "Asleep")
         #expect(status(.certMismatch) == "Trust needed")
         #expect(ChipPresentation(live: nil).fullLabel == "Checking…")
@@ -125,7 +137,7 @@ struct GlimmerCLITests {
     /// The pair sheet's address cleanup applies before anything is printed or dialled.
     @MainActor @Test func pairRefusesAnAddressThatIsNotOne() async throws {
         let command = try GlimmerCLI.parse(["pair", "my gaming pc"])
-        #expect(await GlimmerCLI.pair(command, model: AppModel()) == GlimmerCLI.Exit.usage)
+        #expect(await GlimmerCLI.pair(command, model: AppModel(defaults: settings.defaults)) == GlimmerCLI.Exit.usage)
     }
 
     @Test func aFailedPairSaysToRunItAgainNotToClickTryAgain() {
@@ -170,7 +182,7 @@ struct GlimmerCLITests {
     }
 
     @MainActor @Test func aCommandWaitEndsWhenTheNextStreamStartsImmediately() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.isStreaming = true
         var started = false
         var finished = false
@@ -188,7 +200,7 @@ struct GlimmerCLITests {
     }
 
     @MainActor @Test func aCommandWaitKeepsTheCompletedStreamsFailureAfterAnImmediateRestart() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.isStreaming = true
         var started = false
         var detail: String?
@@ -210,7 +222,7 @@ struct GlimmerCLITests {
     }
 
     @MainActor @Test func aCommandReporterEndsBeforeTheFirstFrameWhenAnotherStreamStarts() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let timing = ConnectTimingTelemetry.shared
         timing.resetForNewSession()
         defer { timing.resetForNewSession() }

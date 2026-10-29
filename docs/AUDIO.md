@@ -8,40 +8,27 @@ layout:
 
 # Audio and voice chat
 
-Glimmer follows the Mac's selected audio output during a stream. Compatible
-AirPods use spatial playback and head tracking automatically. Change outputs
-through macOS; there is no separate spatial-audio switch in Glimmer.
+Listen through your device's speakers or headphones. iPhone and iPad streams use
+stereo sound.
 
-## Bluetooth headphones and voice chat
+On Mac, pick your speakers or headphones in macOS. Glimmer follows, even
+mid-stream. AirPods get spatial audio with head tracking. Other headphones and
+speakers get spatial audio without it, and 5.1 or 7.1 outputs play each channel
+as is. There's nothing to set up.
 
-Using a Bluetooth headset's microphone can change its playback quality and
-volume. A game that sounds clear with the microphone idle can sound muffled when
-Discord or another voice app starts using it. Apple describes this
-[Bluetooth audio behavior](https://support.apple.com/en-us/102217).
+{% hint style="info" %}
 
-When possible, select a separate microphone in your voice app: the Mac's
-built-in microphone, a webcam microphone, or a USB microphone. Keep the AirPods
-selected as the output. In our testing, switching Discord's input from AirPods
-to a Logitech C920 microphone substantially improved playback quality.
+**Muffled sound while you voice chat?** Your Bluetooth headset is lending its
+microphone. In Discord or your voice app, pick the Mac's or a USB microphone and
+keep the headset as the output.
+[Why this happens](https://support.apple.com/en-us/102217).
 
-The result depends on the headphones, macOS version and voice app. Game Mode
-does not guarantee that simultaneous Bluetooth playback and microphone use will
-sound the same as playback alone. Glimmer does not capture microphone audio or
-change Discord's input selection.
+{% endhint %}
 
-## Volume after a microphone or output change
+{% hint style="info" %}
 
-During testing, changing the microphone sometimes left playback quieter even
-though the Mac's volume control still showed its previous level. A small
-adjustment with the system volume control restored the expected loudness.
+**Too quiet after switching outputs?** Nudge the Mac's volume up and back.
 
-If this happens, make a small system-volume adjustment and return it to your
-preferred listening level. This is an observed workaround; the cause of the
-retained low volume has not been confirmed. It is separate from the Bluetooth
-quality change above.
+{% endhint %}
 
-Glimmer does not normalize loudness or boost its gain to compensate for a quiet
-device transition. A compensating boost could become too loud when the device
-recovers. When reporting a volume problem, note whether other Mac apps are also
-quieter, which input and output are selected, and whether adjusting system
-volume restores the sound.
+Still not right? Go to [Troubleshooting](guides/TROUBLESHOOTING.md).

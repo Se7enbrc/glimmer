@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// Session resets prevent stale gauges from leaking across connections.
+// TelemetryCounters.swift owns storage and documents which fields survive reconnects.
+
+import Foundation
+import os
+
+extension TelemetryCounters {
+
+    /// Allocate + initialize every `os_unfair_lock` backing the gauge storage.
+    /// Module-internal (not private) so the class's `init()` in
+    /// TelemetryCounters.swift still runs it across the file split.
+    package func initializeGaugeLocks() {
+        jitterLock.initialize(to: os_unfair_lock_s())
+        inputLock.initialize(to: os_unfair_lock_s())
+        #if os(macOS)
+        rttLock.initialize(to: os_unfair_lock_s())
+        vtSessionCreateLock.initialize(to: os_unfair_lock_s())
+        cruiseMaxGainLock.initialize(to: os_unfair_lock_s())
+        gapLock.initialize(to: os_unfair_lock_s())
+        decodeStateLock.initialize(to: os_unfair_lock_s())
+        fecHealthLock.initialize(to: os_unfair_lock_s())
+        audioStateLock.initialize(to: os_unfair_lock_s())
+        audioFirstPacketLock.initialize(to: os_unfair_lock_s())
+        presentSuppressedLock.initialize(to: os_unfair_lock_s())
+        decodeGatedLock.initialize(to: os_unfair_lock_s())
+        pacerTickRealtimeLock.initialize(to: os_unfair_lock_s())
+        reorderDispLock.initialize(to: os_unfair_lock_s())
+        #endif
+    }
+
+    /// Release every gauge lock. Paired with `initializeGaugeLocks()`;
+    /// module-internal for the same reason - the class's `deinit` calls it.
+    package func deallocateGaugeLocks() {
+        jitterLock.deallocate(); inputLock.deallocate()
+        #if os(macOS)
+        rttLock.deallocate(); vtSessionCreateLock.deallocate()
+        cruiseMaxGainLock.deallocate()
+        gapLock.deallocate()
+        decodeStateLock.deallocate(); fecHealthLock.deallocate()
+        audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
+        presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
+        pacerTickRealtimeLock.deallocate(); reorderDispLock.deallocate()
+        #endif
+    }
+
+    /// Reset and anchor the P2 handshake timeline at a CONNECT-START edge, before any
+    /// receiver can latch a one-shot. A session's first connect resets everything; an
+    /// in-place reconnect keeps the totals, the first handshake and its audio TTF.
+    package func anchorConnectStart(now: UInt64, reconnecting: Bool) {
+        if reconnecting {
+            #if os(macOS)
+            p2.anchorReconnect(now, audioTtfMs: audioFirstPacketMs, audioTtf: audioTtf.latched)
+            #endif
+            resetForReconnect()
+        } else {
+            resetForNewSession()
+            #if os(macOS)
+            p2.reset()
+            #endif
+            #if os(macOS)
+            p2.anchorConnectStart(now)
+            #endif
+        }
+    }
+
+    /// Reset at first connect, before a warm PC can fill one-shot latches for the new session.
+    package func resetForNewSession() {
+        #if os(macOS)
+        ReceiveTimingTelemetry.video.reset()
+        ReceiveTimingTelemetry.audio.reset()
+        AudioPipelineTelemetry.shared.reset()
+        for counter in [rfiTotal, idrRequestedTotal, backlogOverflowTotal,
+                        presentStallTotal, frameLossTotal, unrecoverableFrameTotal,
+                        pacerDisabledTotal, videoPacketsTotal, videoFramesTotal,
+                        fecRecoveredFramesTotal, inputEventsTotal, inputBatchFlushTotal,
+                        inputFlushSendBackloggedSkipTotal, inputFlushReliableBackloggedSkipTotal,
+                        inputIdleToActiveTotal, bookmarkTotal,
+                        cruiseBoostedBatchesTotal, cruiseIdentityBatchesTotal,
+                        videoPacketsLostPreFecTotal, videoPacketsOutOfOrderTotal,
+                        videoPacketsDuplicateTotal, enetRetransmitTotal,
+                        ackSilenceNearMissTotal, ctrlIgnoredTotal,
+                        decoderRecreateTotal, decoderRecreateFirstTotal,
+                        decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
+                        staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
+                        audioStallRecoveryTotal, audioUnderrunDeadairTotal,
+                        presentGapDroughtTotal, reorderHoldExceededTotal,
+                        reorderHoldTakenTotal, reorderHoldRescuedTotal,
+                        pacerOverTargetReleaseTotal,
+                        tickMissDescheduledTotal, tickMissCoalescedTotal,
+                        tickMissPreemptedTotal, tickMissLinkskipTotal,
+                        suppressedDropTotal, pacerSubmitReleaseTotal,
+                        decodeGatedDropTotal, recoveryWaitDropTotal,
+                        inputMotionTotal,
+                        discontinuityFlushTotal,
+                        audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
+                        audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,
+                        audioTrimTotal, audioReceiveFailedTotal, audioDecodeFailedTotal,
+                        rumbleEventTotal, rumbleDroppedInvalidTotal,
+                        // Per-socket gap-event counters.
+                        videoGapOver20msTotal, videoGapOver50msTotal, videoGapOver100msTotal,
+                        audioGapOver20msTotal, audioGapOver50msTotal, audioGapOver100msTotal,
+                        enetGapOver20msTotal, enetGapOver50msTotal, enetGapOver100msTotal,
+                        // P2 session-lifecycle counters. An in-place reconnect takes
+                        // resetForReconnect instead, so these count the whole session.
+                        reconnectTotal, wakeTotal,
+                        idrRoundTripRequestTotal, idrRoundTripMatchedTotal,
+                        corruptionHeuristicTotal] {
+            counter.reset()
+        }
+        resetForReconnect()
+        // `p2` (handshake timeline, disconnect reason, IDR round trip) is NOT reset
+        // here: `anchorConnectStart` resets then anchors it at the same edge.
+        setVtSessionCreateMs(0)
+        // Cruise max-gain resets to the unboosted floor (1.0), not 0.
+        os_unfair_lock_lock(cruiseMaxGainLock); cruiseMaxGainValue = 1.0; os_unfair_lock_unlock(cruiseMaxGainLock)
+        // Present-suppression + decode-gate gauges: a session starts with a
+        // visible stream view, and the present/decode paths re-stamp these at
+        // the next suppression/gate edge.
+        setPresentSuppressed(false)
+        setDecodeGated(false)
+        // RT gauge is NOT reset here: it's a THREAD-LIFETIME fact, set once when
+        // the tick thread starts. The thread is REUSED across reconnects (it never
+        // re-applies/re-stamps), so clearing it here would make the gauge lie
+        // inversely on every reconnect. Leave it at its thread-set value.
+        // Per-type ignored-control tallies are per-session like the aggregate total.
+        ctrlIgnoredPerType.reset()
+        os_unfair_lock_lock(inputLock); lastInputNanosValue = 0; os_unfair_lock_unlock(inputLock)
+        rumbleActivity.reset()
+        audioArrivalGaps.reset()
+        os_unfair_lock_lock(decodeStateLock); decodeStateValue = nil; os_unfair_lock_unlock(decodeStateLock)
+        awdlHelperState.withLock { $0 = nil }
+        os_unfair_lock_lock(audioStateLock)
+        audioStateValue = nil; audioBufferFillMinMsValue = .infinity
+        os_unfair_lock_unlock(audioStateLock)
+        #else
+        #if GLIMMER_DIAGNOSTICS
+        _ = ReceivePolicyMeasurements.video.takeWindow()
+        #endif
+        for counter in [videoPacketsTotal, videoPacketsOutOfOrderTotal, enetRetransmitTotal,
+                        videoGapOver50msTotal, videoGapOver100msTotal,
+                        audioGapOver50msTotal, audioGapOver100msTotal, audioUnderrunTotal] {
+            counter.reset()
+        }
+        resetForReconnect()
+        os_unfair_lock_lock(inputLock); lastInputNanosValue = 0; os_unfair_lock_unlock(inputLock)
+        #endif
+    }
+
+    /// In-place reconnect, a new connection inside the same session: clear the
+    /// one-shot audio latches and the per-connection link gauges, keep every total
+    /// so the receipt covers the whole session.
+    package func resetForReconnect() {
+        setRecvJitterMs(0)
+        #if os(macOS)
+        setRttMs(0)
+        os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)
+        os_unfair_lock_lock(fecHealthLock); fecHealthValue = nil; os_unfair_lock_unlock(fecHealthLock)
+        // The TTF record resets; its last-stream-end stamp survives (host_idle_s).
+        audioTtf.resetForNewSession()
+        os_unfair_lock_lock(audioFirstPacketLock)
+        audioFirstPacketMsValue = 0; audioStreamStartNanosValue = 0
+        os_unfair_lock_unlock(audioFirstPacketLock)
+        #endif
+    }
+}

@@ -1,0 +1,521 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// Lifecycle measurements are compiled only for Mac and diagnostic iOS builds.
+// Disconnect reasons also describe operational session termination.
+
+import Foundation
+import os
+
+// MARK: - Disconnect reason
+
+/// Why a streaming session ended - a small CLOSED enum so the terminate cause is
+/// a queryable ordinal/label rather than free text. Mapped from the engine's
+/// terminate path: a clean stop, a host-initiated terminate with the moonlight
+/// error code, a watchdog teardown (frame/present stall), or unknown. The exporter
+/// emits BOTH the ordinal (a gauge, for thresholding) and the label (in an info
+/// gauge / NDJSON string).
+package enum DisconnectReason: Int, Sendable {
+    /// No terminate observed yet this session (the live default).
+    case none = 0
+    /// User asked to stop (quit hotkey / window close / app quit).
+    case userStopped = 1
+    /// Host told us the session is over with code 0 (clean host-side end).
+    case hostClosedClean = 2
+    /// Host terminated unexpectedly (non-zero moonlight terminate code).
+    case hostError = 3
+    /// Our frame/present watchdog tore the session down (decode/present stall).
+    case watchdogStall = 4
+    /// Connection never reached established (handshake failed / aborted).
+    case connectFailed = 5
+    /// The event-stream consumer was dropped (its `for await` loop ended /
+    /// the AsyncStream's onTermination fired) rather than the user explicitly
+    /// quitting. Distinct from `userStopped` so a reason-less teardown on a
+    /// HEALTHY stream is no longer silently attributed to the user - the prior
+    /// behaviour masked exactly this case (a dropped consumer reading as
+    /// "user_stopped" in the scorecard).
+    case consumerDropped = 6
+    /// The Mac woke from sleep and the link was stale (e.g. woke on a different
+    /// Wi-Fi AP); the wake fast-reconnect probe found the peer gone. Stamped
+    /// wake-suspect on willSleep, attributed if the next disconnect has no more
+    /// specific cause.
+    case systemSleep = 7
+
+    package var label: String {
+        switch self {
+        case .none: return "none"
+        case .userStopped: return "user_stopped"
+        case .hostClosedClean: return "host_closed_clean"
+        case .hostError: return "host_error"
+        case .watchdogStall: return "watchdog_stall"
+        case .connectFailed: return "connect_failed"
+        case .consumerDropped: return "consumer_dropped"
+        case .systemSleep: return "system_sleep"
+        }
+    }
+}
+
+// MARK: - Process-global disconnect tally (by reason)
+
+/// PROCESS-GLOBAL, monotonic per-reason disconnect counters. One `Counter` per
+/// `DisconnectReason` (excluding `.none`), incremented once per session at the
+/// reason-latch site. Lives on the always-live `TelemetryCounters` singleton and
+/// is DELIBERATELY kept out of `resetForNewSession`, so it survives the <1ms
+/// exporter teardown that races the 1s scrape - the next session re-serves it.
+/// `@unchecked Sendable`: each `Counter` is self-locked.
+#if os(macOS)
+package final class DisconnectReasonCounters: @unchecked Sendable {
+
+    package init() {}
+
+    private let counters: [DisconnectReason: TelemetryCounters.Counter] = [
+        .userStopped: .init(), .hostClosedClean: .init(), .hostError: .init(),
+        .watchdogStall: .init(), .connectFailed: .init(), .consumerDropped: .init(),
+        .systemSleep: .init()
+    ]
+    package func increment(_ reason: DisconnectReason) { counters[reason]?.increment() }
+    /// Snapshot of (label, total) for every non-zero-defined reason, for the export.
+    package func snapshot() -> [(label: String, total: UInt64)] {
+        counters.map { ($0.key.label, $0.value.value) }
+    }
+}
+
+// MARK: - Click-to-first-frame latch (true click-to-pixels)
+
+/// The TRUE click-to-pixels span the handshake breakdown can't see:
+/// `handshake_total_ms` is anchored at connect-START (inside connectBackend), so
+/// it EXCLUDES the serverinfo + launch + busy-poll legs that run between the
+/// user's click and connect-start. This latch is anchored at the CLICK
+/// (`AppModel.stream()`) and resolved at the first decoded frame, both on
+/// a wall clock (`Date`) the way the existing click anchor is - no cross-actor
+/// monotonic plumbing, and it survives `P2State.reset()` (which the click
+/// precedes). Standalone + self-locked (the `AudioCushionTelemetry` idiom), read
+/// by the exporter without touching the snapshot structs. First writer wins per
+/// edge; `resetForNewSession` clears it.
+package final class ConnectTimingTelemetry: @unchecked Sendable {
+    package static let shared = ConnectTimingTelemetry()
+
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    /// Wall-clock reference of the user's click; 0 = no click anchored.
+    private var clickReference: Double = 0
+    /// Wall-clock reference of connect-start (for the launch-path leg); 0 = unset.
+    private var connectStartReference: Double = 0
+    private var clickToFirstFrameMsValue: Double = 0
+    private var launchPathMsValue: Double = 0
+    // Launch-path SUB-LEGS (ms), stamped at the real call sites in
+    // launchWithBusyRecovery so the opaque launch_path_ms is attributable.
+    private var serverinfoMsValue: Double = 0
+    private var launchMsValue: Double = 0
+    private var buildMsValue: Double = 0
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
+    deinit { lock.deallocate() }
+
+    /// Anchor the click instant. Called from `AppModel.stream()` at the
+    /// user's launch click - before the connect Task spins up. First write wins
+    /// per session (reset clears it).
+    package func anchorClick() {
+        let now = Date().timeIntervalSinceReferenceDate
+        os_unfair_lock_lock(lock)
+        if clickReference == 0 { clickReference = now }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Mark connect-start to isolate the launch cost (click → connectStart).
+    /// First write wins; no-op if the click was never anchored.
+    package func markConnectStart() {
+        let now = Date().timeIntervalSinceReferenceDate
+        os_unfair_lock_lock(lock)
+        if clickReference > 0, connectStartReference == 0, now >= clickReference {
+            connectStartReference = now
+            launchPathMsValue = (now - clickReference) * 1000.0
+        }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Resolve click → first decoded frame. Called at the `.firstFrame` edge;
+    /// first write wins, no-op without a click anchor.
+    package func markFirstFrame() {
+        let now = Date().timeIntervalSinceReferenceDate
+        os_unfair_lock_lock(lock)
+        if clickReference > 0, clickToFirstFrameMsValue == 0, now >= clickReference {
+            clickToFirstFrameMsValue = (now - clickReference) * 1000.0
+        }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Record a launch sub-leg duration (ms). First non-zero write wins per leg
+    /// (the launch flow runs each leg once); off any hot path.
+    package func recordLaunchLeg(serverinfoMs: Double? = nil, launchMs: Double? = nil, buildMs: Double? = nil) {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        if let ms = serverinfoMs, serverinfoMsValue == 0 { serverinfoMsValue = ms }
+        if let ms = launchMs, launchMsValue == 0 { launchMsValue = ms }
+        if let ms = buildMs, buildMsValue == 0 { buildMsValue = ms }
+    }
+    /// Apply the stamped launch sub-legs onto a HandshakeBreakdown (each nil until
+    /// its call site stamped it). Keeps the multi-value read in one lock take.
+    package func applyLaunchLegs(to out: inout HandshakeBreakdown) {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        out.launchServerinfoMs = serverinfoMsValue != 0 ? serverinfoMsValue : nil
+        out.launchMs = launchMsValue != 0 ? launchMsValue : nil
+        out.buildMs = buildMsValue != 0 ? buildMsValue : nil
+    }
+    /// Click → first decoded frame (ms), or nil if not yet resolved.
+    package var clickToFirstFrameMs: Double? {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        return clickToFirstFrameMsValue != 0 ? clickToFirstFrameMsValue : nil
+    }
+    /// Launch path: click → connect-start (ms), or nil if not yet measured.
+    package var launchPathMs: Double? {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        return launchPathMsValue != 0 ? launchPathMsValue : nil
+    }
+    package func resetForNewSession() {
+        os_unfair_lock_lock(lock)
+        clickReference = 0; connectStartReference = 0
+        clickToFirstFrameMsValue = 0; launchPathMsValue = 0
+        serverinfoMsValue = 0; launchMsValue = 0; buildMsValue = 0
+        os_unfair_lock_unlock(lock)
+    }
+}
+
+// MARK: - Input deliver-stamp (handler entry → batcher enqueue)
+
+/// MEASUREMENT-ONLY per-slot deliver stamp bridging the MainActor controller
+/// handler to the batcher queue WITHOUT threading a timestamp through the backend
+/// protocol. The GameController valueChangedHandler stamps its entry instant per
+/// slot; the batcher takes (clears) it when it sets the slot's enqueue stamp, so
+/// the delta is the pre-hop main-thread leg. Last-writer-wins per slot is correct
+/// (GC delivers serially per slot on main); a take that finds no stamp is a no-op.
+/// Self-locked standalone (the `ConnectTimingTelemetry` idiom). NO behavior change.
+package final class InputDeliverStamp: @unchecked Sendable {
+    package static let shared = InputDeliverStamp()
+    private static let maxSlots = 16  // matches Enet.maxGamepads
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var stamps = [UInt64](repeating: 0, count: maxSlots)
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
+    deinit { lock.deallocate() }
+
+    /// Stamp the handler-entry instant for `slot` (monotonic ns). First write wins
+    /// until taken, so a coalesced burst keeps the oldest delivered instant.
+    @inlinable package func stamp(slot: Int, nanos: UInt64) {
+        guard slot >= 0, slot < Self.maxSlots else { return }
+        os_unfair_lock_lock(lock)
+        if stamps[slot] == 0 { stamps[slot] = nanos }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Take + clear the stamp for `slot`, or 0 if none is pending.
+    @inlinable package func take(slot: Int) -> UInt64 {
+        guard slot >= 0, slot < Self.maxSlots else { return 0 }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        let stamped = stamps[slot]; stamps[slot] = 0
+        return stamped
+    }
+}
+
+// MARK: - Handshake breakdown snapshot
+
+/// One session's CONNECT-HANDSHAKE breakdown: the per-stage durations (ms) of the
+/// connect sequence, all measured connect-relative from the SAME monotonic anchor
+/// the exporter uses, so the stages line up on the timeline. Each leg is optional
+/// - a stage that never fired (a path that aborts early) is simply absent rather
+/// than guessed. Assembled on the exporter queue from the always-live
+/// `HandshakeTimeline`; never the hot path.
+package struct HandshakeBreakdown: Sendable {
+
+    package init(
+        rtspMs: Double? = nil,
+        controlSetupMs: Double? = nil,
+        enetConnectMs: Double? = nil,
+        firstFrameMs: Double? = nil,
+        totalMs: Double? = nil,
+        clickToFirstFrameMs: Double? = nil,
+        launchPathMs: Double? = nil,
+        launchServerinfoMs: Double? = nil,
+        launchMs: Double? = nil,
+        buildMs: Double? = nil,
+        complete: Bool = false
+    ) {
+        self.rtspMs = rtspMs
+        self.controlSetupMs = controlSetupMs
+        self.enetConnectMs = enetConnectMs
+        self.firstFrameMs = firstFrameMs
+        self.totalMs = totalMs
+        self.clickToFirstFrameMs = clickToFirstFrameMs
+        self.launchPathMs = launchPathMs
+        self.launchServerinfoMs = launchServerinfoMs
+        self.launchMs = launchMs
+        self.buildMs = buildMs
+        self.complete = complete
+    }
+
+    /// RTSP/SDP handshake duration (name-resolution start → RTSP-handshake done).
+    package var rtspMs: Double?
+    /// Control-channel setup: RTSP done → ENet connect start, where the control
+    /// crypto and V2 negotiation run. Not pairing, which happened long before.
+    package var controlSetupMs: Double?
+    /// ENet control-channel connect (ENET_CONNECT → START_A → START_B ACKed).
+    package var enetConnectMs: Double?
+    /// Time from connection-established to the FIRST decoded video frame - the
+    /// "black screen until pixels" leg the user actually feels.
+    package var firstFrameMs: Double?
+    /// Total: connect start → first decoded video frame (the whole cold open).
+    package var totalMs: Double?
+    /// TRUE click-to-pixels: the user's launch click → first decoded frame, which
+    /// includes the serverinfo + launch legs `totalMs` excludes (it
+    /// anchors at connect-start). From `ConnectTimingTelemetry`.
+    package var clickToFirstFrameMs: Double?
+    /// Launch path: click → connect-start, isolating the pre-connect launch cost.
+    package var launchPathMs: Double?
+    /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /launch and the
+    /// MainActor subsystem/window build. Each nil until its call site stamps it.
+    package var launchServerinfoMs: Double?
+    package var launchMs: Double?
+    package var buildMs: Double?
+    /// True once the first decoded frame landed (so the exporter emits the
+    /// one-shot breakdown exactly once, not every tick).
+    package var complete: Bool = false
+}
+
+/// What a session's FIRST connect measured, kept when an in-place reconnect
+/// re-anchors the timeline so the receipt reports that connect, not a blend.
+package struct FirstConnect: Sendable {
+
+    package init(
+        handshake: HandshakeBreakdown,
+        audioTtfMs: Double? = nil,
+        audioTtf: AudioTtfContext.Record? = nil
+    ) {
+        self.handshake = handshake
+        self.audioTtfMs = audioTtfMs
+        self.audioTtf = audioTtf
+    }
+
+    package var handshake: HandshakeBreakdown
+    package var audioTtfMs: Double?
+    package var audioTtf: AudioTtfContext.Record?
+}
+
+// MARK: - IDR/RFI round-trip snapshot
+
+/// IDR/RFI ROUND-TRIP telemetry for one tick: the count of requests we've sent +
+/// the count that have been matched to an arriving IDR/recovery frame, plus the
+/// most-recent measured round-trip (ms). The full distribution rides the latency
+/// histogram (`idrRoundTrip` in `LatencyHistograms`); this carries the live gauge
+/// + counts for a glanceable scrape. Assembled on the exporter queue.
+package struct IdrRoundTripSnapshot: Sendable {
+
+    package init(
+        requestsTotal: UInt64 = 0,
+        matchedTotal: UInt64 = 0,
+        lastRoundTripMs: Double? = nil
+    ) {
+        self.requestsTotal = requestsTotal
+        self.matchedTotal = matchedTotal
+        self.lastRoundTripMs = lastRoundTripMs
+    }
+
+    /// EXPLICIT IDR requests sent that started a round-trip measurement
+    /// (monotonic; RFIs ride rfi_total and don't arm).
+    package var requestsTotal: UInt64 = 0
+    /// Requests that were matched to an arriving IDR/recovery frame (monotonic).
+    package var matchedTotal: UInt64 = 0
+    /// Most recent measured request→IDR round-trip (ms), nil if none yet.
+    package var lastRoundTripMs: Double?
+}
+
+#endif
+
+// MARK: - TelemetryCounters: P2 session-lifecycle state
+
+extension TelemetryCounters {
+
+    // The concrete stored state for these signals lives on `TelemetryCounters`
+    // (the always-live singleton) via the `P2State` holder below, reached through
+    // the `p2` accessor. Keeping the storage in one lock-guarded holder (rather
+    // than a dozen more stored properties on the main class) keeps both files
+    // focused and the locking obvious.
+
+    /// One cheap monotonic-clock read (`DispatchTime.now().uptimeNanoseconds`).
+    /// Shared by the P2 lifecycle/recovery sites so they all stamp on the same
+    /// monotonic clock the latency tracker uses. A single function so the clock
+    /// choice is one edit.
+    package static func monotonicNowNanos() -> UInt64 { DispatchTime.now().uptimeNanoseconds }
+
+    /// All P2 session-lifecycle state behind one lock. `@unchecked Sendable`: the
+    /// single `os_unfair_lock` guards every field; last-writer-wins is correct for
+    /// 1Hz-sampled gauges, and the rare lifecycle/recovery writers never contend.
+    #if os(macOS)
+    package final class P2State: @unchecked Sendable {
+        private let lock = os_unfair_lock_t.allocate(capacity: 1)
+        package init() { lock.initialize(to: os_unfair_lock_s()) }
+        deinit { lock.deallocate() }
+
+        // ---- Handshake timeline (monotonic stage instants, ns) ----
+        private var connectStartNanos: UInt64 = 0
+        private var rtspStartNanos: UInt64 = 0
+        private var rtspDoneNanos: UInt64 = 0
+        private var enetStartNanos: UInt64 = 0
+        private var establishedNanos: UInt64 = 0
+        private var firstFrameNanos: UInt64 = 0
+
+        // ---- Disconnect reason (latched at the terminate edge) ----
+        private var disconnectReasonValue: DisconnectReason = .none
+        /// One-shot guard: the process-global per-reason counter is bumped at
+        /// most once per session, at genuine teardown - not at the per-terminate
+        /// latch (a recoverable blip latches a reason but must not be counted).
+        private var globalReasonCounted = false
+
+        // ---- IDR/RFI round-trip ----
+        /// Monotonic instant of the most recent IDR/RFI request we sent that is
+        /// still awaiting its matching IDR arrival, or 0 if none is outstanding.
+        /// Single outstanding request is sufficient: requests coalesce to ≤1 per
+        /// loss event on the send side, so a newer request simply replaces the
+        /// timer (we measure to the next IDR either way).
+        private var idrRequestPendingNanos: UInt64 = 0
+        private var idrLastRoundTripMs: Double = 0
+        /// Set at the first in-place reconnect; nil while the first connect is live.
+        private var firstConnectValue: FirstConnect?
+
+        package func anchorConnectStart(_ now: UInt64) {
+            os_unfair_lock_lock(lock)
+            if connectStartNanos == 0 { connectStartNanos = now }
+            os_unfair_lock_unlock(lock)
+        }
+        /// The TRUE session/connect-start instant (monotonic ns), or 0 if not yet
+        /// anchored. This is the session-lifecycle anchor stamped at the connect
+        /// edge (and preserved across the exporter's own `resetForNewSession`), so
+        /// per-session cold-start metrics (e.g. time-to-first-audio) measure from
+        /// the real session start rather than a later, resettable epoch.
+        package var connectStart: UInt64 {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return connectStartNanos
+        }
+        package func markRtspStart(_ now: UInt64) {
+            os_unfair_lock_lock(lock); if rtspStartNanos == 0 { rtspStartNanos = now }; os_unfair_lock_unlock(lock)
+        }
+        package func markRtspDone(_ now: UInt64) {
+            os_unfair_lock_lock(lock); if rtspDoneNanos == 0 { rtspDoneNanos = now }; os_unfair_lock_unlock(lock)
+        }
+        package func markEnetStart(_ now: UInt64) {
+            os_unfair_lock_lock(lock); if enetStartNanos == 0 { enetStartNanos = now }; os_unfair_lock_unlock(lock)
+        }
+        /// Anchor the handshake's `establishedNanos` leg (first edge only). The
+        /// reconnect signal is NOT derived here - reconnectInPlace re-anchors the
+        /// timeline before the fresh edge, so it's counted at the recovery site instead.
+        package func markEstablished() {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            if establishedNanos == 0 { establishedNanos = TelemetryCounters.monotonicNowNanos() }
+        }
+        package func markFirstFrame(_ now: UInt64) {
+            os_unfair_lock_lock(lock); if firstFrameNanos == 0 { firstFrameNanos = now }; os_unfair_lock_unlock(lock)
+        }
+
+        /// Assemble the CURRENT connect's breakdown from whatever stages have fired.
+        /// Each leg is emitted only when both its endpoints exist (so an aborted-early
+        /// connect omits the legs it never reached rather than reporting 0).
+        package func handshakeBreakdown() -> HandshakeBreakdown {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return breakdownLocked()
+        }
+
+        private func breakdownLocked() -> HandshakeBreakdown {
+            var out = HandshakeBreakdown()
+            out.rtspMs = msBetween(rtspStartNanos, rtspDoneNanos)
+            out.controlSetupMs = msBetween(rtspDoneNanos, enetStartNanos)
+            out.enetConnectMs = msBetween(enetStartNanos, establishedNanos)
+            out.firstFrameMs = msBetween(establishedNanos, firstFrameNanos)
+            out.totalMs = msBetween(connectStartNanos, firstFrameNanos)
+            // The click latch belongs to the first connect: a reconnect's legs
+            // never borrow the original click-to-pixels span.
+            if firstConnectValue == nil {
+                out.clickToFirstFrameMs = ConnectTimingTelemetry.shared.clickToFirstFrameMs
+                out.launchPathMs = ConnectTimingTelemetry.shared.launchPathMs
+                ConnectTimingTelemetry.shared.applyLaunchLegs(to: &out)
+            }
+            out.complete = firstFrameNanos != 0
+            return out
+        }
+
+        /// In-place reconnect: keep the first connect's breakdown and audio TTF
+        /// (a later attempt keeps that stash), then start this connect's timeline.
+        package func anchorReconnect(_ now: UInt64, audioTtfMs: Double?, audioTtf: AudioTtfContext.Record?) {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            let first = firstConnectValue
+                ?? FirstConnect(handshake: breakdownLocked(), audioTtfMs: audioTtfMs, audioTtf: audioTtf)
+            resetLocked()
+            firstConnectValue = first
+            connectStartNanos = now
+        }
+
+        /// The session's first connect, or nil when no in-place reconnect happened.
+        package var firstConnect: FirstConnect? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return firstConnectValue
+        }
+
+        /// Latch the per-session disconnect-reason ordinal (the FIRST concrete
+        /// reason wins). Does NOT touch the global counter - a recoverable blip
+        /// latches here but is silently recovered, so counting it would inflate
+        /// the "why sessions ended" tally. Returns true iff this call won.
+        @discardableResult
+        package func setDisconnectReason(_ reason: DisconnectReason) -> Bool {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            guard disconnectReasonValue == .none, reason != .none else { return false }
+            disconnectReasonValue = reason
+            return true
+        }
+
+        /// At GENUINE teardown, return the latched reason for the process-global
+        /// counter exactly once per session (nil if no reason, or already counted).
+        package func countGlobalReasonOnce() -> DisconnectReason? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            guard !globalReasonCounted, disconnectReasonValue != .none else { return nil }
+            globalReasonCounted = true
+            return disconnectReasonValue
+        }
+        package var disconnectReason: DisconnectReason {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return disconnectReasonValue
+        }
+
+        /// Stamp the instant an IDR/RFI request went out (replacing any pending).
+        package func stampIdrRequest(_ now: UInt64) {
+            os_unfair_lock_lock(lock); idrRequestPendingNanos = now; os_unfair_lock_unlock(lock)
+        }
+        /// Resolve the pending IDR request against an arriving IDR/recovery frame.
+        /// Returns the round-trip (ms) if a request was outstanding, else nil (an
+        /// unsolicited IDR - the host's own keyframe cadence - isn't a round-trip).
+        package func resolveIdrArrival(_ now: UInt64) -> Double? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            let pending = idrRequestPendingNanos
+            guard pending != 0, now >= pending else { return nil }
+            idrRequestPendingNanos = 0
+            let ms = Double(now &- pending) / 1_000_000.0
+            idrLastRoundTripMs = ms
+            return ms
+        }
+        package var lastIdrRoundTripMs: Double? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return idrLastRoundTripMs != 0 ? idrLastRoundTripMs : nil
+        }
+
+        package func reset() {
+            os_unfair_lock_lock(lock)
+            resetLocked()
+            firstConnectValue = nil
+            os_unfair_lock_unlock(lock)
+        }
+
+        private func resetLocked() {
+            connectStartNanos = 0; rtspStartNanos = 0; rtspDoneNanos = 0
+            enetStartNanos = 0; establishedNanos = 0; firstFrameNanos = 0
+            disconnectReasonValue = .none; globalReasonCounted = false
+            idrRequestPendingNanos = 0; idrLastRoundTripMs = 0
+        }
+
+        /// Delta (ms) between two monotonic ns stamps, or nil if either is unset
+        /// (0) or the delta is negative. Same discipline as the latency tracker.
+        private func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
+            guard start != 0, end != 0, end >= start else { return nil }
+            return Double(end &- start) / 1_000_000.0
+        }
+    }
+    #endif
+}

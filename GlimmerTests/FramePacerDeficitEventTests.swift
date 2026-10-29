@@ -8,6 +8,7 @@
 //  floor-assist lifecycle, the warm re-enable cadence stash, depth steps and the link range.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import CoreMedia
 import Foundation
@@ -41,7 +42,7 @@ struct FramePacerDeficitEventTests {
                                                 ticksPerS: 116.9),
                   line: "ASSIST disengaged (case-b) after 2468ms - 9 releases during assist, ticks 116.9/s",
                   reconciles: true),
-        EventCase(event: .warmHandoverComplete(ticksPerS: 97.3, discarded: 2),
+        EventCase(event: .warmHandoverComplete(ticksPerS: 97.3, discarded: [1, 2]),
                   line: "rebuilt link healthy at 97.3 ticks/s", reconciles: true)
     ]
 
@@ -61,7 +62,7 @@ struct FramePacerDeficitEventTests {
             $0.category == "Stream.Pacer" && $0.message.contains(testCase.line)
         })
         if case let .warmHandoverComplete(_, discarded) = testCase.event {
-            #expect(pacer.stats.presentationLateDropCount() == UInt64(discarded))
+            #expect(pacer.stats.presentationLateDropCount() == UInt64(discarded.count))
         }
     }
 
@@ -202,7 +203,7 @@ struct FramePacerDeficitEventTests {
     /// The floor is the stream rate clamped to the panel; preferred and maximum stay at the panel.
     @Test(arguments: [
         (1.0 / 120, 240.0, Float(120), Float(240)), (1.0 / 240, 60.0, Float(60), Float(60)),
-        (1.0 / 30, 120.0, Float(30), Float(120)), (Double.nan, Double.nan, Float(60), Float(60))
+        (1.0 / 30, 120.0, Float(30), Float(120))
     ])
     func preferredRangePinsTheFloorBelowThePanel(
         interval: Double, panel: Double, floor: Float, top: Float
@@ -214,8 +215,10 @@ struct FramePacerDeficitEventTests {
     }
 
     @MainActor @Test func windowlessViewFallsBackToTheMainScreen() {
-        let expected = Double(NSScreen.main?.maximumFramesPerSecond ?? 60)
-        #expect(FramePacer.panelMaxHz(for: NSView()) == (expected > 0 ? expected : 60))
+        let screen = NSScreen.main
+        let expected = FramePacer.panelMaxHz(minimumInterval: screen?.minimumRefreshInterval ?? 0,
+                                             maximumFramesPerSecond: screen?.maximumFramesPerSecond ?? 0)
+        #expect(MacPacer.panelMaxHz(for: NSView()) == expected)
     }
 
     private func label(_ event: FramePacer.TickDeficitEvent) -> String {

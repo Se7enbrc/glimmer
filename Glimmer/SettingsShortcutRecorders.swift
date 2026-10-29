@@ -9,6 +9,7 @@
 //  that keep a recording from clashing with another shortcut or with the Mac.
 //
 
+import GlimmerEngine
 import Accessibility
 import AppKit
 import Combine
@@ -23,17 +24,12 @@ extension HotkeyChord {
     /// `taken` lists every other shortcut by the name Settings shows.
     func recordingProblem(taken: [(name: String, chord: HotkeyChord)],
                           menu: NSMenu? = NSApp.mainMenu) -> String? {
-        if shift, !ctrl, !alt, !cmd {
-            return "Add ⌃, ⌥ or ⌘. With ⇧ alone, every capital letter would trigger it."
-        }
+        if let problem = recordingConflict(taken: []) { return problem }
         // The main menu answers its key equivalents before the stream sees them.
         if let menu, let title = menuItemTitle(in: menu) {
             return "Already used for \(title.hasSuffix("…") ? String(title.dropLast()) : title)."
         }
-        if let owner = taken.first(where: { $0.chord.displayString == displayString }) {
-            return "Already used for \(owner.name)."
-        }
-        return nil
+        return recordingConflict(taken: taken)
     }
 
     /// The title of the visible menu item this chord triggers, searching submenus.
@@ -108,25 +104,25 @@ struct HotkeyBadge: View {
                     if isCapturing { stop() } else { start() }
                 } label: {
                     Text(displayText)
+                        .transaction { $0.animation = nil }
                         .font(.body.weight(.medium).monospaced())
                         .frame(minWidth: 80, minHeight: 22)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
                         // Capture state tints the glass with the accent color so it
                         // reads as "live", otherwise it's a neutral glass capsule.
-                        .glassEffect(
-                            isCapturing
-                                ? .regular.interactive().tint(Color.accentColor.opacity(0.22))
-                                : .regular.interactive(),
-                            in: .capsule
-                        )
+                        .glassSurface(in: .capsule, tint: isCapturing ? Color.accentColor.opacity(0.22) : nil,
+                                      interactive: true)
                         .overlay(
                             Capsule().stroke(
                                 isCapturing ? Color.accentColor : Color.clear,
                                 lineWidth: 2
                             )
+                            .animation(Motion.fade, value: isCapturing)
                         )
-                        .foregroundStyle(isCapturing ? Color.accentColor : .primary)
+                        .animation(Motion.fade) { content in
+                            content.foregroundStyle(isCapturing ? Color.accentColor : .primary)
+                        }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Change \(label) shortcut")
@@ -139,7 +135,7 @@ struct HotkeyBadge: View {
                     Text("Press Esc to cancel")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .transition(.opacity)
+                        .transition(.opacity.animation(Motion.fade))
                 }
             }
             if let problem {
@@ -150,7 +146,6 @@ struct HotkeyBadge: View {
             }
         }
         .onDisappear { stop() }
-        .animation(.snappy(duration: 0.2), value: isCapturing)
     }
 
     private var displayText: String {
@@ -236,133 +231,5 @@ struct HotkeyBadge: View {
         hotkey = hk
         stop()
         AccessibilityNotification.Announcement("Shortcut set to \(hk.displayString)").post()
-    }
-}
-
-// MARK: - Controller chord capture (#9)
-
-/// Records a custom controller chord from live held buttons: the user holds
-/// the combo and releases, and everything held before release is the chord.
-/// Reads GameController pads, raw-HID pads and the DualSense centre buttons.
-struct ChordCaptureSheet: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-    @State private var current: Set<ControllerButton> = []
-    /// Sticky union of every button held during this recording - so releasing
-    /// the combo one button at a time still captures the whole chord.
-    @State private var accumulated: Set<ControllerButton> = []
-    @State private var captured: Set<ControllerButton> = []
-    @State private var recording = true
-    @State private var hidRetained = false
-    @State private var backgroundEventsID = UUID()
-    // Drives poll(): capture reads pad state, so a live stream keeps its handlers.
-    private let tick = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
-
-    /// One button would stop the stream whenever a game has you hold it.
-    nonisolated static func canSave(_ chord: Set<ControllerButton>) -> Bool { chord.count >= 2 }
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Record a chord to stop streaming").font(.headline)
-
-            if recording {
-                Text("Hold all the buttons for your chord at once, then **release** to capture.")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Text(accumulated.isEmpty ? "Waiting for input…" : ControllerButton.describe(accumulated))
-                    .font(.title3.monospaced())
-                    .foregroundStyle(accumulated.isEmpty ? Color.secondary : Color.accentColor)
-                    .frame(minHeight: 28)
-            } else {
-                Text("Captured chord").font(.callout).foregroundStyle(.secondary)
-                Text(ControllerButton.describe(captured))
-                    .font(.title2.weight(.semibold)).foregroundStyle(.tint)
-                if !Self.canSave(captured) {
-                    Text("Use at least two buttons, so a single press in a game can't stop the stream.")
-                        .font(.caption).foregroundStyle(.orange)
-                        .multilineTextAlignment(.center)
-                }
-                Button("Record Again") { startRecording() }
-                    .buttonStyle(.bordered)
-            }
-
-            if DualSenseHID.isEnabled == false {
-                Text("To record Options, Create or Mute on a DualSense, turn on "
-                    + "Extra DualSense buttons in Settings › Input.")
-                    .font(.caption2).foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-            }
-
-            HStack {
-                Button("Cancel") { dismiss() }
-                Spacer()
-                Button("Save") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!Self.canSave(captured))
-            }
-        }
-        .padding(24)
-        .frame(width: 380)
-        .onAppear { engage() }
-        .onDisappear { disengage() }
-        .onReceive(tick) { _ in poll() }
-    }
-
-    /// Poll-driven capture (the 30 Hz tick plus sticky accumulation), so the
-    /// sheet never takes the single-slot input handlers a live stream owns.
-    private func engage() {
-        HIDGamepadManager.shared.retain()
-        ControllerBackgroundEvents.setEnabled(true, for: backgroundEventsID)
-        GCController.startWirelessControllerDiscovery {}
-        if DualSenseHID.isEnabled {
-            DualSenseHID.shared.retain()
-            hidRetained = true
-        }
-    }
-
-    private func disengage() {
-        HIDGamepadManager.shared.release()
-        ControllerBackgroundEvents.setEnabled(false, for: backgroundEventsID)
-        ControllerDiscovery.stopIfIdle(isStreaming: model.isStreaming) {
-            GCController.stopWirelessControllerDiscovery()
-        }
-        if hidRetained {
-            DualSenseHID.shared.release()
-            hidRetained = false
-        }
-    }
-
-    private func startRecording() {
-        captured = []; accumulated = []; current = []; recording = true
-    }
-
-    private func poll() {
-        guard recording else { return }
-        var held: Set<ControllerButton> = []
-        for pad in GCController.controllers().compactMap(\.extendedGamepad) {
-            held.formUnion(heldControllerButtons(pad: pad))
-        }
-        for pad in HIDGamepadManager.shared.devices.values {
-            let state = pad.state
-            held.formUnion(heldControllerButtons(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
-                                                 rightTrigger: state.analog.rightTrigger))
-        }
-        current = held
-        if !held.isEmpty {
-            // Sticky: remember every button touched during the hold, so a
-            // staggered release still yields the full chord.
-            accumulated.formUnion(held)
-        } else if !accumulated.isEmpty {
-            // Fully released after a held combo → that's the chord.
-            captured = accumulated
-            recording = false
-            AccessibilityNotification.Announcement("Captured \(ControllerButton.describe(captured))").post()
-        }
-    }
-
-    private func save() {
-        model.customControllerChord = captured
-        model.controllerQuitChord = .custom
-        dismiss()
     }
 }

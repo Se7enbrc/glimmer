@@ -12,14 +12,15 @@
 //  see that file for the remaining hero pieces.
 //
 
+import GlimmerEngine
 import SwiftUI
 
 enum ChipPresentation: Equatable {
+    case checkingReadiness(reason: String)
     case noPC                                   // gray dot, "No PC"
     case ready(rttMs: Int?)                     // green dot, "Ready" / "Ready · 12 ms"
-    case streamingOurs                          // pulsing green, "Streaming" (our session)
+    case streamingOurs                          // green, "Streaming" (our session)
     case connecting(phase: String)              // amber dot, current handshake phase
-    case streamingElsewhere(appName: String?)   // neutral dot, "Helldivers 2 running"
     case asleep                                 // dim gray dot, "Asleep"
     case certMismatch                           // amber dot, "Trust needed"
     case unknown                                // amber dot, "Checking..." (pre-first-poll)
@@ -29,7 +30,6 @@ enum ChipPresentation: Equatable {
     var label: String {
         switch self {
         case .connecting(let phase): Self.truncate(phase, to: 22)
-        case .streamingElsewhere(let name?): "\(Self.truncate(name, to: 14)) running"
         default: fullLabel
         }
     }
@@ -37,15 +37,13 @@ enum ChipPresentation: Equatable {
     /// The same words untruncated, where there's room (`glimmer list`).
     var fullLabel: String {
         switch self {
+        case .checkingReadiness(let reason): reason
         case .noPC: "No PC"
         case .ready(nil): "Ready"
         case .ready(let ms?): "Ready · \(ms) ms"
         case .streamingOurs: "Streaming"
         // Friendly strings ("Connecting to Tower...") - pass through.
         case .connecting(let phase): phase
-        // "Streaming" implied someone else was connected; the host only
-        // knows an app is running, not who (if anyone) is watching it.
-        case .streamingElsewhere(let name): name.map { "\($0) running" } ?? "App running"
         case .asleep: "Asleep"
         case .certMismatch: "Trust needed"
         case .unknown: "Checking…"
@@ -55,12 +53,12 @@ enum ChipPresentation: Equatable {
     /// The screen-reader sentence, so the chip isn't read as bare jargon.
     var accessibility: String {
         switch self {
+        case .checkingReadiness(let reason): return reason
         case .noPC: return "No PC selected"
         case .ready(nil): return "PC ready"
         case .ready(let ms?): return "PC ready, round trip \(ms) milliseconds"
         case .streamingOurs: return "Streaming"
         case .connecting(let phase): return phase
-        case .streamingElsewhere(let name): return "\(name ?? "An app") is running on this PC"
         case .asleep: return "PC is asleep or unreachable"
         // Matches the visible label so Voice Control's "Click Trust needed"
         // finds the button; the hint carries the re-pair action.
@@ -71,23 +69,15 @@ enum ChipPresentation: Equatable {
 
     var dotColor: Color {
         switch self {
+        case .checkingReadiness: return Color.orange
         case .noPC: return Color.gray
         case .ready: return Color.green
         case .streamingOurs: return Color.green
         case .connecting: return Color.orange
-        // Neutral, not blue: a running app doesn't mean anyone is connected.
-        case .streamingElsewhere: return Color.secondary
         case .asleep: return Color.secondary
         case .certMismatch: return Color.orange
         case .unknown: return Color.orange
         }
-    }
-
-    /// Only the "our session" beat earns a heartbeat - someone-else's session
-    /// must not pulse the chip as if WE were live.
-    var pulsing: Bool {
-        if case .streamingOurs = self { return true }
-        return false
     }
 
     /// A PC's polled state. No sample yet, or one past the stale window (the
@@ -99,9 +89,7 @@ enum ChipPresentation: Equatable {
         }
         switch live.state {
         case .unknown: self = .unknown
-        case .idle: self = .ready(rttMs: live.rttMs)
-        case .streamingApp(let name): self = .streamingElsewhere(appName: name)
-        case .streamingUnknownApp: self = .streamingElsewhere(appName: nil)
+        case .idle, .streamingApp, .streamingUnknownApp: self = .ready(rttMs: live.rttMs)
         case .asleep: self = .asleep
         case .certMismatch: self = .certMismatch
         }
@@ -118,32 +106,12 @@ struct ReadinessChip: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Resolve the user-facing chip presentation. Priority order matters -
-    /// our own session beats the polled host state (we'd rather show the live
-    /// truth than briefly flash "Asleep" off a stale poller sample).
-    private var presentation: ChipPresentation {
-        // The CONNECTING phase outranks the in-flight flag: `isStreaming`
-        // flips at stream() ENTRY (the in-flight latch, not the live edge),
-        // so checking it first pulsed a green "Streaming" through the entire
-        // handshake - including connects that never establish. Typed switch:
-        // the String shim reads "Streaming" for the .streaming phase.
-        if case .connecting(let stage) = model.streamPhase {
-            return .connecting(phase: stage)
-        }
-        if model.isStreaming { return .streamingOurs }
-        guard model.selectedHost != nil else { return .noPC }
-
-        // Polled live snapshot → chip state. The host-id guard in
-        // `publishLiveStatus` already scopes it to the selected host.
-        return ChipPresentation(live: model.hostLiveStatus)
-    }
-
     var body: some View {
-        let chip = presentation
+        let chip = model.selectedReadinessChip
         // GlassEffectContainer composites adjacent glass elements as ONE
         // floating cluster (Apple's Liquid Glass guidance) instead of
         // stacking independent blur passes into double-blur artefacts.
-        GlassEffectContainer(spacing: 8) {
+        GlassGroup(spacing: 8) {
             HStack(spacing: 8) {
                 Group {
                     // certMismatch is the Trust affordance: a REAL Button, so
@@ -162,8 +130,8 @@ struct ReadinessChip: View {
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: presentation)
-        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: model.hostRoute.routeClass)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedReadinessChip)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.hostRoute.routeClass)
     }
 
     /// The dot + label + route-glyph capsule, shared by the plain chip and
@@ -173,7 +141,6 @@ struct ReadinessChip: View {
             Circle()
                 .fill(chip.dotColor)
                 .frame(width: 7, height: 7)
-                .symbolEffect(.pulse, options: .repeating, isActive: chip.pulsing && !reduceMotion)
             Text(chip.label)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.primary)
@@ -190,7 +157,7 @@ struct ReadinessChip: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .glassEffect(.regular, in: .capsule)
+        .glassSurface(in: .capsule)
     }
 
     /// Chip sentence + route flavour for VoiceOver ("Host ready, round trip
@@ -201,5 +168,17 @@ struct ReadinessChip: View {
             return chip.accessibility
         }
         return "\(chip.accessibility), \(route)"
+    }
+}
+
+extension AppModel {
+    var selectedReadinessChip: ChipPresentation {
+        guard let host = selectedHost else { return .noPC }
+        if let reason = selectedReadinessReason { return .checkingReadiness(reason: reason) }
+        if streamingHostID == host.id {
+            if case .connecting(let stage) = streamPhase { return .connecting(phase: stage) }
+            return .streamingOurs
+        }
+        return polledChip(for: host)
     }
 }

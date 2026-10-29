@@ -1,13 +1,65 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController
 import Testing
+import Synchronization
 @testable import Glimmer
 
 struct HIDGamepadTests {
+    @MainActor
+    @Test func streamHIDChangesDoNotScheduleDiagnosticDelivery() {
+        let hid = DualSenseHID.shared
+        let previousUI = hid.onChange
+        let previousInput = hid.onInput
+        defer { hid.onChange = previousUI; hid.onInput = previousInput }
+        let inputs = Mutex(0)
+        hid.onChange = nil
+        hid.onInput = { _, _ in inputs.withLock { $0 += 1 } }
+        var queued = 0
+        hid.notifyInputChange(1, scheduleUI: { _ in queued += 1 })
+        #expect(inputs.withLock { $0 } == 1)
+        #expect(queued == 0)
+        hid.onChange = { _ in }
+        hid.notifyInputChange(1, scheduleUI: { _ in queued += 1 })
+        #expect(inputs.withLock { $0 } == 2)
+        #expect(queued == 1)
+    }
+
+    @MainActor
+    @Test func retiredDiagnosticDeliveryCannotReachAReplacementObserver() {
+        let hid = DualSenseHID.shared
+        let previous = hid.onChange
+        defer { hid.onChange = previous }
+        var calls = 0
+        var pending: (@MainActor @Sendable () -> Void)?
+        hid.onChange = { _ in calls += 1 }
+        hid.notifyInputChange(1, scheduleUI: { pending = $0 })
+        hid.onChange = nil
+        hid.onChange = { _ in calls += 1 }
+        pending?()
+        #expect(calls == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func onlyUnboundDualSenseInputSchedulesBindingWork(bound: Bool) {
+        let controller = NSObject()
+        let other = NSObject()
+        let id = ObjectIdentifier(controller)
+        var binder = DualSenseBinder()
+        binder.connectControllers(bound ? [id] : [id, ObjectIdentifier(other)])
+        binder.connectDevices(bound ? [1] : [1, 2])
+        let queued = Mutex(0)
+        let routing = DualSenseRouting(binder: binder, schedule: { _ in queued.withLock { $0 += 1 } })
+        routing.hid(device: 1, pressed: [.cross], at: 1)
+        routing.gc(controller: id, buttons: ControllerMappedButton.a.rawValue, at: 1)
+        #expect(routing.device(for: id) == (bound ? 1 : nil))
+        #expect(queued.withLock { $0 } == (bound ? 0 : 2))
+    }
+
     @MainActor
     @Test(arguments: [false, true])
     func backgroundConsumersRestoreTheOriginalValueAfterTheLastOwnerLeaves(prior: Bool) {
@@ -40,7 +92,7 @@ struct HIDGamepadTests {
         forwarder.isReady = true
         forwarder.setMiniPlayer(true)
         if diagnosticsFirst { monitor.stop() } else { forwarder.setMiniPlayer(false) }
-        #expect(GCController.shouldMonitorBackgroundEvents)
+        #expect(GCController.shouldMonitorBackgroundEvents == diagnosticsFirst)
         if diagnosticsFirst { forwarder.setMiniPlayer(false) } else { monitor.stop() }
         #expect(!GCController.shouldMonitorBackgroundEvents)
     }
@@ -61,6 +113,24 @@ struct HIDGamepadTests {
         #expect(!stopped)
         ControllerDiscovery.stopIfIdle(isStreaming: false) { stopped = true }
         #expect(stopped)
+    }
+
+    @MainActor
+    @Test func controllerMonitorAcceptsBackgroundInput() async throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let queue = DispatchQueue(label: "controller-monitor-test")
+        controller.handlerQueue = queue
+        let monitor = ControllerMonitor(isStreaming: { false })
+        defer { monitor.stop() }
+        monitor.streamingChanged(controllers: [controller])
+        let handler = try #require(pad.valueChangedHandler)
+        await withCheckedContinuation { continuation in
+            queue.async(execute: ControllerCallbackTestDelivery.gamepad(pad, handler: handler) {
+                DispatchQueue.main.async { continuation.resume() }
+            })
+        }
+        #expect(monitor.gcEventCount == 1)
     }
 
     @MainActor
@@ -89,6 +159,8 @@ struct HIDGamepadTests {
 
         streaming = true
         monitor.streamingChanged(controllers: [pad])
+        #expect(gamepad.valueChangedHandler == nil)
+        #expect(DualSenseHID.shared.onChange == nil)
         let forwarder = InputForwarder()
         defer { forwarder.detach() }
         forwarder.attach(gamepad: pad)
@@ -339,14 +411,14 @@ struct HIDGamepadTests {
 
         forwarder.controllerQuitChordProvider = { .l1r1 }
         forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, analog)) { nil }
-        #expect(backend.calls.count == 1)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0])
         #expect(forwarder.quitChordDwellSlot == 3)
         forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG, analog)) { nil }
         #expect(forwarder.quitChordDwellSlot == nil)
-        #expect(backend.calls.count == 2)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0, StreamProtocol.LB_FLAG])
         forwarder.isReady = false
         forwarder.pushHID(slot: 3, state: (StreamProtocol.B_FLAG, analog)) { nil }
-        #expect(backend.calls.count == 2)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0, StreamProtocol.LB_FLAG])
     }
 
     /// Not Now quiets one pad until relaunch; Don't Ask Again outlives it.
@@ -363,5 +435,15 @@ struct HIDGamepadTests {
         let relaunched = HIDPermissionOffers(defaults: defaults)
         #expect(relaunched.shouldOffer("2DC8:301B"))
         #expect(!relaunched.shouldOffer("0F0D:00C1"))
+    }
+
+    /// Opening System Settings while macOS can still prompt hid the prompt under it.
+    @MainActor @Test func inputMonitoringPromptsBeforeItEverOpensSettings() {
+        #expect(InputMonitoring.step(for: .unknown) == .systemPrompt)
+        #expect(InputMonitoring.step(for: .denied) == .openSettings)
+        #expect(InputMonitoring.step(for: .granted) == .reopenReaders)
+        #expect(InputMonitoring.actionTitle(.denied) == "Open System Settings")
+        #expect(!AppModel.hidPermissionExplanation(.denied).contains("will then ask"))
+        #expect(AppModel.rawHIDExplanation(.unknown).contains("will then ask"))
     }
 }

@@ -14,6 +14,7 @@ import sys
 OUT = Path("build/coverage")
 DEBUG = Path("build/Build/Products/Debug")
 APP = DEBUG / "Glimmer.app/Contents/MacOS/Glimmer.debug.dylib"
+ENGINE = DEBUG / "GlimmerEngine.framework/Versions/A/GlimmerEngine"
 TESTS = DEBUG / "Glimmer.app/Contents/PlugIns/GlimmerTests.xctest/Contents/MacOS/GlimmerTests"
 HEADER = "| Component | Lines (xccov) | Lines (llvm-cov) | Regions | Branches |\n| --- | --- | --- | --- | --- |\n"
 
@@ -49,9 +50,11 @@ def swift():
     (OUT / "swift/xccov.json").write_text(data)
     report = json.loads(data)
     app = llvm_totals(APP, profiles[0], "llvm-app.json")
+    engine = llvm_totals(ENGINE, profiles[0], "llvm-engine.json")
     helper = llvm_totals(TESTS, profiles[0], "llvm-helper.json", "helper/")
     return ("## Swift coverage\n\n" + HEADER
             + f"| App (`Glimmer.debug.dylib`) | {xccov_lines(report, 'Glimmer.app')} | {llvm_row(app)} |\n"
+            + f"| Engine | {xccov_lines(report, 'GlimmerEngine.framework')} | {llvm_row(engine)} |\n"
             + f"| Helper sources in the test bundle | {xccov_lines(report, 'GlimmerTests.xctest', '/helper/')}"
             + f" | {llvm_row(helper)} |\n"
             + f"| Login item | {xccov_lines(report, 'Glimmer Login Helper.app')} | not executed | - | - |\n\n"

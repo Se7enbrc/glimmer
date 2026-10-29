@@ -1,51 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+Defaults.swift
-//
-//  The typed UserDefaults read helpers `AppModel.init()` loads its persisted
-//  settings through, plus the quality-preset migration. Split out of
-//  AppModel.swift to keep each unit focused (and that file under its length
-//  limit); they are `static` rather than file-private precisely so the
-//  initializer over there can still reach them.
-//
+// Read saved choices without turning current defaults into persistent values.
 
+import GlimmerEngine
 import Foundation
 
 extension AppModel {
 
-    // MARK: - Persisted-setting decode helpers
-    //
-    // Small typed wrappers around UserDefaults so `init()` reads as a flat list
-    // of assignments instead of a branch per key. Each returns nil when the key
-    // is absent / out of range / undecodable, so the caller keeps the property's
-    // declared default - identical to the prior inline `if let` / `if x > 0`.
-
     /// A positive `Int`, or nil when the key is absent (`integer(forKey:)`
     /// returns 0) or non-positive.
-    static func persistedPositiveInt(_ key: String, defaults: UserDefaults = .standard) -> Int? {
+    static func persistedPositiveInt(_ key: String, defaults: UserDefaults = PersistentStorage.defaults) -> Int? {
         let value = defaults.integer(forKey: key)
         return value > 0 ? value : nil
     }
 
     /// A `Bool`, or nil when the key was never written (so the default holds).
-    static func persistedBool(_ key: String, defaults: UserDefaults = .standard) -> Bool? {
+    static func persistedBool(_ key: String, defaults: UserDefaults = PersistentStorage.defaults) -> Bool? {
         guard defaults.object(forKey: key) != nil else { return nil }
         return defaults.bool(forKey: key)
     }
 
-    /// The persisted quality preset, with the presets dropped in the rework
-    /// remapped to their surviving equivalents
-    /// (`QualityPreset.migrated(fromPersistedRawValue:)` owns the mapping).
-    /// nil when the key is absent, so the property's declared default holds and
-    /// nothing is written for a user who never picked a preset.
-    ///
-    /// One-shot: the migrated value is written back only when it actually
-    /// differs from what was on disk, so a legacy string is rewritten exactly
-    /// once and every later launch takes the plain decode path. Idempotent -
-    /// re-running over an already-migrated key writes nothing.
-    static func persistedQualityPreset(defaults: UserDefaults = .standard) -> QualityPreset? {
+    /// Only retired enum cases migrate; never infer intent from a value matching a default.
+    static func persistedQualityPreset(defaults: UserDefaults = PersistentStorage.defaults) -> QualityPreset? {
         guard let raw = defaults.string(forKey: "qualityPreset") else { return nil }
         let preset = QualityPreset.migrated(fromPersistedRawValue: raw)
         if raw != preset.rawValue {
@@ -56,7 +33,7 @@ extension AppModel {
 
     /// Decode a string-backed `RawRepresentable` from its persisted raw value.
     static func persistedRawValue<T: RawRepresentable>(
-        _ key: String, _ type: T.Type, defaults: UserDefaults = .standard
+        _ key: String, _ type: T.Type, defaults: UserDefaults = PersistentStorage.defaults
     ) -> T? where T.RawValue == String {
         guard let raw = defaults.string(forKey: key) else { return nil }
         return T(rawValue: raw)
@@ -64,34 +41,28 @@ extension AppModel {
 
     /// JSON-decode a `Codable` from its persisted data blob.
     static func persistedDecoded<T: Decodable>(
-        _ key: String, _ type: T.Type, defaults: UserDefaults = .standard) -> T? {
+        _ key: String, _ type: T.Type, defaults: UserDefaults = PersistentStorage.defaults) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 
-    /// Retire the old default FPS alarms once while preserving custom thresholds.
-    static func persistedStatsThresholds(defaults: UserDefaults = .standard) -> StatsThresholds {
-        var thresholds = defaults.data(forKey: "statsThresholds")
-            .flatMap { try? JSONDecoder().decode(StatsThresholds.self, from: $0) } ?? .default
-        guard !defaults.bool(forKey: "informationalFpsDefaultsApplied") else { return thresholds }
-        if thresholds.fpsWarningBelow == 60 && thresholds.fpsCriticalBelow == 30 {
-            thresholds.fpsWarningBelow = 0
-            thresholds.fpsCriticalBelow = 0
-            if let data = try? JSONEncoder().encode(thresholds) {
-                defaults.set(data, forKey: "statsThresholds")
-            }
-        }
-        defaults.set(true, forKey: "informationalFpsDefaultsApplied")
-        return thresholds
+    /// Move only the old stats default once, preserving later choices of ⌃I.
+    static func persistedStatsHotkey(defaults: UserDefaults = PersistentStorage.defaults) -> HotkeyChord {
+        HotkeyChord.persistedStats(defaults: defaults)
+    }
+
+    /// Stored values carry intent even when they equal a previous default.
+    static func persistedStatsThresholds(defaults: UserDefaults = PersistentStorage.defaults) -> StatsThresholds {
+        persistedDecoded("statsThresholds", StatsThresholds.self, defaults: defaults) ?? .default
     }
 
     /// Decode the persisted stats-overlay custom-row set, or nil when the key is
-    /// absent or decodes to an empty set (so the default initial set holds).
-    static func persistedCustomRows(defaults: UserDefaults = .standard) -> Set<StatsRow.Kind>? {
+    /// absent or contains only unknown names. An explicit empty set stays empty.
+    static func persistedCustomRows(defaults: UserDefaults = PersistentStorage.defaults) -> Set<StatsRow.Kind>? {
         guard let raw = defaults.array(forKey: "statsOverlayCustomRows") as? [String] else {
             return nil
         }
         let decoded = raw.compactMap(StatsRow.Kind.init(rawValue:))
-        return decoded.isEmpty ? nil : Set(decoded)
+        return !raw.isEmpty && decoded.isEmpty ? nil : Set(decoded)
     }
 }

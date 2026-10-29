@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import QuartzCore
 
 /// Forty intervals at the overlay's 4 Hz cadence, with missing readings left as gaps.
@@ -46,6 +51,17 @@ struct StatsTraceHistory {
         storage[next] = Sample(value: valid, severity: valid != nil ? severity : .none, time: time)
         next = (next + 1) % Self.capacity
         count = min(count + 1, Self.capacity)
+    }
+
+    /// False while every reading is the same, so a perfectly steady metric draws no line.
+    var varies: Bool {
+        var first: Double?
+        for index in 0..<count {
+            guard let value = self[index].value else { continue }
+            if let first, abs(value - first) > 0.0001 { return true }
+            first = first ?? value
+        }
+        return false
     }
 
     mutating func reset() {
@@ -156,6 +172,7 @@ final class StatsTrace {
     private let criticals = CAShapeLayer()
     private let dot = CAShapeLayer()
     private var target = 60.0
+    static let minimumHistory = 8
 
     init(metric: Metric) {
         self.metric = metric
@@ -173,7 +190,7 @@ final class StatsTrace {
         criticals.lineWidth = 1.6
     }
 
-    func applyInk(primary: NSColor, caution: NSColor, critical: NSColor, opaque: Bool) {
+    func applyInk(primary: StatsColor, caution: StatsColor, critical: StatsColor, opaque: Bool) {
         baseline.strokeColor = primary.withAlphaComponent(opaque ? 0.4 : 0.18).cgColor
         line.strokeColor = primary.cgColor
         cautions.strokeColor = caution.cgColor
@@ -209,11 +226,16 @@ final class StatsTrace {
     }
 
     func draw() {
+        let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
+        // Two seconds of readings that move: a lone reference line, a stub or a flat dash reads as debris.
+        guard !bounds.isEmpty, history.count >= Self.minimumHistory, history.varies else {
+            for shape in [baseline, line, cautions, criticals, dot] { shape.path = nil }
+            return
+        }
         let normalPath = CGMutablePath()
         let cautionPath = CGMutablePath()
         let criticalPath = CGMutablePath()
         let referencePath = CGMutablePath()
-        let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
         let scale = scale
         func y(_ value: Double) -> CGFloat {
             bounds.minY + CGFloat(min(1, max(0, (value - scale.lower) / (scale.upper - scale.lower)))) * bounds.height

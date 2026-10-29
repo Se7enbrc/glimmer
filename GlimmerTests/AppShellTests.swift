@@ -8,92 +8,125 @@
 //  entry, and how it answers `glimmer stream` and `glimmer quit`.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import Testing
+import Synchronization
 @testable import Glimmer
 
 struct AppShellTests {
+    private let settings = IsolatedDefaults()
 
-    @MainActor private func withQualityDefaults(_ body: () -> Void) {
-        let keys = ["qualityPreset", "customWidth", "customHeight", "customFPS", "streamHDR",
-                    StreamDisplayMode.defaultsKey, BitrateMode.defaultsKey]
-        let defaults = UserDefaults.standard
-        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
-        defer {
-            for (key, value) in saved {
-                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-            }
-        }
-        for key in keys { defaults.removeObject(forKey: key) }
-        body()
+    @Test @MainActor func loadingSettingsDoesNotPersistUnchosenDefaults() {
+        _ = AppModel(defaults: settings.defaults)
+        #expect(settings.defaults.persistentDomain(forName: settings.name)?.isEmpty != false)
     }
 
     @Test @MainActor func customResolutionAndRefreshSurviveRelaunch() {
-        withQualityDefaults {
-            for (width, height, fps) in [(1920, 1080, 60), (1280, 720, 90), (2560, 1440, 120)] {
-                let model = AppModel()
-                model.qualityPreset = .custom
-                model.customWidth = width
-                model.customHeight = height
-                model.customFPS = fps
-                model.streamDisplayMode = .fullScreen
-                model.streamHDR = false
-                model.bitrateMode = .bandwidthSaver
-                let expectedBitrate = model.effectiveBitrateKbps
-                let relaunched = AppModel()
-                #expect(relaunched.qualityPreset == .custom)
-                #expect(relaunched.customWidth == width)
-                #expect(relaunched.customHeight == height)
-                #expect(relaunched.customFPS == fps)
-                #expect(relaunched.streamHDR == false)
-                #expect(relaunched.bitrateMode == .bandwidthSaver)
-                #expect(relaunched.effectiveBitrateKbps == expectedBitrate)
-                #expect(UserDefaults.standard.integer(forKey: "customWidth") == width)
-                #expect(UserDefaults.standard.integer(forKey: "customHeight") == height)
-                #expect(UserDefaults.standard.integer(forKey: "customFPS") == fps)
+        for (width, height, fps) in [(1920, 1080, 60), (1280, 720, 90), (2560, 1440, 120)] {
+            let model = AppModel(defaults: settings.defaults)
+            model.qualityPreset = .custom
+            model.customWidth = width
+            model.customHeight = height
+            model.customFPS = fps
+            model.streamDisplayMode = .fullScreen
+            model.streamHDR = false
+            model.bitrateMode = .bandwidthSaver
+            let expectedBitrate = model.effectiveBitrateKbps
+            let relaunched = AppModel(defaults: settings.defaults)
+            #expect(relaunched.qualityPreset == .custom)
+            #expect(relaunched.customWidth == width)
+            #expect(relaunched.customHeight == height)
+            #expect(relaunched.customFPS == fps)
+            #expect(relaunched.streamHDR == false)
+            #expect(relaunched.bitrateMode == .bandwidthSaver)
+            #expect(relaunched.effectiveBitrateKbps == expectedBitrate)
+            #expect(settings.defaults.integer(forKey: "customWidth") == width)
+            #expect(settings.defaults.integer(forKey: "customHeight") == height)
+            #expect(settings.defaults.integer(forKey: "customFPS") == fps)
+        }
+    }
+
+    @Test @MainActor func nativeQualitySurvivesRelaunchAndFailedReadiness() {
+        do {
+            let defaults = settings.defaults
+            defaults.set("matchDisplay", forKey: "qualityPreset")
+            defaults.set(1920, forKey: "customWidth")
+            defaults.set(1080, forKey: "customHeight")
+            defaults.set(60, forKey: "customFPS")
+            let host = Host(id: "quality-pc", name: "Tower", customName: nil, localAddress: nil,
+                            manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
+                            appVersion: nil, macAddress: nil)
+            for _ in 0..<2 {
+                let model = AppModel(defaults: defaults)
+                model.displayProbe = { (3456, 2234, 120) }
+                for state: HostLiveStatus.State in [.unknown, .certMismatch, .idle, .asleep] {
+                    model.hostLiveStatus = HostLiveStatus(hostID: host.id, state: state, capturedAt: Date())
+                    let config = model.nativeStreamConfig(for: host)
+                    #expect((config.width, config.height, config.fps) == (3456, 2234, 120))
+                    #expect(model.qualityPreset == .matchDisplay)
+                    #expect(defaults.string(forKey: "qualityPreset") == "matchDisplay")
+                    #expect(defaults.integer(forKey: "customWidth") == 1920)
+                    #expect(defaults.integer(forKey: "customHeight") == 1080)
+                    #expect(defaults.integer(forKey: "customFPS") == 60)
+                }
             }
         }
     }
 
     @Test @MainActor func fullscreenCoversEveryPanelUnlessTheUserChoseOtherwise() {
-        let keys = ["streamCoversNotch", "streamUsesFullScreenSpace"]
-        let defaults = UserDefaults.standard
-        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
-        defer {
-            for (key, value) in saved {
-                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-            }
-        }
-        for key in keys { defaults.removeObject(forKey: key) }
-        let fresh = AppModel()
+        let defaults = settings.defaults
+        let fresh = AppModel(defaults: settings.defaults)
         for hasNotch in [true, false] {
             #expect(AppModel.streamCoversNotch(displayHasNotch: hasNotch, coversNotch: fresh.streamCoversNotch,
                                                usesFullScreenSpace: fresh.streamUsesFullScreenSpace))
         }
         defaults.set(false, forKey: "streamCoversNotch")
         defaults.set(true, forKey: "streamUsesFullScreenSpace")
-        let chosen = AppModel()
+        let chosen = AppModel(defaults: settings.defaults)
         #expect(!chosen.streamCoversNotch && chosen.streamUsesFullScreenSpace)
     }
 
     @Test @MainActor func loadingQualityDoesNotSaveUntouchedCustomValues() {
-        withQualityDefaults {
-            let model = AppModel()
-            for key in ["qualityPreset", "customWidth", "customHeight", "customFPS"] {
-                #expect(UserDefaults.standard.object(forKey: key) == nil)
-            }
-            let expected = model.effectiveValuesForPreset(model.qualityPreset)
-            model.qualityPreset = .custom
-            #expect(model.customWidth == expected.width)
-            #expect(model.customHeight == expected.height)
-            #expect(model.customFPS == expected.fps)
+        let model = AppModel(defaults: settings.defaults)
+        for key in ["qualityPreset", "customWidth", "customHeight", "customFPS"] {
+            #expect(settings.defaults.object(forKey: key) == nil)
         }
+        let expected = model.effectiveValuesForPreset(model.qualityPreset)
+        model.qualityPreset = .custom
+        #expect(model.customWidth == expected.width)
+        #expect(model.customHeight == expected.height)
+        #expect(model.customFPS == expected.fps)
     }
 
     @Test @MainActor func testHostRegistersDefaultsWithoutLaunchingTheApp() {
         #expect(AppDelegate.boundManager == nil)
-        let registration = UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain)
+        GlimmerApp.registerDefaults(defaults: settings.defaults)
+        let registration = settings.defaults.volatileDomain(forName: UserDefaults.registrationDomain)
         #expect(registration[MouseAccelerationControl.enabledDefaultsKey] as? Bool == true)
+    }
+
+    @Test @MainActor func injectedSettingsLeaveStandardDomainUntouched() throws {
+        let domain = try #require(Bundle.main.bundleIdentifier)
+        let before = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
+        defer {
+            let after = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
+            let unchanged = NSDictionary(dictionary: before).isEqual(to: after)
+            #expect(unchanged)
+        }
+        settings.defaults.set("maximum", forKey: "qualityPreset")
+        let model = AppModel(defaults: settings.defaults)
+        model.qualityPreset = .custom
+        model.customWidth = 2560
+        model.customHeight = 1440
+        model.customFPS = 120
+        model.rawHIDPromptAnswered = true
+        model.telemetryEnabled = true
+        let relaunched = AppModel(defaults: settings.defaults)
+        #expect(relaunched.customWidth == 2560 && relaunched.customHeight == 1440)
+        #expect(relaunched.customFPS == 120)
+        #expect(relaunched.rawHIDPromptAnswered && relaunched.telemetryEnabled)
+        #expect(settings.defaults.object(forKey: "informationalFpsDefaultsApplied") == nil)
     }
 
     @Test func dockIconStaysWhileThereIsSomethingToComeBackTo() {
@@ -149,9 +182,8 @@ struct AppShellTests {
     @Test func checkTellsTheTerminalWhetherAStreamWouldBeTaken() {
         var handled: Set<String> = []
         #expect(decide(["id": "a", "verb": "check", "host": "UUID-1"], handled: &handled) == .ready)
-        // Streaming, or a request still waiting on its route: asking about a takeover would be moot.
-        #expect(decide(["id": "b", "verb": "check", "host": "UUID-1"], streamingFrom: "UUID-1", handled: &handled)
-            == .rejected(CommandChannel.alreadyStreaming))
+        // A live stream on this PC can return to its window or offer a named replacement.
+        #expect(decide(["id": "b", "verb": "check", "host": "UUID-1"], streamingFrom: "UUID-1", handled: &handled) == .ready)
     }
 
     @Test @MainActor func routeWaitStopsAtTheFirstSettledCheckOrAfterTheBudget() async {
@@ -182,7 +214,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func quitCancelsALaunchBeforeItsRouteSettles() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let route = CommandRouteWait()
         let (request, task) = try await pendingStream(model, route: route)
         let replies = CommandReplies()
@@ -201,8 +233,93 @@ struct AppShellTests {
         #expect(reply?[CommandChannel.Key.detail] == "Stream request cancelled.")
     }
 
+    @Test @MainActor func stopCancelsALaunchBeforeItsRouteSettles() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let route = CommandRouteWait()
+        let (request, task) = try await pendingStream(model, route: route)
+        #expect(await model.stopActiveStream(matching: "another-pc", source: "test") == .pcMismatch)
+        #expect(model.pendingCommandStream === request && !task.isCancelled)
+        #expect(await model.stopActiveStream(matching: tower.id, source: "test") == .stopped)
+        #expect(model.pendingCommandStream == nil && task.isCancelled)
+        model.cancelPendingCommandStream()
+        route.settle()
+        await task.value
+        #expect(!model.isStreaming && model.nativeSession == nil)
+    }
+
+    @Test @MainActor func stopCancelsAnArmedLaunchBeforeTheSessionExists() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.lastLaunchAttempt = (desktop, tower)
+        model.isStreaming = true
+        var launched = false
+        let task = Task {
+            launched = !Task.isCancelled && !model.menuStopInProgress
+            model.isStreaming = false
+        }
+        model.nativeStreamTask = task
+        #expect(await model.stopActiveStream(matching: tower.id, source: "test") == .stopped)
+        await task.value
+        #expect(task.isCancelled && !launched)
+    }
+
+    @Test @MainActor func stopInvalidatesReplacementThroughoutOldSessionTeardown() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let sunshine = FakeSunshine.scripted([:])
+        let session = StreamSession(hostDisposition: .disconnectOnly,
+            audioDecoder: AudioDecoder(defaults: settings.defaults), services: SessionServices(),
+            backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+            makeBackend: { InputRecordingBackend() })
+        let closing = CommandRouteWait()
+        let presentation = SessionPresentation()
+        presentation.waitForVisualClose = { await closing.wait() }
+        await session.installCloseFixture(presentation, streaming: true)
+        model.nativeSession = session
+        model.isStreaming = true
+        model.lastLaunchAttempt = (LibraryApp(id: 99, name: "Other", hdr: false, hidden: false), tower)
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        model.beginCommandStream("replacement", app: desktop, on: tower, takeover: true, waitForRoute: {})
+        let request = try #require(model.pendingCommandStream)
+        let task = try #require(request.task)
+        try #require(await AppModel.poll(slices: 2_000, every: .milliseconds(1)) { closing.started })
+        #expect(model.pendingCommandStream === request)
+        #expect(await model.stopActiveStream(matching: "another-pc", source: "test") == .pcMismatch)
+        let stop = Task { await model.stopActiveStream(matching: tower.id, source: "test") }
+        try #require(await AppModel.poll(slices: 2_000, every: .milliseconds(1)) { model.menuStopInProgress })
+        #expect(task.isCancelled)
+        // A stale launch must only resume this inert fixture, never create real media or storage.
+        model.lastLaunchAttempt = (desktop, tower)
+        closing.settle()
+        #expect(await stop.value == .stopped)
+        await task.value
+        model.isStreaming = false
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.rejected])
+        #expect(model.pendingCommandStream == nil && model.pendingTakeover == nil)
+        #expect(sunshine.paths.isEmpty)
+    }
+
+    @Test @MainActor func aCommandWaitsForReadinessAndQuitStillCancelsIt() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let readiness = CommandRouteWait()
+        let readyTask = Task { await readiness.wait() }
+        model.hostPolling.readinessTasks[tower.id] = readyTask
+        model.hostPolling.readinessReasons[tower.id] = "Finishing the last stream…"
+        defer { model.cancelHostReadiness() }
+        let route = CommandRouteWait()
+        let (request, task) = try await pendingStream(model, route: route)
+        route.settle()
+        await Task.yield()
+        #expect(model.pendingCommandStream === request)
+        #expect(!model.isStreaming && model.nativeSession == nil)
+        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        readiness.settle()
+        await task.value
+        #expect(task.isCancelled && model.pendingCommandStream == nil)
+        #expect(!model.isStreaming && model.nativeSession == nil)
+    }
+
     @Test @MainActor func quittingAnotherPCLeavesThePendingLaunchAlone() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let route = CommandRouteWait()
         let (request, task) = try await pendingStream(model, route: route)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": "another-pc"])
@@ -214,7 +331,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func aLateRouteCannotClearTheReplacementLaunch() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let firstRoute = CommandRouteWait()
         let (_, firstTask) = try await pendingStream(model, route: firstRoute)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
@@ -231,11 +348,11 @@ struct AppShellTests {
     }
 
     @Test @MainActor func aLateRouteDoesNotDisturbAReconnectingSession() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let route = CommandRouteWait()
         let (_, task) = try await pendingStream(model, route: route)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         model.nativeSession = session
         model.isStreaming = true
         model.isReconnecting = true
@@ -244,6 +361,62 @@ struct AppShellTests {
         #expect(model.nativeSession === session)
         #expect(model.isStreaming)
         #expect(model.isReconnecting)
+    }
+
+    @Test @MainActor func aDifferentGameDuringRouteWaitRejectsTheStaleCommand() async throws {
+        let window = CommandTestWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
+        window.identifier = NSUserInterfaceItemIdentifier("main")
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let model = AppModel(defaults: settings.defaults)
+        let route = CommandRouteWait()
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        try #require(model.mainWindowVisible)
+        let (_, task) = try await pendingStream(model, route: route)
+        let other = LibraryApp(id: 99, name: "Other", hdr: false, hidden: false)
+        model.lastLaunchAttempt = (app: other, host: tower)
+        model.isStreaming = true
+        route.settle()
+        await task.value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.rejected])
+        #expect(model.pendingTakeover == nil)
+        #expect(model.lastLaunchAttempt?.app.id == other.id)
+    }
+
+    @Test @MainActor func aCommandWithoutAStartedSessionIsAlreadyComplete() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.nativeStreamError = "The stream could not start."
+        let end = CommandStreamEnd(model: model)
+        #expect(end.ended)
+        if end.ended { #expect(await end.wait() == model.nativeStreamError) }
+    }
+
+    @Test @MainActor func acceptedCommandTimesOutWithoutAFirstFrame() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.isStreaming = true
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        let time = Mutex<UInt64>(0)
+        let clock = SessionClock(uptimeNanos: { time.withLock { $0 } }, sleep: { _ in
+            time.withLock { $0 += 60_000_000_000 }
+        })
+        await model.reportCommandSession("timeout", clock: clock, firstFrame: { false }).value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.ended])
+        #expect(replies.first?[CommandChannel.Key.detail] != nil)
+    }
+
+    @Test @MainActor func acceptedCommandReportsLiveAndItsOwnTerminalResult() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.isStreaming = true
+        var replies: [[String: String]] = []
+        model.postCommandReply = {
+            replies.append($0)
+            if $0[CommandChannel.Key.event] == CommandChannel.Event.live { model.isStreaming = false }
+        }
+        await model.reportCommandSession("live", firstFrame: { true }).value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.live, CommandChannel.Event.ended])
+        #expect(replies.last?[CommandChannel.Key.detail] == nil)
     }
 
     @Test @MainActor func routePollingStopsWhenCancelledEvenIfTheRouteBecomesReady() async throws {
@@ -296,4 +469,9 @@ private final class CommandRouteWait {
         continuation?.resume()
         continuation = nil
     }
+}
+
+@MainActor
+private final class CommandTestWindow: NSWindow {
+    override var isVisible: Bool { true }
 }

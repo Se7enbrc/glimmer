@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 import os.log
 
@@ -16,9 +17,10 @@ enum ContainerMigration {
 
     /// Run the migration if it hasn't run yet. Idempotent and a no-op when the
     /// old container is absent (fresh installs, already-migrated users).
-    static func runIfNeeded(defaults: UserDefaults = .standard,
-                            home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    static func runIfNeeded(defaults: UserDefaults = PersistentStorage.defaults,
+                            home: URL = PersistentStorage.home) {
         guard !defaults.bool(forKey: didMigrateKey) else { return }
+        let home = PersistentStorage.checked(home)
         let fm = FileManager.default
         let containerLib = home
             .appendingPathComponent("Library/Containers/\(bundleID)/Data/Library", isDirectory: true)
@@ -42,7 +44,7 @@ enum ContainerMigration {
         // Our prefs plist may have just landed under the host domain; drop
         // CFPreferences' in-memory cache for it so this launch reads the
         // migrated values instead of the empty domain it opened with.
-        CFPreferencesAppSynchronize(bundleID as CFString)
+        if !PersistentStorage.isTesting { CFPreferencesAppSynchronize(bundleID as CFString) }
 
         log.notice("container migration copied \(copied, privacy: .public) item(s) from the sandbox container")
         defaults.set(true, forKey: didMigrateKey)

@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Determine DCO requirement
+        id: requirement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from urllib.parse import quote
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+              pr = json.load(event_file)["pull_request"]
+          exempt = pr.get("author_association") in {"OWNER", "MEMBER", "COLLABORATOR"}
+          repository = os.environ["GITHUB_REPOSITORY"]
+          login = quote(pr["user"]["login"], safe="")
+          try:
+              response = subprocess.run(
+                  ["gh", "api", "--method", "GET",
+                   f"repos/{repository}/collaborators/{login}/permission", "--jq", ".permission"],
+                  text=True, capture_output=True, check=True, timeout=30,
+              )
+          except (OSError, subprocess.SubprocessError):
+              print("Permission lookup unavailable; using the PR author's association.")
+          else:
+              permission = response.stdout.strip()
+              if permission in {"admin", "maintain", "write", "triage", "read", "none"}:
+                  exempt = permission in {"admin", "maintain", "write"}
+              else:
+                  print("Permission lookup unrecognized; using the PR author's association.")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"required={'false' if exempt else 'true'}", file=output)
+          if exempt:
+              print("DCO passed: the PR author is exempt as a project maintainer or writer.")
+          else:
+              print("DCO requires an author sign-off on every PR commit.")
+          PY
+
+      - name: Check out commit history
+        if: steps.requirement.outputs.required == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check author sign-offs
+        if: steps.requirement.outputs.required == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          def git(*args, input=None):
+              return subprocess.run(
+                  ["git", *args], input=input, text=True, check=True,
+                  stdout=subprocess.PIPE,
+              ).stdout
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+              pr = json.load(event_file)["pull_request"]
+          base, head = pr["base"]["sha"], pr["head"]["sha"]
+          if not all(re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (base, head)):
+              sys.exit("Invalid PR commit range.")
+          commits = git("rev-list", f"{base}..{head}").splitlines()
+          if not commits:
+              sys.exit("No PR commits found.")
+
+          failures = 0
+          for sha in commits:
+              name, email, message = git(
+                  "show", "-s", "--format=%an%x00%ae%x00%B", sha,
+              ).split("\0", 2)
+              trailers = git("interpret-trailers", "--parse", input=message)
+              expected = f"Signed-off-by: {name} <{email}>"
+              if expected not in trailers.splitlines():
+                  print(f"{sha}: missing Signed-off-by matching the author; use git commit -s.")
+                  failures += 1
+          if failures:
+              sys.exit(1)
+          print(f"DCO passed for {len(commits)} PR commits.")
+          PY

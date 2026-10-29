@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import Foundation
 import Network
 import os
@@ -8,6 +9,8 @@ import Testing
 @testable import Glimmer
 
 struct SessionSafetyTests {
+    private let settings = IsolatedDefaults()
+
     @Test func stoppedBackendReleasesTheVideoSink() {
         weak var releasedBackend: NativeBackend?
         weak var released: StubVideoSink?
@@ -34,7 +37,7 @@ struct SessionSafetyTests {
         weak var audio: AudioDecoder?
         do {
             let videoSink = StubVideoSink()
-            let audioSink = AudioDecoder()
+            let audioSink = AudioDecoder(defaults: settings.defaults)
             video = videoSink
             audio = audioSink
             backend.attachVideoSink(videoSink)
@@ -419,6 +422,17 @@ struct SessionSafetyTests {
             #expect(failure.kind == kind, "\(error)")
             #expect(failure.message == message)
             #expect(!failure.message.contains(" - ") && !failure.message.contains("192.0.2.10"))
+        }
+    }
+
+    @Test func nativeFailureFallbackRemainsUnreachableForNonStreamErrors() {
+        let errors: [Error] = [StreamConnection.Failure.pairingRequired,
+                               StreamConnection.Failure.invalidConfiguration, CancellationError(),
+                               TakeoverRequired(appID: 42)]
+        for error in errors {
+            let failure = AppModel.connectFailure(for: error, hostName: "Tower")
+            #expect(failure.kind == .unreachable)
+            #expect(failure.message == AppModel.unreachableMessage("Tower"))
         }
     }
 

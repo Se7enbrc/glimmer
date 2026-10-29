@@ -1,19 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ControllerForwarder+StatePush.swift
-//
-//  The PER-FRAME state push: the two entry points that carry a gamepad frame to
-//  the host (the GameController `valueChangedHandler` full-state forward and the
-//  raw-HID centre-button side-channel), the shared builder they both run, and
-//  the table-driven button bitmask. Split from ControllerForwarder.swift - same
-//  idiom as the ControllerForwarder+QuitChord split, to keep that file under the
-//  length limit; the attach/detach/arrival lifecycle stays there. Stored state
-//  (`gamepadMask`, the quit-chord dwell fields) lives on `InputForwarder`
-//  proper, so the methods here rely on default `internal` access to it.
-//
+// GameController owns full snapshots; raw HID contributes centre-button edges without repeating touch.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController
@@ -25,96 +15,54 @@ extension InputForwarder {
     }
 
     func updateControllerBackgroundEvents() {
+        publishInputSnapshot()
         ControllerBackgroundEvents.setEnabled(isMiniPlayer && isReady, for: controllerBackgroundEventsID)
         ControllerHaptics.shared.setBackgroundPlayEnabled(isMiniPlayer && isReady,
                                                           for: controllerBackgroundEventsID)
         for state in attachedControllers.values {
-            ControllerMotion.shared.setInputEnabled(forwardsControllerEvents, slot: state.slot)
+            ControllerMotion.shared.setInputEnabled(
+                forwardsControllerEvents && controllerMouseStates[state.slot]?.isMouse != true, slot: state.slot)
         }
     }
 
     // MARK: - Per-frame state push
 
-    /// FULL-state push from the GameController valueChangedHandler - the SINGLE
-    /// source of truth for sticks/triggers/face buttons/touchpad. Pushes the
-    /// merged multiController state AND forwards the touchpad surface.
-    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8) {
+    /// Only GameController snapshots own the surface, so centre-button edges cannot double-feed touch.
+    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8,
+                           touchpadUpdate: (@MainActor () -> Void)? = nil) {
         guard pushControllerState(pad: pad, slot: slot) else { return }
-        // Forward the touchpad surface (finger contacts) as host touch events.
-        // ONLY from this GameController path - touchpad data comes through
-        // GameController, so the raw-HID center-button path must NOT re-run this
-        // (it would emit redundant touch pass-through events, an amplifier).
-        forwardTouchpad(pad: pad, slot: slot)
+        if let touchpadUpdate { touchpadUpdate() } else { forwardTouchpad(pad: pad, slot: slot) }
     }
 
-    /// Raw-HID side-channel update: fired ONLY when a decoded DualSense bit
-    /// changed - a center button (Options/Create/PS/Mute) or, for the quit chord,
-    /// a shoulder (DualSenseHID gates onChange on a real bit change). GameController
-    /// never delivers the center buttons and does NOT fire its valueChangedHandler
-    /// for them, so this push is necessary to carry a center-button edge to the
-    /// host - but it does NOT re-forward the touchpad (that stays on the
-    /// GameController path) and the InputBatcher coalesces it with the latest
-    /// GC-sourced axes for the slot, so it is not a double-feed of stick/axis
-    /// state. A shoulder edge here re-pushes the same GC-sourced state (the host
-    /// L1/R1 still come from GameController); its purpose is to re-run the chord
-    /// check so a chord completed by a shoulder arms even if GameController's
-    /// frame for it is late or withheld.
+    /// Raw-HID centre and shoulder edges re-run the chord check when GameController is late or silent.
+    /// Axes still come from GameController; the batcher merges them without repeating surface events.
     func sendCenterButtonUpdate(pad: GCExtendedGamepad, slot: UInt8) {
         let pushed = pushControllerState(pad: pad, slot: slot)
-        // Partial-hold breadcrumb: a centre button is down, the chord needs
-        // centre buttons, and the chord did NOT match on this edge (a match
-        // returns false from the push, having armed the dwell). This is the
-        // line that makes "I held all four and nothing happened" diagnosable:
-        // it names which of the four never registered. Edge-only + rate-limited.
-        guard pushed, quitChordUsesCentreButtons() else { return }
+        // Keep the rate-limited partial-hold breadcrumb: it identifies which centre button never registered.
+        guard pushed, controllerMouseStates[slot]?.isMouse != true, quitChordUsesCentreButtons() else { return }
         let hid = dualSenseButtons(pad: pad)
         if hid.options || hid.create {
             quitChordBreadcrumb(.partial, "partial hold on slot \(slot)", pad: pad)
         }
     }
 
-    /// Build + push the current multiController state for `slot`. Returns false if
-    /// the push was short-circuited (not ready, or the quit chord fired). The
-    /// touchpad surface is NOT forwarded here - callers that own the GameController
-    /// frame do that separately.
+    /// Only the GameController frame owns touchpad forwarding, so centre-button edges cannot double-feed it.
+    /// Returns false when input is gated or the quit chord is held; mouse mode still needs the surface.
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
         guard forwardsControllerEvents else { return false }
+        publishInputSnapshot()
+        if let controller = pad.controller, let sample = controllerLayouts?.sample(for: controller, slot: slot) {
+            let result = inputCore.receive(slot: slot, buttons: Int32(bitPattern: sample.game.buttons),
+                analog: sample.game.gamepadAnalog, extras: sample.physical.extras, physicalSample: sample.physical,
+                rawSupplement: sample.supplement.map { (Int32(bitPattern: $0), Int32(bitPattern: $0)) })
+            return result == .forwarded || result == .mouse
+        }
         let buttons = pressedButtonFlags(pad: pad)
-
-        // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
-        // so an in-game overlap can't. Frames holding it stay off the PC, or the game would act on
-        // those buttons for the whole hold.
-        if matchesControllerQuitChord(pad: pad, buttons: buttons) {
-            armQuitChordDwell(pad: pad, slot: slot)
-            // No frame is enqueued, so its stamp must not age into the next push.
-            _ = InputDeliverStamp.shared.take(slot: Int(slot))
-            return false
-        }
-        // Released before the dwell elapsed (or never held): an in-game
-        // button coincidence, not a quit. Only the arming pad's frames may
-        // cancel - another pad's traffic says nothing about the holder.
-        if quitChordDwellSlot == slot {
-            cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
-        }
-
-        let lt = UInt8((pad.leftTrigger.value  * 255).rounded().clamped(to: 0...255))
-        let rt = UInt8((pad.rightTrigger.value * 255).rounded().clamped(to: 0...255))
-        let lx = Int16((pad.leftThumbstick.xAxis.value  * 32767).rounded().clamped(to: -32768...32767))
-        let ly = Int16((pad.leftThumbstick.yAxis.value  * 32767).rounded().clamped(to: -32768...32767))
-        let rx = Int16((pad.rightThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        let ry = Int16((pad.rightThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
-
-        let rc = backend?.sendMultiController(
-            num: Int16(slot),
-            mask: Int16(bitPattern: gamepadMask),
-            buttons: buttons,
-            analog: GamepadAnalog(leftTrigger: lt, rightTrigger: rt,
-                                  leftStickX: lx, leftStickY: ly,
-                                  rightStickX: rx, rightStickY: ry)
-        ) ?? -2
-        record("LiSendMultiControllerEvent", rc)
-        return true
+        let result = inputCore.receive(slot: slot, buttons: buttons, analog: Self.controllerAnalog(pad),
+                                       chordButtons: Self.controllerChordButtons(pad, buttons: buttons))
+        if result == .chord || result == .mouse { _ = InputDeliverStamp.shared.take(slot: Int(slot)) }
+        return result == .forwarded || result == .mouse
     }
 
     /// The host button bitmask for a gamepad's current state. Table-driven so
@@ -123,7 +71,7 @@ extension InputForwarder {
     /// trips). The DualSense/DualShock touchpad *click* rides here as
     /// TOUCHPAD_FLAG (Sunshine's touchpad button); the touchpad *surface* is
     /// forwarded separately as touch events.
-    func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
+    nonisolated func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
         let mapping: [(Bool, Int32)] = [
             (pad.buttonA.isPressed, StreamProtocol.A_FLAG),
             (pad.buttonB.isPressed, StreamProtocol.B_FLAG),
@@ -168,38 +116,68 @@ extension InputForwarder {
     // MARK: - Focus loss
 
     /// The all-zero analog state a removal and a focus-loss release both send.
-    static let neutralControllerAnalog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-                                                       leftStickX: 0, leftStickY: 0,
-                                                       rightStickX: 0, rightStickY: 0)
+    static let neutralControllerAnalog = InputCore.neutral
 
     /// Release every pad when focus leaves ordinary playback; Mini Player keeps its controller ownership.
     func neutralizeControllers() {
-        guard isReady else { return }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        controllerOwnershipSuspended = true
+        publishInputSnapshot(focused: false)
+        inputCore.clearChords()
         releaseControllerTouches()
+        suspendControllerMouse()
         for state in attachedControllers.values {
             ControllerMotion.shared.setInputEnabled(false, slot: state.slot)
         }
-        let slots = attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
-        for slot in slots {
-            let rc = backend?.sendMultiController(
-                num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                buttons: 0, analog: Self.neutralControllerAnalog
-            ) ?? -2
-            record("LiSendMultiControllerEvent(focus loss)", rc)
+        let slots = Set(attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
+            + Array(controllerButtons.keys))
+        for slot in slots.sorted()
+            where controllerButtons[slot] != 0 || releases.held.contains(.controller(slot)) {
+            releases.hold(.controller(slot))
+            releases.release(.controller(slot))
+            controllerButtons[slot] = 0
+            controllerAnalogs[slot] = Self.neutralControllerAnalog
         }
+        flushPendingReleases()
         if !slots.isEmpty {
-            Diag.info("input: released \(slots.count) controller(s) on focus loss", "Stream")
+            Diag.info("input: \(slots.count) controller release obligations on focus loss", "Stream")
         }
     }
 }
 
-// MARK: - Local numeric helper
-
-// File-local clamp helper. A fileprivate extension can't be shared across files,
-// and promoting it to internal would leak the helper across the whole target, so
-// each file that needs it keeps a tight local copy.
-fileprivate extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
+extension InputForwarder {
+    func installMappedController(_ state: AttachedController, token: UUID) {
+        guard let controller = state.controller,
+              let (reader, configuration) = controllerLayouts?.configure(state) else { return }
+        let id = ObjectIdentifier(controller)
+        let slot = state.slot
+        let routesHID = state.retainedHID
+        let mapsGameInput = configuration.plan != nil
+        ControllerStreamHandlers.install(controller: controller, input: reader.input, queue: controllerCaptureQueue,
+            mapsGameInput: mapsGameInput, shortcutElements: reader.shortcutElements(configuration),
+            read: reader.sample) { @Sendable [core = inputCore] sample, now in
+                if routesHID {
+                    DualSenseRouting.shared.gc(controller: id, buttons: sample.buttons, at: now)
+                }
+                let supplement = routesHID ? MacControllerLayouts.centerButtons(for: id) : nil
+                InputTimingContext.begin(source: .controller, timestamp: now)
+                defer { InputTimingContext.end() }
+                core.withLock {
+                    guard let registered = core.controllers[id], registered.token == token,
+                          now >= registered.registeredAt else { return }
+                    let game = mapsGameInput ? sample : reader.systemSample()
+                    core.controllers[id] = InputCore.ControllerSample(slot: slot, token: token,
+                        registeredAt: registered.registeredAt, buttons: Int32(bitPattern: game.buttons),
+                        analog: game.gamepadAnalog, extras: sample.extras)
+                    core.receive(slot: slot, buttons: Int32(bitPattern: game.buttons), analog: game.gamepadAnalog,
+                                 capturedAt: now, extras: sample.extras, physicalSample: sample,
+                                 rawSupplement: supplement.map { (Int32(bitPattern: $0), Int32(bitPattern: $0)) })
+                    if let touch = reader.touchSample(clicked: sample.buttons & ControllerMappedButton.touchpad.rawValue != 0) {
+                        core.forwardTouchpad(slot: slot, primary: (touch.primaryX, touch.primaryY),
+                            secondary: (touch.secondaryX, touch.secondaryY), clicked: touch.clicked, now: now)
+                    }
+                    core.retainMouseTiming(slot: slot)
+                }
+            }
     }
 }

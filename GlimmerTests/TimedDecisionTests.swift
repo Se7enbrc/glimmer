@@ -8,6 +8,7 @@
 //  age and idle edges, the decode gate, present recovery, display and audio windows, the quit dwell.
 //
 
+@testable import GlimmerEngine
 import AVFoundation
 import Foundation
 import os
@@ -58,13 +59,125 @@ final class ScriptedClock: Sendable {
 
 struct TimedLatencyTests {
 
+    @Test func decodedTimingSurvivesPacerDiscardAndCountsOnlyOnce() throws {
+        let clock = ScriptedClock()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tracker = FrameTimingTracker(sessionId: "discard", traceDirectory: directory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.traceWriter.start(isoStamp: "test")
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.seconds(2))
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos, isIDR: true)
+        let submitted = tracker.recordSubmit(rtpTimestamp: 2)
+        clock.advance(.milliseconds(4))
+        let entry = clock.nanos
+        tracker.recordOutput(rtpTimestamp: 2, uptimeNanos: entry)
+        tracker.recordOutput(rtpTimestamp: 2, uptimeNanos: entry)
+        clock.advance(.milliseconds(20))
+        tracker.recordCallbackFinished(rtpTimestamp: 2, entryNanos: entry)
+        tracker.recordPacerDiscard(rtpTimestamp: 2, reason: .trim)
+        tracker.recordPresent(rtpTimestamp: 2)
+        #expect(tracker.flushRemainingDrops(nowNanos: clock.nanos + 3_000_000_000) == 0)
+        tracker.traceWriter.stop()
+        #expect(tracker.histograms.submitToOutput.snapshot().count == 1)
+        #expect(tracker.histograms.submitToOutput.snapshot().sumMs == 4)
+        #expect(tracker.histograms.decodeIDR.snapshot().count == 1)
+        #expect(tracker.histograms.outputToPresent.snapshot().count == UInt64.zero)
+        let url = directory.appendingPathComponent("telemetry-frames-test.ndjson")
+        let rows = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+        let decoded = try #require(rows.first { $0["event"] as? String == "decode_output" })
+        let discarded = try #require(rows.first { $0["event"] as? String == "pacer_discard" })
+        #expect(decoded["t_ms"] as? Double == Double(entry) / 1_000_000)
+        #expect(discarded["t_output_ms"] as? Double == Double(entry) / 1_000_000)
+        #expect(discarded["t_submit_ms"] as? Double == Double(submitted) / 1_000_000)
+        #expect(discarded["reason"] as? String == "trim")
+        #expect(!rows.contains { $0["event"] as? String == "frame_expired" })
+    }
+
+    @Test func completionBoundariesSurvivePresentedTimingRetirement() throws {
+        let clock = ScriptedClock()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tracker = FrameTimingTracker(sessionId: "retired", traceDirectory: directory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.traceWriter.start(isoStamp: "test")
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        let submitted = tracker.recordSubmit(rtpTimestamp: 1)
+        clock.advance(.milliseconds(3))
+        let entry = clock.nanos
+        tracker.recordOutput(rtpTimestamp: 1, uptimeNanos: entry)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.milliseconds(2))
+        tracker.recordCallbackFinished(rtpTimestamp: 1, entryNanos: entry)
+        clock.advance(.milliseconds(1))
+        tracker.recordSubmitReturned(rtpTimestamp: 1, beganNanos: submitted, status: 0, flags: 0)
+        tracker.traceWriter.stop()
+        let url = directory.appendingPathComponent("telemetry-frames-test.ndjson")
+        let rows = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+        let callback = try #require(rows.first { $0["event"] as? String == "decode_callback_finished" })
+        let returned = try #require(rows.first { $0["event"] as? String == "decode_submit_returned" })
+        #expect(callback["duration_ms"] as? Double == 2)
+        #expect(returned["duration_ms"] as? Double == 6)
+        #expect(callback["rtp"] as? Int == 1)
+        #expect(returned["rtp"] as? Int == 1)
+        #expect(tracker.flushRemainingDrops(nowNanos: clock.nanos + 3_000_000_000) == 0)
+    }
+
+    @Test func enqueueBoundaryExcludesLaterHudAndDiagnosticWork() {
+        let clock = ScriptedClock()
+        let tracker = FrameTimingTracker(sessionId: "enqueue", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.seconds(2))
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordSubmit(rtpTimestamp: 2)
+        clock.advance(.milliseconds(3))
+        tracker.recordOutput(rtpTimestamp: 2)
+        clock.advance(.milliseconds(2))
+        let enqueued = clock.nanos
+        clock.advance(.milliseconds(50))
+        tracker.recordPresent(rtpTimestamp: 2, uptimeNanos: enqueued)
+        #expect(tracker.histograms.outputToPresent.snapshot().sumMs == 2)
+        #expect(tracker.histograms.submitToOutput.snapshot().count == 1)
+    }
+
+    @Test func failedDecodeCallbackDoesNotBecomeASuccessfulDecodeObservation() {
+        let clock = ScriptedClock()
+        let tracker = FrameTimingTracker(sessionId: "failure", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.seconds(2))
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordSubmit(rtpTimestamp: 2)
+        clock.advance(.milliseconds(4))
+        tracker.recordOutput(rtpTimestamp: 2, status: -1, flags: 2, decoded: false)
+        #expect(tracker.histograms.submitToOutput.snapshot().count == UInt64.zero)
+        #expect(tracker.histograms.decodeP.snapshot().count == UInt64.zero)
+    }
+
     /// Onset frames inside 1.25 s of the first present are traced but kept out of the histograms;
     /// the first one past it lands in every stage, glass-to-glass and input-to-photon.
     @Test func presentsPastTheWarmupFillEveryStage() {
         let clock = ScriptedClock()
         let counters = TelemetryCounters()
         counters.setRttMs(10)
-        let tracker = FrameTimingTracker(sessionId: "t", now: clock.now, counters: counters)
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: counters)
         func present(_ rtp: UInt32) {
             let received = clock.nanos
             tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(rtp), receiveNanos: received,
@@ -102,7 +215,8 @@ struct TimedLatencyTests {
     @Test func oneInputFeedsOneInputToPhoton() {
         let clock = ScriptedClock()
         let counters = TelemetryCounters()
-        let tracker = FrameTimingTracker(sessionId: "t", now: clock.now, counters: counters)
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: counters)
         func present(_ rtp: UInt32) {
             tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(rtp), receiveNanos: clock.nanos,
                                     assembleNanos: clock.nanos)
@@ -134,15 +248,16 @@ struct TimedLatencyTests {
 
     /// Merged motion held back by a stalled reliable channel ages until an edge event drains it.
     @Test func heldMotionReportsItsQueueAgeWhenAnEdgeDrainsIt() throws {
-        // Every read is 7 ms after the last: the stamp, then the drain's two reads.
-        let clock = ScriptedClock(step: .milliseconds(7))
-        let tracker = FrameTimingTracker(sessionId: "t", counters: TelemetryCounters())
+        let scheduler = InputBatcherScheduler()
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         counters: TelemetryCounters())
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: EnetFixture.key))
+        EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(true, ordering: .relaxed)
-        let batcher = InputBatcher(enet: channel, now: { DispatchTime(uptimeNanoseconds: clock.now()) },
-                                   tracker: { tracker })
+        let batcher = scheduler.makeBatcher(enet: channel, tracker: { tracker })
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
+        scheduler.clock.advance(.milliseconds(14))
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
             channel: Enet.ctrlChannelMouse)
@@ -172,7 +287,7 @@ struct TimedPresentPathTests {
 
     @Test func aFrozenDirectPresentRecoversOnceThenAgainAfterAFullWindow() {
         let clock = ScriptedClock()
-        let session = StreamSession(backend: recorder, clock: clock.session)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
         let frozen = decoder(presenting: false)
         session.tickPresentWatchdog(dec: frozen)
         #expect(session.directPresentStallSince == clock.seconds)
@@ -191,10 +306,69 @@ struct TimedPresentPathTests {
         #expect(recorder.idrRequests == 2)
     }
 
+    @Test(arguments: [false, true])
+    func neverPresentedDirectPathRetriesAfterGrace(resetStatistics: Bool) {
+        let clock = ScriptedClock()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
+        let frozen = decoder(presenting: false)
+        defer { frozen.teardown() }
+        frozen.pacingDisplay = PacerDisplay(makeLink: { _, _ in nil }, screen: {
+            PacerScreen(identity: "test", maximumHz: 120, minimumHz: nil, scale: 1)
+        }, tickOffMain: { false }, prepareTickThread: {})
+        if resetStatistics { frozen.statsCollector.resetForConnection() }
+        frozen.statsCollector.lastPresentTime = 0
+        frozen.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() + 3_600
+        session.presentWatchdogStartedAt = clock.seconds
+        session.pacingDisabledSince = clock.seconds
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 0)
+        clock.advance(.seconds(10))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 0)
+        clock.advance(.milliseconds(500))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 1)
+        clock.advance(.milliseconds(500))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 2)
+        frozen.statsCollector.lastPresentTime = CACurrentMediaTime() + 3_600
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(session.directPresentStallSince == nil)
+        #expect(recorder.idrRequests == 2)
+        clock.advance(.seconds(10))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(frozen.framePacer != nil)
+        #expect(session.pacingDisabledSince == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func neverPresentedEvidenceResetsDuringSuppressionOrDecodeDrought(suppressed: Bool) {
+        let clock = ScriptedClock()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
+        let frozen = decoder(presenting: false)
+        frozen.statsCollector.lastPresentTime = 0
+        session.tickPresentWatchdog(dec: frozen)
+        clock.advance(.seconds(1))
+        if suppressed {
+            frozen.setPresentSuppressed(true)
+        } else {
+            frozen.statsCollector.lastDecodedFrameTime = 0
+        }
+        session.tickPresentWatchdog(dec: frozen)
+        if suppressed { frozen.setPresentSuppressed(false) }
+        frozen.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() + 3_600
+        let recoveries = recorder.idrRequests
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == recoveries)
+        clock.advance(.milliseconds(500))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == recoveries + 1)
+    }
+
     /// A healthy stream's present metric reaches notice level once a minute, debug in between.
     @Test func aHealthyPresentMetricNoticesOncePerMinute() {
         let clock = ScriptedClock()
-        let session = StreamSession(backend: recorder, clock: clock.session)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
         let healthy = decoder(presenting: true)
         session.emitPresentMetric(dec: healthy)
         let first = clock.seconds
@@ -262,16 +436,18 @@ struct TimedPresentPathTests {
         let analog = InputForwarder.neutralControllerAnalog
         let shoulders = StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG
 
-        forwarder.armQuitChordDwell(slot: 0) { (shoulders, analog) }
+        let held = OSAllocatedUnfairLock(initialState: shoulders)
+        forwarder.armQuitChordDwell(slot: 0) { (held.withLock { $0 }, analog) }
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 0, pad: nil) { (StreamProtocol.LB_FLAG, analog) }
+        held.withLock { $0 = StreamProtocol.LB_FLAG }
+        forwarder.controllerChordDwell.expire()
         #expect(quits == 0)
         #expect(forwarder.quitChordDwellTask == nil)
         #expect(forwarder.quitChordDwellSlot == nil)
 
         forwarder.armQuitChordDwell(slot: 1) { (shoulders, analog) }
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 1, pad: nil) { (shoulders, analog) }
+        forwarder.controllerChordDwell.expire()
         #expect(quits == 1)
     }
 
@@ -303,7 +479,7 @@ struct TimedAudioReceiveTests {
 
     private static func receiver() -> RtpAudioReceiver {
         RtpAudioReceiver(host: .ipv4(.loopback), audioPort: 0, pingPayload: [], audioPacketDuration: 5,
-                         opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+                         opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
                          audioEncryption: false, aesKey: EnetFixture.key,
                          aesIvId: [UInt8](repeating: 0, count: 16), sink: SilentSink())
     }

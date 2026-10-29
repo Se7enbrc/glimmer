@@ -1,19 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ControllerBatteryMappingTests.swift
-//
-//  Battery registration, haptic sharpness per locality, and the generic
-//  HID pad's type, advertised buttons and trigger kind derived from its mapping.
-//
+// Keep device identity separate from the capabilities its controls actually expose.
 
+@testable import GlimmerEngine
 import GameController
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct ControllerBatteryMappingTests {
+    @Test func playStationGlyphsDecideTheTypeOfAGenericProfile() throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let glyphs = ["xmark.circle", "circle.circle", "square.circle", "triangle.circle"]
+        for (button, glyph) in zip([pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY], glyphs) {
+            button.unmappedSfSymbolsName = glyph
+        }
+        let forwarder = InputForwarder()
+        #expect(forwarder.controllerType(for: controller) == UInt8(StreamProtocol.LI_CTYPE_PS))
+    }
 
     @Test func padWithoutABatteryAdvertisesNoBatteryAndReportsNone() throws {
         let forwarder = InputForwarder()

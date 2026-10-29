@@ -1,27 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  HostsPersistenceTests.swift
-//
-//  The paired-PC store, the per-PC codec choice and the typed settings readers,
-//  all against a scratch UserDefaults suite and a temp directory so nothing
-//  touches the developer's real preferences or Application Support.
-//
+// Isolated stores keep persistence tests away from real preferences and paired PCs.
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
-/// A scratch suite plus a temp directory, removed by `remove()`. Each test names its own
-/// suite so a crashed run leaves at most one known plist behind.
+/// A unique scratch suite and temporary directory, removed by `remove()`.
 struct IsolatedStore {
     let domain: String
     let defaults: UserDefaults
     let directory: URL
 
     init(_ name: String) throws {
-        domain = "io.ugfugl.Glimmer.tests.persistence-\(name)"
+        domain = "io.ugfugl.Glimmer.tests.persistence-\(name)-\(UUID().uuidString)"
         defaults = try #require(UserDefaults(suiteName: domain))
         defaults.removePersistentDomain(forName: domain)
         directory = FileManager.default.temporaryDirectory
@@ -37,6 +31,7 @@ struct IsolatedStore {
 
 @MainActor
 struct HostsPersistenceTests {
+    private let settings = IsolatedDefaults()
 
     private typealias App = AppModel.PairedApp
     private static let desktop = App(id: 1, name: "Desktop", hdr: false, hidden: false)
@@ -63,10 +58,71 @@ struct HostsPersistenceTests {
              lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
     }
 
+    @Test(arguments: [nil, "i", "k"] as [String?])
+    func statsDefaultUpdatesWithoutReplacingCustomChords(savedKey: String?) throws {
+        let defaults = settings.defaults
+        if let savedKey {
+            let chord = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: savedKey)
+            defaults.set(try JSONEncoder().encode(chord), forKey: "statsHotkey")
+        }
+        let model = AppModel(defaults: defaults)
+        #expect(model.statsHotkey.serialized == (savedKey == "k" ? "ctrl+k" : "ctrl+z"))
+        let restored = AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults)
+        #expect(restored == (savedKey == nil ? nil : model.statsHotkey))
+        #expect(AppModel(defaults: defaults).statsHotkey == model.statsHotkey)
+    }
+
+    @Test(arguments: ["quitHotkey", "releasePointerHotkey", "miniPlayerHotkey"], [false, true])
+    func statsMigrationNeverTakesASavedShortcut(owner: String, savedStats: Bool) throws {
+        let defaults = settings.defaults
+        let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        let occupied = try JSONEncoder().encode(HotkeyChord.defaultStats)
+        defaults.set(occupied, forKey: owner)
+        if savedStats { defaults.set(try JSONEncoder().encode(old), forKey: "statsHotkey") }
+        #expect(HotkeyChord.persistedStats(defaults: defaults) == old)
+        #expect(defaults.data(forKey: owner) == occupied)
+        defaults.removeObject(forKey: owner)
+        #expect(HotkeyChord.persistedStats(defaults: defaults) == old)
+    }
+
+    @Test func statsMigrationLeavesBothOccupiedChordsAlone() throws {
+        let defaults = settings.defaults
+        defaults.set(try JSONEncoder().encode(HotkeyChord.defaultStats), forKey: "quitHotkey")
+        let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        defaults.set(try JSONEncoder().encode(old), forKey: "releasePointerHotkey")
+        #expect(HotkeyChord.persistedStats(defaults: defaults).keyChar.isEmpty)
+    }
+
+    @Test func statsMigrationPreservesModifiersAndLaterControlIChoice() throws {
+        let defaults = settings.defaults
+        let custom = HotkeyChord(ctrl: true, alt: false, shift: true, cmd: false, keyChar: "i")
+        defaults.set(try JSONEncoder().encode(custom), forKey: "statsHotkey")
+        let model = AppModel(defaults: defaults)
+        #expect(model.statsHotkey == custom)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+    }
+
+    @Test func resettingStatsUsesTheCurrentDefaultAndPreservesTheNextExplicitChoice() {
+        let defaults = settings.defaults
+        let model = AppModel(defaults: defaults)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+        SettingsReset.reset(defaults: defaults)
+        let reset = AppModel(defaults: defaults)
+        #expect(reset.statsHotkey == .defaultStats)
+        #expect(defaults.data(forKey: "statsHotkey") == nil)
+        #expect(defaults.bool(forKey: "statsControlZDefaultApplied"))
+        reset.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+    }
+
     @Test func savingAPCWritesItsSlotAndLoadsIt() throws {
         let store = try IsolatedStore("save")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         try save(app, store, uuid: "AAA", name: "tower", mac: "AA:BB:CC:DD:EE:FF")
         #expect(store.defaults.integer(forKey: "hosts.size") == 1)
@@ -79,7 +135,7 @@ struct HostsPersistenceTests {
     @Test func rePairingReusesTheSlotAndKeepsTheCustomName() throws {
         let store = try IsolatedStore("repair")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         try save(app, store, uuid: "AAA", name: "tower")
         let host = try #require(app.hosts.first)
@@ -93,13 +149,13 @@ struct HostsPersistenceTests {
     @Test func aNewPCTakesTheSlotAnUnpairLeftEmptyWithoutInheritingItsWakeTarget() throws {
         let store = try IsolatedStore("slot-reuse")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         try save(app, store, uuid: "AAA", name: "one", mac: "AA:BB:CC:DD:EE:01")
         try save(app, store, uuid: "BBB", name: "two")
         let first = try #require(app.hosts.first { $0.id == "AAA" })
         app.setWakeOnLAN(first, enabled: false, defaults: store.defaults)
-        app.unpair(first, defaults: store.defaults, supportBase: store.directory)
+        try app.unpair(first, defaults: store.defaults, supportBase: store.directory)
         #expect(app.hosts.map(\.id) == ["BBB"])
         try save(app, store, uuid: "CCC", name: "three")
         #expect(store.defaults.integer(forKey: "hosts.size") == 2)
@@ -112,7 +168,7 @@ struct HostsPersistenceTests {
     @Test func unpairingForgetsThePCEverywhere() throws {
         let store = try IsolatedStore("unpair")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         try save(app, store, uuid: "AAA", name: "tower", pem: Self.pem)
         HostCodecPreference.save(.hevc, for: "AAA", defaults: store.defaults)
@@ -120,7 +176,7 @@ struct HostsPersistenceTests {
         let host = try #require(app.hosts.first)
         app.selectHost(host, defaults: store.defaults)
         #expect(FileManager.default.fileExists(atPath: pinFile(store, "AAA").path))
-        app.unpair(host, defaults: store.defaults, supportBase: store.directory)
+        try app.unpair(host, defaults: store.defaults, supportBase: store.directory)
         #expect(app.hosts.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: pinFile(store, "AAA").path))
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -130,17 +186,57 @@ struct HostsPersistenceTests {
         #expect(store.defaults.object(forKey: "hosts.1.apps.size") == nil)
     }
 
+    @Test func deniedPinDeletionKeepsThePCAndAllowsRetry() async throws {
+        let store = try IsolatedStore("unpair-denied")
+        defer { store.remove() }
+        let app = AppModel(defaults: store.defaults)
+        app.supportBase = store.directory
+        defer { settle(app) }
+        try save(app, store, uuid: "AAA", name: "tower", pem: Self.pem)
+        let host = try #require(app.hosts.first)
+        app.selectHost(host)
+        HostCodecPreference.save(.hevc, for: host.id, defaults: store.defaults)
+        store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
+        let before = store.defaults.persistentDomain(forName: store.domain) ?? [:]
+        let directory = pinFile(store, host.id).deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+
+        do {
+            try app.unpair(host)
+            Issue.record("Expected denied pin deletion to fail")
+        } catch let error as CocoaError {
+            #expect(error.code == .fileWriteNoPermission)
+        }
+        #expect(app.hosts.map(\.id) == [host.id])
+        #expect(app.selectedHost?.id == host.id)
+        let unchanged = NSDictionary(dictionary: before).isEqual(
+            to: store.defaults.persistentDomain(forName: store.domain) ?? [:])
+        #expect(unchanged)
+        #expect(try String(contentsOf: pinFile(store, host.id), encoding: .utf8) == Self.pem)
+        #expect(AppModel.forgetFailureTitle(host.displayName) == "Couldn't forget tower")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        try await app.unpair(host).value
+        #expect(app.hosts.isEmpty && app.selectedHost == nil)
+        #expect(!FileManager.default.fileExists(atPath: pinFile(store, host.id).path))
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
+        #expect(HostCodecPreference.load(for: host.id, defaults: store.defaults) == .auto)
+        #expect(store.defaults.string(forKey: "glimmer.selectedHostID") == nil)
+        try await app.unpair(host).value
+    }
+
     @Test func unpairingWipesEveryDuplicateSlot() throws {
         let store = try IsolatedStore("unpair-dupes")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         for slot in 1...2 {
             store.defaults.set("DUP", forKey: "hosts.\(slot).uuid")
             store.defaults.set("dup", forKey: "hosts.\(slot).hostname")
         }
         store.defaults.set(2, forKey: "hosts.size")
-        app.unpair(bareHost("DUP"), defaults: store.defaults, supportBase: store.directory)
+        try app.unpair(bareHost("DUP"), defaults: store.defaults, supportBase: store.directory)
         #expect(store.defaults.string(forKey: "hosts.1.uuid") == nil)
         #expect(store.defaults.string(forKey: "hosts.2.uuid") == nil)
     }
@@ -148,7 +244,7 @@ struct HostsPersistenceTests {
     @Test func renamingSetsAndClearsTheCustomName() throws {
         let store = try IsolatedStore("rename")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         try save(app, store, uuid: "AAA", name: "tower")
         let host = try #require(app.hosts.first)
@@ -165,7 +261,7 @@ struct HostsPersistenceTests {
     @Test func aMacRefreshIgnoresZeroedAddressesAndKeepsTheRealOne() throws {
         let store = try IsolatedStore("mac")
         defer { store.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         try save(app, store, uuid: "AAA", name: "tower", mac: "AA:BB:CC:DD:EE:FF")
         app.updateHostMac(hostID: "AAA", mac: "00:00:00:00:00:00", defaults: store.defaults)
@@ -188,7 +284,7 @@ struct HostsPersistenceTests {
         qt.defaults.set(1, forKey: "hosts.1.apps.size")
         qt.defaults.set("Steam", forKey: "hosts.1.apps.1.name")
         qt.defaults.set(7, forKey: "hosts.1.apps.1.id")
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         app.migrateFromMoonlightQtIfNeeded(defaults: store.defaults, moonlightSuite: qt.domain)
         app.loadHosts(defaults: store.defaults)
@@ -205,7 +301,7 @@ struct HostsPersistenceTests {
         let store = try IsolatedStore("mq-empty")
         let qt = try IsolatedStore("mq-empty-source")
         defer { store.remove(); qt.remove() }
-        let app = AppModel()
+        let app = AppModel(defaults: settings.defaults)
         defer { settle(app) }
         app.migrateFromMoonlightQtIfNeeded(defaults: store.defaults, moonlightSuite: qt.domain)
         #expect(store.defaults.bool(forKey: "glimmer.hostsMigratedFromMoonlightQt"))
@@ -214,7 +310,7 @@ struct HostsPersistenceTests {
 
     // MARK: - Codec preference
 
-    @Test func aCodecChoiceRoundTripsAndAutoClearsTheKey() throws {
+    @Test func aCodecChoiceRoundTripsIncludingAutomatic() throws {
         let store = try IsolatedStore("codec")
         defer { store.remove() }
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -222,7 +318,7 @@ struct HostsPersistenceTests {
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .h264)
         #expect(HostCodecPreference.load(for: "BBB", defaults: store.defaults) == .auto)
         HostCodecPreference.save(.auto, for: "AAA", defaults: store.defaults)
-        #expect(store.defaults.string(forKey: "glimmer.codecPreference.AAA") == nil)
+        #expect(store.defaults.string(forKey: "glimmer.codecPreference.AAA") == "auto")
         HostCodecPreference.save(.hevc, for: "AAA", defaults: store.defaults)
         HostCodecPreference.forget(hostID: "AAA", defaults: store.defaults)
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -271,5 +367,19 @@ struct HostsPersistenceTests {
         #expect(AppModel.persistedCustomRows(defaults: store.defaults) == [.latency, .jitter])
         store.defaults.set(["bogus"], forKey: "statsOverlayCustomRows")
         #expect(AppModel.persistedCustomRows(defaults: store.defaults) == nil)
+    }
+    @Test func choosingDefaultLauncherStyleKeepsAnExplicitValue() throws {
+        let store = try IsolatedStore("launcher-default")
+        defer { store.remove() }
+        LauncherStyle.save(.buttons, for: "AAA", defaults: store.defaults)
+        store.defaults.register(defaults: ["glimmer.launcherStyle.AAA": "covers"])
+        #expect(LauncherStyle.load(for: "AAA", defaults: store.defaults) == .buttons)
+    }
+
+    @Test func choosingNoCustomStatsRowsKeepsTheEmptySelection() throws {
+        let store = try IsolatedStore("empty-rows")
+        defer { store.remove() }
+        store.defaults.set([String](), forKey: "statsOverlayCustomRows")
+        #expect(AppModel.persistedCustomRows(defaults: store.defaults)?.isEmpty == true)
     }
 }

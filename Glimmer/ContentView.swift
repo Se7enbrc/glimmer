@@ -1,50 +1,64 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 import AppKit
 
 // MARK: - Main Window
 
-/// The takeover question, in the launcher's dialog and the menu bar's alert.
-/// App names show exactly as typed ("iRacing"); nil is an app the PC didn't name.
-enum TakeoverDialogCopy {
-    static func title(occupantApp: String?, hostName: String) -> String {
-        "\(occupantApp ?? "Another app") is running on \(hostName)."
-    }
-
-    static let message = "It will quit and your stream will start."
-}
-
 struct MainWindow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
+    @FocusState private var launcherFocus: LauncherFocus?
+    @State private var focusCells: [LauncherFocus] = []
+    @State private var pendingLauncherCommand: LauncherCommand?
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
-    /// Lifted out of EmptyPairingState so the sheet survives the swap to
-    /// ConnectSurface the instant pairing fills `model.hosts` - the sheet used
-    /// to hang off the empty state itself and vanish mid-handshake success.
-    @State private var showPair = false
 
     var body: some View {
         @Bindable var model = model
         return Group {
             if model.hosts.isEmpty {
-                EmptyPairingState(showPair: $showPair)
+                EmptyPairingState(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             } else {
-                ConnectSurface()
+                ConnectSurface(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             }
         }
-        .onAppear { model.setHIDDiscovery(true, for: .launcher) }
-        .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
-        .sheet(isPresented: $showPair) {
-            PairSheet().environment(model)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.hosts.isEmpty)
+        .background {
+            LauncherControllerWindow(controller: model.launcherController, handle: navigateLauncher)
+                .frame(width: 0, height: 0)
         }
+        .onPreferenceChange(LauncherFocusCells.self) { cells in
+            focusCells = cells
+            if let launcherFocus, launcherFocus != .pc, !cells.contains(launcherFocus) {
+                self.launcherFocus = cells.first
+            }
+        }
+        .onPreferenceChange(LauncherControllerFocusReady.self) { ready in
+            guard ready, let command = pendingLauncherCommand else { return }
+            pendingLauncherCommand = nil
+            navigateLauncher(command)
+        }
+        .onChange(of: model.selectedHost?.id) { _, _ in launcherFocus = nil }
+        .onChange(of: launcherFocus) { _, focus in
+            if focus == nil { model.launcherControllerNavigating = false }
+        }
+        .onChange(of: model.launcherStyle) { _, _ in launcherFocus = nil }
+        .onAppear {
+            model.restartHostStatusPolling()
+            model.setHIDDiscovery(true, for: .launcher)
+        }
+        .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
         // One-time proactive offer when a DualSense is connected (see
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
         .alert("Turn on Extra DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
-            Button("Turn On") { model.enableRawHIDFromPrompt() }
+            Button(InputMonitoring.state == .denied ? "Open System Settings" : "Turn On") {
+                model.enableRawHIDFromPrompt()
+            }
             // "Not Now" just dismisses - no permanent flag - so a future
             // DualSense connect offers again. Only "Don't Ask Again" answers
             // for good (matches AWDLEnablePrompt's Not Now / Don't ask again
@@ -52,16 +66,16 @@ struct MainWindow: View {
             Button("Not Now", role: .cancel) { model.showRawHIDPrompt = false }
             Button("Don't Ask Again") { model.declineRawHIDPrompt() }
         } message: {
-            Text(AppModel.rawHIDExplanation)
+            Text(AppModel.rawHIDExplanation(InputMonitoring.state))
         }
         // Same explanation and answers for a pad macOS doesn't recognise (generic HID).
         .alert("Use \(model.hidPermissionPadName ?? "this controller") with Glimmer?",
                isPresented: $model.showHIDPermissionPrompt) {
-            Button("Continue") { model.continueHIDPermission() }
+            Button(InputMonitoring.actionTitle(InputMonitoring.state)) { model.continueHIDPermission() }
             Button("Not Now", role: .cancel) { model.dismissHIDPermission() }
             Button("Don't Ask Again") { model.declineHIDPermission() }
         } message: {
-            Text(AppModel.hidPermissionExplanation)
+            Text(AppModel.hidPermissionExplanation(InputMonitoring.state))
         }
         // Wi-Fi stutter protection is offered at first open on every Mac, whatever the
         // route: awdl0 wrecks streams, and a MacBook first opened on Ethernet goes to the
@@ -69,11 +83,7 @@ struct MainWindow: View {
         .sheet(isPresented: $showAWDLPrompt) {
             AWDLEnablePrompt(manager: AWDLHelperManager.shared)
         }
-        // Pair a PC… from the menu bar, and Pair Again… from the menu bar, the
-        // Stream button, the banner and the Trust needed chip land here.
-        .sheet(isPresented: $model.pairSheetShown) {
-            PairSheet(repairing: model.pairSheetHost).environment(model)
-        }
+        .modifier(PairingPresentation(owner: .launcher))
         .task {
             guard !awdlPromptChecked else { return }
             awdlPromptChecked = true
@@ -98,29 +108,16 @@ struct MainWindow: View {
             StreamEndedToast()
                 .padding(.top, 16)
         }
-        // Takeover confirmation: launching while an app is already running on
-        // the PC quits it (unsaved progress included), so confirm first. The
-        // title carries the specifics; the message states the consequence.
-        .confirmationDialog(
-            model.pendingTakeover.map {
-                TakeoverDialogCopy.title(occupantApp: $0.occupantApp, hostName: $0.host.displayName)
-            } ?? "",
-            isPresented: Binding(
-                get: { model.pendingTakeover != nil },
-                set: { if !$0 { model.pendingTakeover = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: model.pendingTakeover
-        ) { _ in
-            Button("Quit and Stream", role: .destructive) { model.confirmPendingTakeover() }
-            Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
-        } message: { _ in
-            Text(TakeoverDialogCopy.message)
-        }
+        .modifier(LauncherTakeoverConfirmation())
         .toolbar {
             // The PC switcher is the header's name; the toolbar keeps only Settings,
             // on the trailing edge (a hidden title bar has no title to push it there).
-            ToolbarSpacer(.flexible)
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible)
+            } else {
+                // macOS 15 has no ToolbarSpacer; a flexible Spacer item gives the same push.
+                ToolbarItem { Spacer() }
+            }
             ToolbarItem(placement: .automatic) {
                 Button {
                     openSettings()
@@ -135,16 +132,60 @@ struct MainWindow: View {
         }
         .navigationTitle("Glimmer")
     }
+
+    private func navigateLauncher(_ command: LauncherCommand) {
+        guard !model.isStreaming || model.nativeStreamBackgrounded else { return }
+        // Apply the first command only after SwiftUI installs the controller focus targets.
+        guard model.launcherControllerNavigating else {
+            pendingLauncherCommand = command
+            model.launcherControllerNavigating = true
+            return
+        }
+        let modal = showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt
+            || model.showHIDPermissionPrompt || model.pendingTakeover != nil
+        if command == .dismiss {
+            if modal { model.launcherController.postKey(.dismiss) }
+            return
+        }
+        guard !modal else { return }
+        let apps = model.selectedHost?.apps ?? []
+        let cells = focusCells
+        if command == .menu {
+            if case .app(let id) = launcherFocus { model.launcherMenuAppID = id }
+            return
+        }
+        if command == .activate {
+            if launcherFocus != nil {
+                model.launcherController.postKey(.activate)
+            } else {
+                launcherFocus = cells.first ?? (model.hosts.count > 1 ? .pc : nil)
+            }
+            return
+        }
+        let columns = model.launcherStyle == .covers ? LauncherLayout.columns(appCount: apps.count) : 2
+        launcherFocus = LauncherNavigation.destination(from: launcherFocus, command: command,
+                                                        cells: cells, columns: columns,
+                                                        hasSwitcher: model.hosts.count > 1)
+    }
 }
 
 /// The Stream menu: the launcher's one action in its words, where ⌘? finds it, and the PCs
-/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
+/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). Browsing another PC leaves the stream running.
 struct StreamMenu: View {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         primaryItem
+        if let host = model.selectedHost, let app = model.runningApp(on: host) {
+            Button("Quit \(app.name)…", role: .destructive) { model.requestQuitGame(on: host, app: app) }
+                .disabled(model.menuStopInProgress)
+        }
+        if let trial = model.pictureTrial {
+            Text("Does \(trial.app.name) look right?")
+            Button("Keep this size", action: model.keepPictureSize)
+            Button("Use the previous size", action: model.restorePictureSize)
+        }
         Toggle("Mini Player", isOn: Binding(get: { model.isMiniPlayer }, set: { _ in model.toggleMiniPlayer() }))
             .disabled(!model.isStreaming)
         Button("Stop Streaming") { model.stopStreamFromMenu(source: "the Stream menu") }
@@ -154,7 +195,6 @@ struct StreamMenu: View {
             Toggle(host.displayName, isOn: Binding(
                 get: { model.selectedHost?.id == host.id }, set: { if $0 { model.selectHost(host) } }))
                 .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
-                .disabled(model.isStreaming)
         }
     }
 
@@ -162,13 +202,16 @@ struct StreamMenu: View {
     @ViewBuilder private var primaryItem: some View {
         let host = model.selectedHost
         switch model.menuBarPrimaryAction {
-        case .stream(let app): Button("Stream \(app)") { model.streamHeroApp() }
+        case .stream(let app):
+            Button("Stream \(app)") { model.streamHeroApp() }
+                .disabled(model.selectedReadinessReason != nil)
+                .accessibilityHint(model.selectedReadinessReason ?? "")
         case .wake: Button("Wake and Connect") { if let host { model.wakeHost(host, thenConnect: true) } }
         case .waking: Button("Stop Waiting") { if let host { model.cancelWake(host) } }
         case .pairAgain:
             Button("Pair Again…") {
                 model.requestPairing(for: host)
-                openWindow(id: "main")
+                if model.pairSheetOwner == .launcher { openWindow(id: "main") }
             }
         case .cancelConnection: Button("Cancel Connection") { model.cancelConnect() }
         case .backToStream:
@@ -183,7 +226,9 @@ struct StreamMenu: View {
 
 // MARK: - Connect surface
 
-private struct ConnectSurface: View {
+struct ConnectSurface: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     /// The raw connecting edge: `streamPhase` alone, since `isStreaming` flips at
@@ -199,15 +244,7 @@ private struct ConnectSurface: View {
     /// doesn't briefly flash a spinner or change the button.
     @State private var showsConnectingUI = false
 
-    /// True once the stream is established and the fullscreen window is
-    /// taking over - Glimmer's window fades down so the handoff doesn't
-    /// strobe two competing surfaces. NOT true while backgrounded (the
-    /// launcher is the foreground surface then) and NOT during CONNECTING:
-    /// `isStreaming` flips at stream() ENTRY, so without that exemption the
-    /// `!isHandedOff` guard below unmounted the StreamButton for the whole
-    /// handshake - the .connecting capsule was unreachable dead code and a
-    /// stuck connect stranded the user on a dimmed, button-less launcher.
-    /// Handoff (and the dim) now begin at the live edge, as documented.
+    /// The live app owns the controls until it is hidden or reconnecting.
     private var isHandedOff: Bool {
         guard model.isStreaming, !model.nativeStreamBackgrounded else { return false }
         if case .connecting = model.streamPhase { return false }
@@ -232,7 +269,9 @@ private struct ConnectSurface: View {
     private var launchIsOnAButton: Bool {
         guard let attempt = model.lastLaunchAttempt, let host = model.selectedHost,
               attempt.host.id == host.id else { return false }
-        return AppIconsRow.inlineApps(host.apps).contains { $0.id == attempt.app.id }
+        let apps = model.launcherStyle == .covers ? host.apps
+            : AppIconsRow.inlineApps(host.apps, runningAppID: model.runningApp(on: host)?.id)
+        return apps.contains { $0.id == attempt.app.id }
     }
 
     var body: some View {
@@ -242,23 +281,34 @@ private struct ConnectSurface: View {
             // Banner first so it can't be missed. NOT behind the 400 ms hold:
             // errors must surface the instant they exist.
             ConnectBanner()
-            PCHeader(host: model.selectedHost)
+            PCHeader(host: model.selectedHost, focus: focus)
+            if let ended = model.endedContinuation, model.selectedHost?.id == ended.host.id {
+                Text(StreamFailureCopy.gameEnded(ended.app.name, pc: ended.host.displayName))
+                Button(ended.format == nil ? "Start \(ended.app.name)" : "Start \(ended.app.name) at the previous size",
+                       action: model.startEndedGame)
+            }
             if let host = model.selectedHost, !host.apps.isEmpty {
-                AppIconsRow(apps: host.apps, host: host, connectingShown: showsConnectingUI)
+                AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)
+                    .id(host.id)
+                    .transition(.opacity.animation(Motion.fade))
             }
             if showsStateButton {
-                StreamButton(isConnecting: showsConnectingUI)
+                StreamButton(isConnecting: showsConnectingUI, launcherFocus: focus)
+                    .preference(key: LauncherFocusCells.self, value: [.state])
                     .transition(.opacity)
             }
             ContextFooter()
                 .frame(maxWidth: .infinity)
         }
-        .animation(.snappy(duration: 0.3), value: showsStateButton)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: showsStateButton)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.nativeStreamError != nil)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedHost?.id)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedHost?.apps.count)
         // No trailing Spacer: the window sizes to this column (.windowResizability
         // in GlimmerApp). 532pt of content in 24pt margins is the 580pt window, and
         // must stay in step with GlimmerApp's minWidth, or the window can be dragged.
-        .frame(width: 532)
-        .padding(.horizontal, 24)
+        .frame(width: LauncherLayout.contentWidth)
+        .padding(.horizontal, LauncherLayout.horizontalPadding)
         .padding(.top, 4)
         .padding(.bottom, 18)
         // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
@@ -270,10 +320,6 @@ private struct ConnectSurface: View {
         // proposes nil height to the column, so every such floor resolves to its
         // own ideal instead of springboarding off the window.
         .fixedSize(horizontal: false, vertical: true)
-        // Hand off to the stream window: dim Glimmer's content so the
-        // fullscreen surface visibly takes over and reverses on disconnect.
-        .opacity(isHandedOff ? 0.4 : 1.0)
-        .animation(.snappy(duration: 0.4), value: isHandedOff)
         // The 400 ms connect threshold. task(id:) restarts on every raw-edge
         // flip: a connect that establishes inside the hold cancels the sleep
         // (no flash); a disconnect mid-hold resets the same way.
@@ -337,6 +383,7 @@ var accentSurfaceGradient: LinearGradient {
 /// one PC), the specs under it and the readiness chip. Right-click for the PC's menu.
 private struct PCHeader: View {
     let host: Host?
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -359,6 +406,8 @@ private struct PCHeader: View {
 
     private var name: some View {
         Text(host?.displayName ?? "No PC selected")
+            .contentTransition(.opacity)
+            .animation(Motion.fade, value: host?.id)
             .font(.title.weight(.semibold))
             .lineLimit(1)
     }
@@ -390,6 +439,7 @@ private struct PCHeader: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .modifier(LauncherControlFocus(focus: focus, target: .pc))
         .help("Choose a PC")
         .accessibilityLabel("PC")
         .accessibilityValue(host?.displayName ?? "None")

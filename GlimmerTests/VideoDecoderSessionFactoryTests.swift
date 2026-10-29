@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import CoreMedia
 import CoreVideo
 import Foundation
+import QuartzCore
 import Synchronization
 import Testing
 import VideoToolbox
@@ -40,6 +42,55 @@ struct VideoDecoderSessionFactoryTests {
                             0x00, 0x00, 0x03, 0x00, 0x10, 0x00, 0x00, 0x03, 0x03, 0xC0, 0xF1, 0x83, 0x19, 0x60])
     private let pps = Data([0, 0, 0, 1, 0x68, 0xEB, 0xE3, 0xCB, 0x22, 0xC0])
 
+    @Test func configurationLeavesThreadingToTheCodecAndReportsReadback() throws {
+        var changes: [String: Bool] = [:]
+        let keys = [kVTDecompressionPropertyKey_RealTime,
+                    kVTDecompressionPropertyKey_MaximizePowerEfficiency,
+                    kVTDecompressionPropertyKey_ThreadCount,
+                    kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder]
+        let fields = VideoDecoder.configureSessionProperties(
+            set: { key, value in changes[key as String] = CFBooleanGetValue(value); return noErr },
+            supported: { (noErr, Set(keys.map { $0 as String })) },
+            read: { key in
+                let name = key as String
+                if name == kVTDecompressionPropertyKey_ThreadCount as String { return (noErr, NSNumber(value: 4)) }
+                return (noErr, NSNumber(value: name != kVTDecompressionPropertyKey_MaximizePowerEfficiency as String))
+            })
+        let row = try Self.configurationRow(fields)
+        #expect(changes == [kVTDecompressionPropertyKey_RealTime as String: true,
+                            kVTDecompressionPropertyKey_MaximizePowerEfficiency as String: false])
+        #expect(row["thread_policy"] as? String == "platform_default")
+        #expect(row["thread_count_set_status"] == nil)
+        #expect(row["thread_count_value"] as? Int == 4)
+        #expect(row["thread_count_supported"] as? Bool == true)
+        #expect(row["realtime_requested"] as? Bool == true)
+        #expect(row["power_efficiency_requested"] as? Bool == false)
+        #expect(row["realtime_set_status"] as? Int == 0)
+        #expect(row["realtime_value"] as? Bool == true)
+        #expect(row["power_efficiency_value"] as? Bool == false)
+        #expect(row["hardware_value"] as? Bool == true)
+    }
+
+    @Test func configurationDoesNotInventEffectiveValuesWhenQueriesFail() throws {
+        let fields = VideoDecoder.configureSessionProperties(
+            set: { _, _ in kVTPropertyNotSupportedErr },
+            supported: { (kVTPropertyNotSupportedErr, nil) },
+            read: { _ in (kVTPropertyNotSupportedErr, NSNumber(value: 99)) })
+        let row = try Self.configurationRow(fields)
+        #expect(row["support_query_status"] as? Int == Int(kVTPropertyNotSupportedErr))
+        #expect(row["realtime_set_status"] as? Int == Int(kVTPropertyNotSupportedErr))
+        #expect(row["thread_count_read_status"] as? Int == Int(kVTPropertyNotSupportedErr))
+        #expect(row["realtime_value"] == nil)
+        #expect(row["thread_count_value"] == nil)
+        #expect(row["hardware_value"] == nil)
+        #expect(row["thread_count_supported"] == nil)
+    }
+
+    private static func configurationRow(_ fields: [String]) throws -> [String: Any] {
+        let data = Data(("{" + fields.joined(separator: ",") + "}").utf8)
+        return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
     @Test(arguments: [
         (StreamProtocol.VIDEO_FORMAT_H264, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
         (StreamProtocol.VIDEO_FORMAT_H265_MAIN10, kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange),
@@ -54,6 +105,69 @@ struct VideoDecoderSessionFactoryTests {
         #expect(!decoder.ensureDecompressionSession())
         #expect(factory.calls.map(\.pixelFormat) == [pixelFormat])
         #expect(factory.calls.map(\.requiresHardware) == [true])
+    }
+
+    @Test func recoverySupersedesAlreadyQueuedDecodeWorkBeforeItCanCreateASession() async throws {
+        let factory = RefusingFactory()
+        let decoder = VideoDecoder(makeSession: factory.make)
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H264
+        decoder.isStreaming = true
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        decoder.decodeQueue.async {
+            entered.signal()
+            _ = release.wait(timeout: .now() + 5)
+        }
+        defer { release.signal() }
+        try #require(await entered.waitAsync(for: .seconds(2)) == .success)
+        _ = decoder.decodeAssembledFrame(pictureData: Data([0, 0, 0, 1, 0x65]), newSps: sps, newPps: pps,
+                                         newVps: nil, isIDR: true, rtpTimestamp: 750, totalLength: 5)
+        decoder.inFlightDecodeLock.withLock { decoder.lastVtDecodeFailed = true }
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        _ = decoder.decodeAssembledFrame(pictureData: Data([0, 0, 0, 1, 0x65]), newSps: sps, newPps: pps,
+                                         newVps: nil, isIDR: true, rtpTimestamp: 1_500, totalLength: 5)
+
+        release.signal()
+        await decoder.decodeQueue.drainForTest()
+
+        #expect(factory.calls.count == 1)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+        #expect(decoder.decodeReservations.isEmpty)
+        decoder.teardown()
+    }
+
+    @Test func repeatedStallRecoveryReleasesSupersededPayloadsWhileQueueIsBlocked() async {
+        let factory = RefusingFactory()
+        let decoder = VideoDecoder(makeSession: factory.make)
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H264
+        decoder.isStreaming = true
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        let liveBytes = Mutex<Int>(0)
+        let payloadSize = 64 * 1_024
+        decoder.decodeQueue.suspend()
+        for cycle in 0..<20 {
+            for frame in 0..<decoder.maxInFlightDecodes {
+                let storage = UnsafeMutableRawPointer.allocate(byteCount: payloadSize, alignment: 16)
+                storage.initializeMemory(as: UInt8.self, repeating: 0, count: payloadSize)
+                liveBytes.withLock { $0 += payloadSize }
+                let payload = Data(bytesNoCopy: storage, count: payloadSize,
+                                   deallocator: .custom { @Sendable pointer, count in
+                    pointer.deallocate()
+                    liveBytes.withLock { $0 -= count }
+                })
+                _ = decoder.decodeAssembledFrame(
+                    pictureData: payload, newSps: frame == 0 ? sps : nil, newPps: frame == 0 ? pps : nil,
+                    newVps: nil, isIDR: frame == 0, rtpTimestamp: UInt32(cycle * 100 + frame),
+                    totalLength: Int32(payloadSize))
+            }
+        }
+        #expect(liveBytes.withLock { $0 } <= decoder.maxInFlightDecodes * payloadSize)
+        decoder.decodeQueue.resume()
+        await decoder.decodeQueue.drainForTest()
+        #expect(liveBytes.withLock { $0 } == 0)
+        #expect(factory.calls.count == 1)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+        decoder.teardown()
     }
 
     @Test func aRefusedSessionReleasesItsCallbackRetain() throws {

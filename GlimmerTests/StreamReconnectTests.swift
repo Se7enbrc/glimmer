@@ -8,11 +8,13 @@
 //  a PC-sent terminate means the PC ended the session rather than dropped it.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct StreamReconnectTests {
+    private let settings = IsolatedDefaults()
 
     // MARK: - Awake-time budget
 
@@ -84,7 +86,7 @@ struct StreamReconnectTests {
     }
 
     @MainActor @Test func giveUpWithAnUnreachablePcOffersWakeAndConnect() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let den = Host(id: "pc-1", name: "den", customName: "Den PC", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.handleNativeEvent(
@@ -98,7 +100,7 @@ struct StreamReconnectTests {
     /// Picking another PC while one connects doesn't redirect the failed one's banner: its action
     /// still targets the PC the error names.
     @MainActor @Test func bannerActionTargetsThePcThatFailed() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let den = Host(id: "pc-1", name: "den", customName: "Den PC", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         let tower = Host(id: "pc-2", name: "tower", customName: nil, localAddress: "192.0.2.20", manualAddress: nil,
@@ -167,7 +169,7 @@ struct StreamReconnectTests {
         backend.withState { backend.enetChannel = enet }
         if interruptOnly { backend.interruptConnection() } else { backend.stopConnection() }
 
-        #expect(!backend.wireControllerFeedback(enet: enet, events: NativeConnectionEvents()))
+        #expect(!backend.activateControllers(events: NativeConnectionEvents()))
         #expect(enet.onTeardown == nil)
         #expect(enet.onRumble == nil)
         #expect(enet.onSetMotionEvent == nil)
@@ -234,7 +236,7 @@ struct StreamReconnectTests {
     @MainActor @Test(arguments: [false, true])
     func lateEstablishedCannotRearmStoppedInput(stopping: Bool) async {
         let backend = NativeBackend()
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
         await session.prepareCallbackTest(input: input, streaming: stopping, stopping: stopping)
         await session.nativeConnectionEstablished(from: backend)
@@ -246,7 +248,7 @@ struct StreamReconnectTests {
     @MainActor @Test func oldBackendCannotMutateTheReplacementConnection() async {
         let old = NativeBackend()
         let current = NativeBackend()
-        let session = StreamSession(backend: current)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: current)
         let input = InputForwarder()
         await session.prepareCallbackTest(input: input)
         await session.nativeConnectionEstablished(from: old)
@@ -260,21 +262,24 @@ struct StreamReconnectTests {
         #expect(await session.isStreaming)
     }
 
-    @MainActor @Test func ignoredTerminationCannotPauseReconnectingInput() async {
+    @MainActor @Test func currentTerminationPausesReconnectingInput() async {
         let backend = NativeBackend()
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
         input.setReady(true)
         await session.prepareCallbackTest(input: input, reconnecting: true)
         await session.handleHostTerminate(code: 0, from: backend)
         await Self.drainMainQueue()
-        #expect(input.isReady)
+        #expect(!input.isReady)
         #expect(await session.isStreaming)
+        let attempt = await session.attemptID
+        #expect(await session.reconnectTermination?.attempt == attempt)
+        #expect(await session.reconnectTermination?.code == 0)
     }
 
     @MainActor @Test func currentEstablishedArmsLiveInput() async {
         let backend = NativeBackend()
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
         await session.prepareCallbackTest(input: input)
         await session.nativeConnectionEstablished(from: backend)
@@ -292,10 +297,15 @@ struct StreamReconnectTests {
 
 private extension StreamSession {
     func prepareCallbackTest(input: InputForwarder, streaming: Bool = true,
-                             stopping: Bool = false, reconnecting: Bool = false) {
-        self.input = input
+                             stopping: Bool = false, reconnecting: Bool = false) async {
+        self.input = await SessionInputHooks(input)
         isStreaming = streaming
         stopInProgress = stopping
         isReconnecting = reconnecting
+        // Native callbacks only arrive through a published bridge for the current attempt.
+        let decoder = await MainActor.run { VideoDecoder() }
+        let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder)
+        bridge.beginAttempt(attemptID)
+        self.bridge = bridge
     }
 }

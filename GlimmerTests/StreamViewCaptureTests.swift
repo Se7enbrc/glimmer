@@ -4,6 +4,7 @@
 // Window mode's grab and release as the forwarder walks them, and the diagnostic
 // event sampler. No key event reaches the diagnostic log.
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import Testing
@@ -11,6 +12,8 @@ import Testing
 
 @MainActor
 struct StreamViewCaptureTests {
+    private let settings = IsolatedDefaults()
+
     @MainActor
     private final class Edges { var seen: [Bool] = [] }
 
@@ -58,6 +61,30 @@ struct StreamViewCaptureTests {
     /// Capture sync reads the live mouse location, so its position is left out.
     private func buttons(_ backend: InputRecordingBackend) -> [PointerSend] {
         backend.pointer.filter { if case .button = $0 { true } else { false } }
+    }
+
+    @Test(arguments: ["Desktop", "desktop", "Hades"])
+    func everyAppBuildsWithRelativeFullscreenCapture(name: String) throws {
+        let model = AppModel(defaults: settings.defaults)
+        let app = LibraryApp(id: 1, name: name, hdr: false, hidden: false)
+        let host = Host(id: "pointer-pc", name: "Tower", customName: nil, localAddress: nil,
+                        manualAddress: nil, apps: [app], lastConnected: nil, serverCertPEM: nil,
+                        appVersion: nil, macAddress: nil)
+        var config = model.nativeStreamConfig(for: host, app: app)
+        config.displayMode = .fullScreen
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        let setup = session.buildStreamSubsystems(.init(
+            config: config, negotiatedBitrateKbps: config.bitrateKbps,
+            initialStatsOverlay: false, initialStatsCorner: .topLeft,
+            quitHotkeyProvider: { .defaultQuit }, statsHotkeyProvider: { .defaultStats },
+            bookmarkHotkeyProvider: { .defaultQuit }, releasePointerHotkeyProvider: { .defaultQuit },
+            miniPlayerHotkeyProvider: { .defaultQuit }, controllerQuitChordProvider: { .none },
+            customControllerChordProvider: { [] }, onBackgroundedChanged: nil, onMiniPlayerChanged: nil,
+            onCancelConnect: nil))
+        defer { setup.1.detach(); setup.2.teardown(); setup.0.close() }
+        #expect(setup.1.fullscreenRelativePointer)
+        #expect(setup.0.fullscreenRelativePointer)
+        #expect(!setup.1.isWindowMode)
     }
 
     @Test func hoverGrabsAndAHeldEscLatchHoldsItOffUntilThePointerLeaves() throws {
@@ -153,14 +180,61 @@ struct StreamViewCaptureTests {
         #expect(!forwarder.sendsAbsolutePointer)
     }
 
+    @Test func fullscreenDesktopMapsClicksAndTogglesToRelativeAndBack() throws {
+        let (forwarder, backend, edges) = windowed()
+        defer { forwarder.detach() }
+        forwarder.fullscreenRelativePointer = false
+        forwarder.setWindowMode(false)
+        let view = try #require(forwarder.inputView)
+        #expect(forwarder.sendsAbsolutePointer)
+        view.mouseEntered(with: try crossing(.mouseEntered))
+        #expect(!forwarder.isMouseCaptured)
+        view.mouseDown(with: try mouse(.leftMouseDown))
+        #expect(backend.pointer.first == .position(x: 160, y: 160, refW: 640, refH: 640))
+        view.keyDown(with: try pointerChord())
+        #expect(forwarder.isMouseCaptured)
+        #expect(forwarder.fullscreenRelativePointer)
+        #expect(!forwarder.sendsAbsolutePointer)
+        view.keyDown(with: try pointerChord())
+        #expect(forwarder.sendsAbsolutePointer)
+        #expect(!forwarder.fullscreenRelativePointer)
+        #expect(forwarder.heldMouseButtons.isEmpty)
+        view.mouseUp(with: try mouse(.leftMouseUp))
+        #expect(buttons(backend).count == 2)
+        #expect(edges.seen == [true, false])
+        #expect(backend.keyboard.isEmpty)
+        forwarder.windowResignedKey()
+        #expect(forwarder.sendsAbsolutePointer)
+    }
+
+    @Test func returningFromAWindowRestoresTheFullscreenPointerChoice() {
+        let (forwarder, _, _) = windowed()
+        defer { forwarder.detach() }
+        forwarder.fullscreenRelativePointer = false
+        forwarder.capturePointer(reason: "test")
+        #expect(forwarder.isMouseCaptured)
+        forwarder.setWindowMode(false)
+        #expect(!forwarder.isMouseCaptured)
+        #expect(forwarder.sendsAbsolutePointer)
+        forwarder.setWindowMode(true)
+        forwarder.fullscreenRelativePointer = true
+        forwarder.setWindowMode(false)
+        #expect(forwarder.isMouseCaptured)
+        #expect(!forwarder.sendsAbsolutePointer)
+    }
+
     // MARK: Diagnostic sampler
 
-    @Test func diagnosticEventNamesFallBackToTheRawType() {
+    @Test func diagnosticEventNamesFallBackToTheRawType() throws {
         let forwarder = InputForwarder()
         #expect(forwarder.diagnosticEventTypeName(.scrollWheel) == "scrollWheel")
         #expect(forwarder.diagnosticEventTypeName(.otherMouseDown) == "otherMouseDown")
-        #expect(forwarder.diagnosticEventTypeName(.mouseCancelled)
-            == "type(\(NSEvent.EventType.mouseCancelled.rawValue))")
+        if #available(macOS 26, *) {
+            #expect(forwarder.diagnosticEventTypeName(.mouseCancelled)
+                == "type(\(NSEvent.EventType.mouseCancelled.rawValue))")
+        }
+        let unmapped = try #require(NSEvent.EventType(rawValue: 999))
+        #expect(forwarder.diagnosticEventTypeName(unmapped) == "type(999)")
     }
 
     /// Past 100 events in a second the log samples one in N.

@@ -62,9 +62,10 @@ device or automatically repair account signing state.
    bootstrap release tooling.
 2. Require successful Verify and all three CodeQL analyses for the exact source
    commit, with no unresolved CodeQL alerts. Use the complete 40-character SHA.
-3. Choose the iOS marketing version and an unused, increasing build number.
-   Check App Store Connect before dispatching. A retry after Apple accepts an
-   upload must not overwrite or silently reuse that build number.
+3. Use the shared CalVer from `Glimmer/Version.xcconfig` and choose an unused,
+   increasing iOS build number. The archive rejects a different marketing
+   version. Check App Store Connect before dispatching. A retry after Apple
+   accepts an upload must not overwrite or silently reuse that build number.
 4. Dispatch **iOS TestFlight Build** on the candidate branch whose HEAD is that
    exact SHA, with the version, build number and `flavour` (`beta` or
    `production`). The builder rejects `main` and the repository's default
@@ -78,13 +79,12 @@ device or automatically repair account signing state.
 6. After Apple processes the upload, check its status and confirm automatic
    availability in **Internal**. Enter a short **What to Test** description
    covering the actual changes and known limitations. Internal distribution
-   continues while an external build awaits Beta App Review. Choose `beta` for
-   local diagnostic recording, on by default unless the player has turned it
-   off. Choose `production` to test the diagnostics-free App Store candidate
-   through TestFlight. Installation through TestFlight never changes the
-   compiled flavour. Production ignores saved diagnostic preferences and leaves
-   old files untouched, without exposing them. Only a production archive is
-   eligible as App Store submission source.
+   continues while an external build awaits Beta App Review. Beta enables
+   adaptive stream quality by default; production leaves it off. Saved choices
+   take precedence. Neither flavour records custom diagnostics. Installation
+   through TestFlight never changes the compiled flavour. Both ignore old
+   recording preferences and leave earlier files untouched. Only a production
+   archive is eligible as App Store submission source.
 
 Every export sets `testFlightInternalTestingOnly = false`. This removes the
 Internal Only restriction; it does not grant Beta App Review approval or publish
@@ -120,13 +120,15 @@ separate maintainer decision.
 ## What CI must preserve
 
 The candidate-branch workflow builds a Release archive without signing
-credentials or local development compilation flags. `beta` sets
-`GLIMMER_DIAGNOSTICS` for both the app and shared engine; `production` leaves it
-unset. Unspecified local builds are production. Unknown flavour inputs fail. The
-separate main workflow does not check out or execute candidate code. Its fresh
-protected job validates the successful build run, workflow, source, repository,
-producing attempt, GitHub artifact digest, manifest, compiled flavour and bundle
-identity before signing/exporting and uploading the existing bytes.
+credentials or local development compilation flags. `beta` sets the legacy
+`GLIMMER_DIAGNOSTICS` flag for the adaptive-quality default and in-memory
+receive timing; `production` leaves it unset. Shared custom recorders compile
+only on macOS. Unspecified local builds are production. Unknown flavour inputs
+fail. The separate main workflow does not check out or execute candidate code.
+Its fresh protected job validates the successful build run, workflow, source,
+repository, producing attempt, GitHub artifact digest, manifest, compiled
+flavour and bundle identity before signing/exporting and uploading the existing
+bytes.
 
 The signed receipt uses schema 2 and `external_testing_eligible: true` in place
 of `internal_only`. This records export eligibility, not Apple's review status.
@@ -164,10 +166,10 @@ python3 scripts/check-ios-diagnostics.py \
 ```
 
 The inspection scans defined symbols, executable contents, debug dylibs and
-resources. Production rejects recording, trace, probe and control markers; beta
-must contain the recording components. See the
-[diagnostics audit](../../docs/IOS_DIAGNOSTICS.md) for operational measurements
-that remain and the physical-device acceptance checklist.
+resources. Both flavours reject custom recording, trace, probe and control
+markers. See the [diagnostics audit](../../docs/IOS_DIAGNOSTICS.md) for
+operational measurements that remain and the physical-device acceptance
+checklist.
 
 ## Privacy and encryption review
 
@@ -178,18 +180,18 @@ of tracking does not remove the required-reason API declaration requirement.
 
 The audited declarations are:
 
-| Category         | Reason             | Use in the shipped app                                                |
-| ---------------- | ------------------ | --------------------------------------------------------------------- |
-| User defaults    | `CA92.1`           | Private preferences, saved PCs and audio seeds                        |
-| System boot time | `35F9.1`, `8FFB.1` | Elapsed input/session timing and receive-event timestamps             |
-| File timestamps  | `C617.1`           | Sandbox cache eviction, identity/pin files; beta diagnostic retention |
+| Category         | Reason             | Use in the shipped app                                    |
+| ---------------- | ------------------ | --------------------------------------------------------- |
+| User defaults    | `CA92.1`           | Private preferences, saved PCs and audio seeds            |
+| System boot time | `35F9.1`, `8FFB.1` | Elapsed input/session timing and receive-event timestamps |
+| File timestamps  | `C617.1`           | Sandbox cache eviction, identity/pin files                |
 
 The app-level resource covers the same-developer, statically linked engine.
 There are no external Swift package dependencies. This does not establish
-manifest packaging for a future independently distributed SDK. Beta diagnostics
-are local files and loopback metrics; production has no diagnostic recording or
-listener; no analytics or developer upload endpoint is present. Confirm actual
-support/data-handling practices when completing account-side privacy answers.
+manifest packaging for a future independently distributed SDK. Both flavours use
+Apple system logs and reports, with no diagnostic recording, listener, analytics
+or developer upload endpoint. Confirm actual support/data-handling practices
+when completing account-side privacy answers.
 
 Encryption is declared in the candidate app's `Info.plist` via the Boolean
 `ITSAppUsesNonExemptEncryption`; check that the archived app carries the
@@ -212,7 +214,5 @@ lists as requiring no App Store Connect encryption documentation. The maintainer
 must confirm that classification and intended distribution before answering.
 Encryption exists; do not answer that the app has none.
 
-Follow the candidate branch's Simulator and hardware verification instructions
-before accepting a beta for wider testing. The
-[repository contribution guide](../../docs/CONTRIBUTING.md) covers shared
-checks.
+Continue with [Simulator and hardware verification](../CONTRIBUTING.md) before
+accepting a beta for wider testing.

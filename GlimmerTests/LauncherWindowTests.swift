@@ -8,8 +8,11 @@
 //  chip's running wording, and the takeover dialog's title.
 //
 
+@testable import GlimmerEngine
+import AppKit
 import Foundation
 import SwiftUI
+import ScreenCaptureKit
 import Testing
 @testable import Glimmer
 
@@ -18,6 +21,7 @@ import Testing
 /// quietly downgrading the banner's button.
 @MainActor
 struct ConnectBannerActionTests {
+    private let settings = IsolatedDefaults()
 
     private func action(for error: Error, canWake: Bool = true, pc: String = "Tower") -> ConnectBannerAction {
         ConnectBannerAction(kind: AppModel.connectFailure(for: error, hostName: pc).kind, canWake: canWake)
@@ -80,7 +84,7 @@ struct ConnectBannerActionTests {
     /// A reconnect's failed stage leaves the banner alone; the give-up terminate
     /// records its kind alongside the sentence.
     @Test func engineFailuresRecordTheirKind() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let rig = Host(id: "pc-1", name: "rig", customName: "Repair Rig", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.nativeStreamErrorKind = .pairing
@@ -92,36 +96,16 @@ struct ConnectBannerActionTests {
     }
 }
 
-struct ReadinessChipRunningLabelTests {
-
-    @Test func appRunningReplacesTheSomeoneElseStreamingWording() {
-        let chip = ChipPresentation.streamingElsewhere(appName: "Helldivers 2")
-        #expect(chip.label == "Helldivers 2 running")
-        #expect(chip.accessibility == "Helldivers 2 is running on this PC")
-    }
-
-    @Test func runningColorIsNeutralNotBlue() {
-        #expect(ChipPresentation.streamingElsewhere(appName: "x").dotColor == Color.secondary)
-    }
-
-    @Test func longNameStillTruncatesInsideTheRunningLabel() {
-        // The chip must stay narrow: truncate to 14 chars (with an ellipsis)
-        // before appending " running", not after - the old code truncated
-        // the same way ahead of its "Streaming " prefix.
-        let chip = ChipPresentation.streamingElsewhere(appName: "A Very Long Game Title Indeed")
-        #expect(chip.label == "A Very Long G… running")
-    }
-
-    @Test func certMismatchIsUnaffectedByTheRunningRewording() {
-        #expect(ChipPresentation.certMismatch.label == "Trust needed")
-        #expect(ChipPresentation.certMismatch.accessibility == ChipPresentation.certMismatch.label)
-        #expect(ChipPresentation.certMismatch.dotColor == Color.orange)
-    }
-
-    @Test func appMissingFromTheCachedListReadsInSentenceCase() {
-        let chip = ChipPresentation.streamingElsewhere(appName: nil)
-        #expect(chip.label == "App running")
-        #expect(chip.accessibility == "An app is running on this PC")
+struct ReadinessChipReadyTests {
+    @Test(arguments: [HostLiveStatus.State.idle, .streamingApp(name: "Helldivers 2"),
+                      .streamingUnknownApp(id: 7)])
+    func reachablePCAlwaysShowsReadyAndLatency(state: HostLiveStatus.State) {
+        let live = HostLiveStatus(hostID: "pc", state: state, rttMs: 12, capturedAt: Date())
+        let chip = ChipPresentation(live: live)
+        #expect(chip == .ready(rttMs: 12))
+        #expect(chip.label == "Ready · 12 ms")
+        #expect(chip.accessibility == "PC ready, round trip 12 milliseconds")
+        #expect(chip.dotColor == Color.green)
     }
 }
 
@@ -129,19 +113,19 @@ struct ReadinessChipRunningLabelTests {
 struct TakeoverDialogCopyTests {
 
     @Test func keepsARealAppNameAsTyped() {
-        #expect(TakeoverDialogCopy.title(occupantApp: "Helldivers 2", hostName: "Tower")
-            == "Helldivers 2 is running on Tower.")
-        #expect(TakeoverDialogCopy.title(occupantApp: "iRacing", hostName: "Tower")
-            == "iRacing is running on Tower.")
-        #expect(TakeoverDialogCopy.title(occupantApp: "eFootball", hostName: "Tower")
-            == "eFootball is running on Tower.")
+        #expect(TakeoverDialogCopy.title(occupantApp: "Helldivers 2", targetApp: "Desktop")
+            == "Quit Helldivers 2 and start Desktop?")
+        #expect(TakeoverDialogCopy.title(occupantApp: "iRacing", targetApp: "Desktop")
+            == "Quit iRacing and start Desktop?")
+        #expect(TakeoverDialogCopy.title(occupantApp: "eFootball", targetApp: "Desktop")
+            == "Quit eFootball and start Desktop?")
     }
 
     @Test func anAppThePCDidntNameReadsAsAnotherApp() throws {
         let unnamed = try #require(AppModel.occupant(of: .streamingUnknownApp(id: 9)))
         #expect(unnamed == nil)
-        #expect(TakeoverDialogCopy.title(occupantApp: unnamed, hostName: "Tower")
-            == "Another app is running on Tower.")
+        #expect(TakeoverDialogCopy.title(occupantApp: unnamed, targetApp: "Desktop")
+            == "Quit the running app and start Desktop?")
         #expect(AppModel.occupant(of: .idle) == nil)
     }
 }
@@ -149,13 +133,17 @@ struct TakeoverDialogCopyTests {
 /// Every Pair Again… lands on the one launcher sheet, which names the PC.
 @MainActor
 struct PairAgainSheetTests {
+    private let settings = IsolatedDefaults()
 
     @Test func pairAgainCarriesThePCToTheSheet() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let tower = Host(id: "pc-1", name: "tower", customName: "Tower", localAddress: nil, manualAddress: "192.0.2.10",
                          apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.requestPairing(for: tower)
         #expect(model.pairSheetShown && model.pairSheetHost == tower)
+        model.requestPairing(for: nil)
+        #expect(model.pairSheetShown && model.pairSheetHost == tower)
+        model.finishPairingPresentation(owner: .launcher)
         model.requestPairing(for: nil)
         #expect(model.pairSheetShown && model.pairSheetHost == nil)
     }
@@ -165,5 +153,109 @@ struct PairAgainSheetTests {
         #expect(PairSheet.title(paired: false, chosen: true, rePairName: nil) == "Pair a new PC")
         #expect(PairSheet.title(paired: false, chosen: false, rePairName: nil) == "Choose a PC")
         #expect(PairSheet.title(paired: true, chosen: true, rePairName: "Tower") == "Paired")
+    }
+}
+
+@MainActor
+struct PointerShortcutHelpTests {
+    @Test func pointerHelpCoversWindowAndFullScreenCapture() {
+        #expect(ShortcutsPane.pointerDetail ==
+            "Captures or releases the pointer in a window or full screen.")
+    }
+}
+
+@Suite(.serialized)
+@MainActor
+struct RunningTileWindowTests {
+    private let settings = IsolatedDefaults()
+
+    @Test(arguments: [false, true], [false, true])
+    func launcherScreenshots(dark: Bool, running: Bool) async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let sunshine = FakeSunshine.scripted([:])
+        model.makeNetwork = { sunshine.client($0) }
+        let apps = ["Desktop", "Steam Big Picture", "SuperTuxKart"].enumerated().map {
+            LibraryApp(id: $0.offset + 1, name: $0.element, hdr: false, hidden: false)
+        }
+        let host = Host(id: "fixture", name: "Living room PC", customName: nil, localAddress: "192.0.2.1",
+                        manualAddress: nil, apps: apps, lastConnected: nil, serverCertPEM: nil,
+                        appVersion: nil, macAddress: nil)
+        model.hosts = [host]
+        model.selectedHost = host
+        model.hostStatusTask?.cancel()
+        model.cancelHostReadiness()
+        model.hostLiveStatus = .init(hostID: host.id, state: .idle, capturedAt: .now)
+        let content = RunningTileWindowFixture().environment(model)
+            .tint(Color("AccentColor"))
+            .accentColor(Color("AccentColor"))
+            .background(.background)
+            .environment(\.colorScheme, dark ? .dark : .light)
+        let view = NSHostingView(rootView: content)
+        let idleSize = view.fittingSize
+        model.hostLiveStatus = .init(hostID: host.id,
+                                    state: running ? .streamingApp(name: "Desktop") : .idle,
+                                    capturedAt: .now, runningAppID: running ? 1 : nil)
+        view.layoutSubtreeIfNeeded()
+        #expect(view.fittingSize == idleSize)
+        #expect(idleSize.width == 580)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: idleSize),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = view
+        defer { window.contentView = nil; window.close() }
+        view.frame = NSRect(origin: .zero, size: idleSize)
+        view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        let renderer = ImageRenderer(content: content.frame(width: 580))
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        let name = "mac-\(dark ? "dark" : "light")-\(running ? "running" : "idle").png"
+        Attachment.record(Array(data), named: name)
+    }
+}
+
+private struct RunningTileWindowFixture: View {
+    @FocusState private var focus: LauncherFocus?
+    var body: some View { ConnectSurface(focus: $focus).modifier(LauncherTakeoverConfirmation()) }
+}
+
+@Suite(.serialized)
+@MainActor
+struct ShortcutContrastWindowTests {
+    @Test(arguments: [false, true])
+    func compositedShortcutBadges(dark: Bool) async throws {
+        let settings = IsolatedDefaults()
+        let model = AppModel(defaults: settings.defaults)
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let previous = NSApp.appearance
+        NSApp.appearance = appearance
+        defer { NSApp.appearance = previous }
+        let host = NSHostingController(rootView: ShortcutsPane().environment(model)
+            .environment(\.colorScheme, dark ? .dark : .light))
+        let window = NSWindow(contentViewController: host)
+        window.isReleasedWhenClosed = false
+        window.title = "Shortcut contrast verification"
+        window.appearance = appearance
+        window.setContentSize(CGSize(width: 620, height: 760))
+        window.orderFront(nil)
+        defer { window.contentViewController = nil; window.close() }
+        host.view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        // This API exposes only this test host's windows and requires no screen-recording permission.
+        let content = try await SCShareableContent.currentProcess
+        let target = try #require(content.windows.first { $0.windowID == CGWindowID(window.windowNumber) })
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(window.frame.width * 2)
+        configuration.height = Int(window.frame.height * 2)
+        configuration.showsCursor = false
+        configuration.ignoreShadowsSingleWindow = true
+        let image = try await SCScreenshotManager.captureImage(
+            contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: configuration)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        Attachment.record(Array(data), named: "shortcut-composited-\(dark ? "dark" : "light").png")
     }
 }

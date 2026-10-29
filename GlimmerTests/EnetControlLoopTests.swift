@@ -8,6 +8,7 @@
 //  kept in sentReliable, so its exact wire bytes and the loop's decisions are readable there.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -254,5 +255,65 @@ struct EnetControlLoopTests {
         #expect(Self.msSince(dead.withState { dead.lastAckRecvMs }, dead) < 50)
         #expect(Self.commands(live) == [[0x85, 0xFF, 0x00, 0x01]])
         #expect(Self.commands(dead).isEmpty)
+    }
+    @Test func sealAndMtuFailuresCannotLeaveReliableSequenceHoles() throws {
+        let attempts = AtomicCounter()
+        let channel = EnetControlChannel(host: .ipv4(.loopback), port: 9, controlConnectData: 0,
+            crypto: try ControlCrypto(rikey: EnetFixture.key), sealControl: { crypto, type, payload, seq in
+                attempts.increment()
+                if attempts.value == 1 { throw EnetError.mtuExceeded }
+                return try crypto.seal(type: type, payload: payload, seq: seq)
+            })
+        EnetFixture.connect(channel)
+        #expect(!channel.sendInputPacket([1], channel: 2))
+        #expect(!channel.sendInputPacket([UInt8](repeating: 0, count: Int(Enet.defaultMTU)), channel: 2))
+        #expect(channel.sendInputPacket([3], channel: 2))
+        let sent = try #require(channel.sentReliable.first)
+        #expect(sent.reliableSequenceNumber == 1)
+        #expect(channel.sentReliable.count == 1)
+        #expect(channel.enetSeq == 3)
+        #expect(try Self.openReliable(sent.commandBytes).inner == [6, 2, 1, 0, 3])
+    }
+
+    @Test func unmatchedAckCannotRefreshPeerClock() throws {
+        let channel = try EnetFixture.channel()
+        channel.sendEnetPing()
+        channel.lastAckRecvMs = UInt32.max - 5
+        channel.onDatagram(EnetFixture.datagram([EnetFixture.ack(channel: 2, relSeq: 1, sentTime: 0)]))
+        #expect(channel.lastAckRecvMs == UInt32.max - 5)
+        #expect(channel.sentReliable.count == 1)
+    }
+
+    @Test func lostKeyboardUpRetransmitsAfterDownAckUntilMatchedAck() throws {
+        let channel = try EnetFixture.channel()
+        let down = InputEncoder.keyboard(keyCode: VKScanCode(vk: 0x57).wireCode,
+                                         action: Int8(StreamProtocol.KEY_ACTION_DOWN), modifiers: 0, flags: 0)
+        let up = InputEncoder.keyboard(keyCode: VKScanCode(vk: 0x57).wireCode,
+                                       action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0)
+        #expect(channel.sendInputPacket(down, channel: 2))
+        let first = try #require(channel.sentReliable.first)
+        #expect(try Array(Self.openReliable(first.commandBytes).inner.dropFirst(4)) == down)
+        channel.onDatagram(EnetFixture.datagram([EnetFixture.ack(channel: 2, relSeq: 1, sentTime: 0)]))
+        #expect(channel.sendInputPacket(up, channel: 2))
+        let original = try #require(channel.sentReliable.first).commandBytes
+        channel.withState { channel.sentReliable[0].sentAtMs = channel.serviceTimeMs &- 2_000 }
+        channel.checkRetransmit()
+        let resent = try #require(channel.sentReliable.first)
+        #expect(resent.attempts == 2)
+        #expect(resent.commandBytes == original)
+        #expect(try Array(Self.openReliable(resent.commandBytes).inner.dropFirst(4)) == up)
+        channel.onDatagram(EnetFixture.datagram([EnetFixture.ack(channel: 2, relSeq: 2, sentTime: 0)]))
+        #expect(channel.sentReliable.isEmpty)
+    }
+
+    @Test func otherChannelAcksCannotHideAStuckReliableChannel() throws {
+        let channel = try EnetFixture.channel()
+        var state = channel.startControlLoop()
+        channel.withState {
+            channel.sentReliable = [Self.entry(ageMs: 10_001, now: channel.serviceTimeMs)]
+            channel.lastAckRecvMs = channel.serviceTimeMs
+        }
+        #expect(!channel.controlLoopTick(&state))
+        #expect(channel.disconnected)
     }
 }
