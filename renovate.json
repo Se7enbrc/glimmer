@@ -46,7 +46,7 @@
     {
       "description": "Keep Python on 3.14 until PyYAML publishes 3.15 wheels for locked, wheel-only installs.",
       "matchManagers": ["mise"],
-      "matchPackageNames": ["python"],
+      "matchPackageNames": ["python/cpython"],
       "allowedVersions": "<3.15"
     },
     {
