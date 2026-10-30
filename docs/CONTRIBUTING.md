@@ -47,6 +47,12 @@ Use macOS 26 or later on Apple Silicon, with Xcode 26.6 or later. CI uses Xcode
 
 Hooks launch through mise and do not download tools during a commit.
 
+hk runs yamllint for YAML syntax and lint checks; the `pre-commit-hooks` Python
+package is not needed. Python stays on 3.14 for automated updates until PyYAML
+provides 3.15 wheels for both CI platforms. Before lifting that Renovate bound,
+verify `mise install --locked` on Linux x64 and macOS arm64 without source
+builds.
+
 ### Migrate shared hooks
 
 Git hooks are shared by all worktrees. With Git 2.54 or later, run these
