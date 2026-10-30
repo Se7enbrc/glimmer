@@ -50,6 +50,14 @@
       "commitMessagePrefix": "build(deps):"
     },
     {
+      "description": "Keep macOS 15 as the oldest-supported compatibility test runner.",
+      "matchManagers": ["github-actions"],
+      "matchDatasources": ["github-runners"],
+      "matchPackageNames": ["macos"],
+      "matchCurrentValue": "/^15$/",
+      "enabled": false
+    },
+    {
       "matchPackageNames": ["sparkle-project/Sparkle"],
       "prBodyNotes": [
         "Sparkle changed. Verify the new `Sparkle-<version>.tar.xz` release archive and add its SHA-256 to `scripts/sparkle-tools.sh` (the release-tool tests fail until you do), and check `Glimmer/ThirdPartyNotices.txt` against the new LICENSE."
