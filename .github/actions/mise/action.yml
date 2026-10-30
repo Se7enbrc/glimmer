@@ -83,7 +83,6 @@ runs:
           ~/.local/share/mise/installs/aqua-zizmorcore-zizmor
           ~/.local/share/mise/installs/npm-prettier
           ~/.local/share/mise/installs/npm-markdownlint-cli
-          ~/.local/share/mise/installs/pipx-pre-commit-hooks
           ~/.local/share/mise/installs/pipx-yamllint
           ~/.local/share/mise/installs/pipx-coverage
         key: ${{ steps.tools.outputs.cache-primary-key }}

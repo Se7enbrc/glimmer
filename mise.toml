@@ -22,7 +22,6 @@ python = "3.14.8"
 "npm:prettier" = "4.0.0-alpha.8"
 "npm:markdownlint-cli" = "0.41.0"
 "pipx:yamllint" = "1.35.1"
-"pipx:pre-commit-hooks" = "4.6.0"
 "pipx:coverage" = "7.16.2"
 
 [env]

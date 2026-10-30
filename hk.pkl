@@ -14,10 +14,6 @@ local linters = new Mapping<String, Step | Group> {
   ["end-of-file-fixer"] = (Builtins.newlines) {
     exclude = Regex("^third_party/")
   }
-  ["check-yaml"] {
-    types = List("yaml")
-    check = "check-yaml --allow-multiple-documents {{files}}"
-  }
   ["check-added-large-files"] = (Builtins.check_added_large_files) {
     check = "hk util check-added-large-files --maxkb 2048 {{files}}"
   }

@@ -186,12 +186,6 @@ backend = "pipx:coverage"
 specifiers = ["7.16.2"]
 uv = { path = ".mise/locks/pipx-coverage/7.16.2", digest = "sha256:ff9cad2966f56855891946f266964c58bcff52a965b2d5a324fb87c2c4f3a801" }
 
-[[tools."pipx:pre-commit-hooks"]]
-version = "4.6.0"
-backend = "pipx:pre-commit-hooks"
-specifiers = ["4.6.0"]
-uv = { path = ".mise/locks/pipx-pre-commit-hooks/4.6.0", digest = "sha256:a974a1ca0fd7eb3c909f073c36f333059a81408a9285ffece822680b0f0b5cb7" }
-
 [[tools."pipx:yamllint"]]
 version = "1.35.1"
 backend = "pipx:yamllint"
