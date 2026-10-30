@@ -20,55 +20,55 @@ url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-macos-aarch64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850972"
 
 [[tools."aqua:astral-sh/uv"]]
-version = "0.13.5"
+version = "0.13.6"
 backend = "aqua:astral-sh/uv"
-specifiers = ["0.13.5"]
+specifiers = ["0.13.6"]
 
 [tools."aqua:astral-sh/uv"."platforms.linux-x64"]
-checksum = "sha256:f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/664336023"
+checksum = "sha256:f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/679980644"
 provenance = "github-attestations"
 
 [tools."aqua:astral-sh/uv"."platforms.macos-arm64"]
-checksum = "sha256:743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
-url = "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/664335803"
+checksum = "sha256:60fbd5c8a1ed681845eea28d9d622fcde03c51e91a43465b64a1e17db1ed3472"
+url = "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/679980393"
 provenance = "github-attestations"
 
 [[tools."aqua:cli/cli"]]
-version = "2.101.0"
+version = "2.103.3"
 backend = "aqua:cli/cli"
-specifiers = ["2.101.0"]
+specifiers = ["2.103.3"]
 
 [tools."aqua:cli/cli"."platforms.linux-x64"]
-checksum = "sha256:9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857134"
+checksum = "sha256:4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/679195621"
 provenance = "github-attestations"
 
 [tools."aqua:cli/cli"."platforms.macos-arm64"]
-checksum = "sha256:e4303e39d8f07141c4bad4b99b01079f05029c59b27076e8fbc825c985ecdd8b"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_macOS_arm64.zip"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857200"
+checksum = "sha256:d700207eae9ae98fe2b89535c2c087c07823d4628c56364695a5a07ef311c062"
+url = "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_macOS_arm64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/679195704"
 provenance = "github-attestations"
 
 [[tools."aqua:jdx/hk"]]
-version = "2.8.1"
+version = "2.10.0"
 backend = "aqua:jdx/hk"
-specifiers = ["2.8.1"]
+specifiers = ["2.10.0"]
 
 [tools."aqua:jdx/hk"."platforms.linux-x64"]
-checksum = "sha256:8033ca42aaf88412e789c281f7e2766526e60e12f95a16c03574aeb0a2c7a657"
+checksum = "sha256:3a1d580ba031d684307a88ce07f1751d792325f2fdace7d24dfc59b816766ad5"
 checksum_source = "mise-versions"
-url = "https://github.com/jdx/hk/releases/download/v2.8.1/hk-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/668781856"
+url = "https://github.com/jdx/hk/releases/download/v2.10.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/688168002"
 
 [tools."aqua:jdx/hk"."platforms.macos-arm64"]
-checksum = "sha256:87d5288c1d19acd45885e35722f655a1e1498a1cb92f42c1490e7f1623aedddd"
+checksum = "sha256:ab54862e724bd4a1ef9180ef535cfeef7f7ff98ace911bd5ea36bb41fa4ebc94"
 checksum_source = "mise-versions"
-url = "https://github.com/jdx/hk/releases/download/v2.8.1/hk-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/668781793"
+url = "https://github.com/jdx/hk/releases/download/v2.10.0/hk-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/688167962"
 
 [[tools."aqua:koalaman/shellcheck"]]
 version = "0.11.0"
@@ -122,21 +122,21 @@ url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/3849248
 provenance = "github-attestations"
 
 [[tools."aqua:trufflesecurity/trufflehog"]]
-version = "3.97.8"
+version = "3.99.7"
 backend = "aqua:trufflesecurity/trufflehog"
-specifiers = ["3.97.8"]
+specifiers = ["3.99.7"]
 
 [tools."aqua:trufflesecurity/trufflehog"."platforms.linux-x64"]
-checksum = "sha256:8f71019bcb8c6c44242b6e34f68c3755f8f9c8496d3063b7a8b5626fb9bff220"
+checksum = "sha256:bdbea0508e439b144f49de14e775908de5f902f3d14ea7ae8354bae72b0b72ef"
 checksum_source = "mise-versions"
-url = "https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.8/trufflehog_3.97.8_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/trufflesecurity/trufflehog/releases/assets/584364253"
+url = "https://github.com/trufflesecurity/trufflehog/releases/download/v3.99.7/trufflehog_3.99.7_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/trufflesecurity/trufflehog/releases/assets/671473557"
 
 [tools."aqua:trufflesecurity/trufflehog"."platforms.macos-arm64"]
-checksum = "sha256:b8a3f496ec10f213bd2d2ad276625a773a2b284b5cc84993d24fc27db00d3493"
+checksum = "sha256:5540ef352fc88b1f580e91603689782c0107ca7d4a96c1aeb2714b3a98c766ce"
 checksum_source = "mise-versions"
-url = "https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.8/trufflehog_3.97.8_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/trufflesecurity/trufflehog/releases/assets/584364255"
+url = "https://github.com/trufflesecurity/trufflehog/releases/download/v3.99.7/trufflehog_3.99.7_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/trufflesecurity/trufflehog/releases/assets/671473559"
 
 [[tools."aqua:zizmorcore/zizmor"]]
 version = "1.31.1"
@@ -156,53 +156,53 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/645467
 provenance = "github-attestations"
 
 [[tools.node]]
-version = "26.9.0"
+version = "26.13.0"
 backend = "core:node"
-specifiers = ["26.9.0"]
+specifiers = ["26.13.0"]
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:03d9104fc4f19652e74480fed11c023d75981464b7292f21a601c3f95ce7d90d"
-url = "https://nodejs.org/dist/v26.9.0/node-v26.9.0-linux-x64.tar.gz"
+checksum = "sha256:5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
-checksum = "sha256:6f3de7ed853ee283b4bf24b6e426618f1d357401ce5815db1866eb85eb4b05d9"
-url = "https://nodejs.org/dist/v26.9.0/node-v26.9.0-darwin-arm64.tar.gz"
+checksum = "sha256:d38bd5e5a2ddce6bbb5ce45e46e208337da4d51fffe611e567fd32073d6439f6"
+url = "https://nodejs.org/dist/v26.13.0/node-v26.13.0-darwin-arm64.tar.gz"
 
 [[tools."npm:markdownlint-cli"]]
-version = "0.41.0"
-aube = { path = ".mise/locks/npm-markdownlint-cli/0.41.0", digest = "sha256:4c892d53fb22e55795b258108ea1b0a185e715b3fcbadb6649420b1e2f7ca794" }
+version = "0.50.0"
+aube = { path = ".mise/locks/npm-markdownlint-cli/0.50.0", digest = "sha256:95a24ea400de52f7c0a9df1e11244d54cbed6ce843ab23024c7b99a2e050b2de" }
 backend = "npm:markdownlint-cli"
-specifiers = ["0.41.0"]
+specifiers = ["0.50.0"]
 
 [[tools."npm:prettier"]]
-version = "4.0.0-alpha.8"
-aube = { path = ".mise/locks/npm-prettier/4.0.0-alpha.8", digest = "sha256:50ec34fb9793095e679726cead03026a3cdecc9b33db4bb0f4b76efdebba6657" }
+version = "4.0.0-alpha.13"
+aube = { path = ".mise/locks/npm-prettier/4.0.0-alpha.13", digest = "sha256:92c2f25e012dd8181d7a688bbe6aa89bbe49c88bda9d7e2b7f6bfdda799103a9" }
 backend = "npm:prettier"
-specifiers = ["4.0.0-alpha.8"]
+specifiers = ["4.0.0-alpha.13"]
 
 [[tools."pipx:coverage"]]
-version = "7.16.2"
+version = "7.17.0"
 backend = "pipx:coverage"
-specifiers = ["7.16.2"]
-uv = { path = ".mise/locks/pipx-coverage/7.16.2", digest = "sha256:ff9cad2966f56855891946f266964c58bcff52a965b2d5a324fb87c2c4f3a801" }
+specifiers = ["7.17.0"]
+uv = { path = ".mise/locks/pipx-coverage/7.17.0", digest = "sha256:ff75abe208b59993aa590bd69709515034a0fa7e1dd3c502b608bfdb9fcb5304" }
 
 [[tools."pipx:yamllint"]]
-version = "1.35.1"
+version = "1.38.0"
 backend = "pipx:yamllint"
-specifiers = ["1.35.1"]
-uv = { path = ".mise/locks/pipx-yamllint/1.35.1", digest = "sha256:6101c65d2fc43486cdf66916eff776ae38145e2389749b005b21fe6237c47a1d" }
+specifiers = ["1.38.0"]
+uv = { path = ".mise/locks/pipx-yamllint/1.38.0", digest = "sha256:78c0eddf1cd48ee72dfd73ed52d094a69c49f42749e538098d12a7a8057a48ba" }
 
 [[tools.python]]
-version = "3.14.8"
+version = "3.15.2"
 backend = "core:python"
-specifiers = ["3.14.8"]
+specifiers = ["3.15.2"]
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:b88a4ac994ac55c35a03a3672103618d5c5d5bf342db7b2093b8d328b6516b42"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.14.8+20261020-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:7b03163a980c607ba8194709d4a4086735a7a9c488cc475b098157306927b36b"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2+20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-arm64"]
-checksum = "sha256:f0f1402b45a8a655fc78c8ee62462fddcb9dc8717a022e79700d07e44fd18d4a"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.14.8+20261020-aarch64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:1b1b03fca8aa351698403f3d100ee83db7a5d99748fc7707681ac31a6a846ad9"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2+20261026-aarch64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"

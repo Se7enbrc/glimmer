@@ -41,7 +41,7 @@ RELEASES_REPO   ?= Se7enbrc/glimmer
 TAP_REPO        ?= Se7enbrc/homebrew-glimmer
 export RELEASES_REPO TAP_REPO
 VERSION         ?= $(MARKETING_VERSION)
-SPARKLE_VERSION ?= 2.10.0
+SPARKLE_VERSION ?= 2.10.1
 export SPARKLE_VERSION
 
 HELPER_LABEL  := io.ugfugl.glimmer.helper

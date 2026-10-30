@@ -2,6 +2,6 @@
   "name": "mise-npm-install",
   "private": true,
   "dependencies": {
-    "prettier": "4.0.0-alpha.8"
+    "markdownlint-cli": "0.50.0"
   }
 }
