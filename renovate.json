@@ -44,9 +44,17 @@
   ],
   "packageRules": [
     {
+      "description": "Keep explicit Ubuntu pins on 24.04 until actionlint recognizes 26.04.",
+      "matchManagers": ["github-actions"],
+      "matchDatasources": ["github-runners"],
+      "matchPackageNames": ["ubuntu"],
+      "matchCurrentValue": "/^24\\.04$/",
+      "enabled": false
+    },
+    {
       "description": "Keep Python on 3.14 until PyYAML publishes 3.15 wheels for locked, wheel-only installs.",
       "matchManagers": ["mise"],
-      "matchPackageNames": ["python"],
+      "matchPackageNames": ["python/cpython"],
       "allowedVersions": "<3.15"
     },
     {

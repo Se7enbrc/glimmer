@@ -1,5 +1,5 @@
-Sparkle 2.10.0
-https://github.com/sparkle-project/Sparkle/blob/2.10.0/LICENSE
+Sparkle 2.10.1
+https://github.com/sparkle-project/Sparkle/blob/2.10.1/LICENSE
 
 Copyright (c) 2006-2013 Andy Matuschak.
 Copyright (c) 2009-2013 Elgato Systems GmbH.
