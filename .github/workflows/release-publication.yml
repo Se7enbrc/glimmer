@@ -35,8 +35,6 @@ on:
         required: false
       GLIMMER_RC_APP_PRIVATE_KEY:
         required: false
-      RELEASE_CONTENTS_TOKEN:
-        required: false
 
 permissions:
   contents: read
@@ -124,25 +122,7 @@ jobs:
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
           python3 scripts/promote-release.py tag "$RC_TAG" "$CANDIDATE_SHA"
-      - name: Select publication credentials
-        id: credentials
-        env:
-          RELEASE_APP_CLIENT_ID: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
-          RELEASE_APP_PRIVATE_KEY:
-            ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
-        run: |
-          if [ -n "$RELEASE_APP_CLIENT_ID" ] && [ -n "$RELEASE_APP_PRIVATE_KEY" ]; then
-            echo 'mode=app' >> "$GITHUB_OUTPUT"
-            echo 'Publication credentials: GitHub App.' >> "$GITHUB_STEP_SUMMARY"
-          elif [ -z "$RELEASE_APP_CLIENT_ID" ] && [ -z "$RELEASE_APP_PRIVATE_KEY" ]; then
-            echo 'mode=pat' >> "$GITHUB_OUTPUT"
-            echo 'Publication credentials: PAT fallback; both App secrets are absent.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'ERR: Configure both publication App secrets; refusing PAT fallback.' >&2
-            exit 1
-          fi
       - name: Mint publication token for glimmer only
-        if: steps.credentials.outputs.mode == 'app'
         id: publication-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -154,11 +134,7 @@ jobs:
       - name: Publish candidate or promote accepted bytes
         env:
           GH_TOKEN: ${{ github.token }}
-          # Migration fallback only: remove after the App completes a normal release and tap update.
-          RELEASE_CONTENTS_TOKEN:
-            ${{ steps.credentials.outputs.mode == 'pat' &&
-            secrets.RELEASE_CONTENTS_TOKEN ||
-            steps.publication-token.outputs.token }}
+          RELEASE_CONTENTS_TOKEN: ${{ steps.publication-token.outputs.token }}
         run: |
           case "$RELEASE_OPERATION" in
             candidate) scripts/ci-release.sh publish ;;
@@ -224,25 +200,7 @@ jobs:
         run: |
           scripts/ci-release.sh checks
           scripts/ci-release.sh prepare-promotion
-      - name: Select publication credentials
-        id: credentials
-        env:
-          RELEASE_APP_CLIENT_ID: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
-          RELEASE_APP_PRIVATE_KEY:
-            ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
-        run: |
-          if [ -n "$RELEASE_APP_CLIENT_ID" ] && [ -n "$RELEASE_APP_PRIVATE_KEY" ]; then
-            echo 'mode=app' >> "$GITHUB_OUTPUT"
-            echo 'Publication credentials: GitHub App.' >> "$GITHUB_STEP_SUMMARY"
-          elif [ -z "$RELEASE_APP_CLIENT_ID" ] && [ -z "$RELEASE_APP_PRIVATE_KEY" ]; then
-            echo 'mode=pat' >> "$GITHUB_OUTPUT"
-            echo 'Publication credentials: PAT fallback; both App secrets are absent.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'ERR: Configure both publication App secrets; refusing PAT fallback.' >&2
-            exit 1
-          fi
       - name: Mint tap token for homebrew-glimmer only
-        if: steps.credentials.outputs.mode == 'app'
         id: tap-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -254,10 +212,7 @@ jobs:
       - name: Update Homebrew from verified published bytes
         env:
           GH_TOKEN: ${{ github.token }}
-          # Migration fallback only: remove with the publication fallback after App acceptance.
-          RELEASE_CONTENTS_TOKEN:
-            ${{ steps.credentials.outputs.mode == 'pat' &&
-            secrets.RELEASE_CONTENTS_TOKEN || steps.tap-token.outputs.token }}
+          RELEASE_CONTENTS_TOKEN: ${{ steps.tap-token.outputs.token }}
         run: |
           scripts/ci-release.sh tap
       - name: Remove temporary credentials

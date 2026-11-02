@@ -177,7 +177,7 @@ dispatch, re-running its publication or tap job fails closed; dispatch a fresh
 promote on the new `main` instead. That works whenever the shipped paths are
 unchanged, and it reuses the same accepted candidate bytes.
 
-## Publication GitHub App setup and PAT retirement
+## Publication GitHub App
 
 Keep all release credentials as protected `release` **environment secrets**, not
 repository secrets. Doppler project `glimmer`, config `release`, syncs them to
@@ -194,9 +194,8 @@ needs no Doppler runtime token. Editing only GitHub can be overwritten by sync.
 | `APP_PROVISIONPROFILE_BASE64`     | Approved app Developer ID profile, single-line base64                        |
 | `HELPER_PROVISIONPROFILE_BASE64`  | Approved helper Developer ID profile, single-line base64                     |
 | `SPARKLE_ED_PRIVATE_KEY`          | Existing update-signing key, used only before signed-asset persistence       |
-| `GLIMMER_RELEASE_APP_CLIENT_ID`   | New publication App's client ID                                              |
-| `GLIMMER_RELEASE_APP_PRIVATE_KEY` | New publication App's PEM private key                                        |
-| `RELEASE_CONTENTS_TOKEN`          | Temporary migration fallback PAT for the two release repositories            |
+| `GLIMMER_RELEASE_APP_CLIENT_ID`   | Publication App's client ID                                                  |
+| `GLIMMER_RELEASE_APP_PRIVATE_KEY` | Publication App's PEM private key                                            |
 
 Make `GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY` available in
 `release` as well as `rc-cut`. Only promotion mints this token, requesting
@@ -204,12 +203,16 @@ Contents and Workflows write for `glimmer` with the App's existing ruleset
 bypass. It creates only the final tag; publication and tap keep their separate
 App. The post-job hook revokes the token, including after a failure.
 
-The publication App does not exist yet. The marked PAT fallback is active only
-when both App secrets are absent, and each publication or tap job records that
-choice in its summary. A partial pair or an App that cannot mint a token fails;
-it does not fall back to the PAT. Keep the existing PAT's 30-day rotation and
-day-25 reminder until App acceptance is complete. Never use the broad token from
-a local `gh` login.
+Publication and Homebrew use GitHub App installation tokens, minted for each job
+and revoked afterward. There is no PAT fallback or periodic PAT rotation.
+Missing App credentials stop publication. Never use a personal token from a
+local `gh` login.
+
+The
+[2026.10.8 promotion](https://github.com/Se7enbrc/glimmer/actions/runs/40974798443)
+completed publication and the Homebrew update through the App, including both
+token revocation steps. Keep an owner and a replacement procedure for the App's
+long-lived private key; automatic installation tokens do not rotate that key.
 
 Maintainer setup, without transferring or replacing Apple or Sparkle keys:
 
@@ -235,14 +238,12 @@ Maintainer setup, without transferring or replacing Apple or Sparkle keys:
 5. Exercise a failed publication retry and a tap-only retry using the same
    digests. Confirm no compilation or signing job reruns, no asset is replaced,
    Pages deploys the feed, and the cask points to the accepted DMG. Verify the
-   App token post-job revocation steps succeed.
-6. After a normal release and its tap update succeed through the App, remove the
-   marked PAT fallback expressions and their environment selection from
-   `release-publication.yml`, delete `RELEASE_CONTENTS_TOKEN` from Doppler and
-   GitHub's environment, and revoke the PAT in GitHub. Remove any redundant
-   repository copy. Update the “Glimmer release token rotation” maintenance note
-   and retire its PAT reminder. Keep an owner and rotation procedure for the App
-   private key itself.
+   App token post-job revocation steps succeed. For installations migrated from
+   the former PAT fallback, delete the obsolete `RELEASE_CONTENTS_TOKEN` secret
+   from Doppler and GitHub after confirming App publication and the tap update.
+   Check for other consumers before revoking the PAT in GitHub, then retire its
+   rotation reminder. The workflow environment variable of the same name carries
+   the job's temporary App token; it is not a stored secret.
 
 The pinned `actions/create-github-app-token` action mints one token immediately
 before publication, scoped only to `glimmer`, and a separate token immediately
