@@ -8,6 +8,9 @@
 - Controllers with raw accelerometer readings advertise motion support correctly
   on Mac, iPhone and iPad.
 
+- PlayStation touchpad swipes reach the PC with default controls and custom
+  controller layouts.
+
 ## 2026.10.8 - 2026-10-29
 
 - Complete controller shortcuts are captured before they reach the PC, and their

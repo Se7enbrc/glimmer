@@ -19,7 +19,7 @@ final class ControllerLayoutReader: @unchecked Sendable {
     private let systemButtons: [(GCControllerButtonInput, UInt32)]
     private let systemTriggers: [GCControllerButtonInput]
     private let systemAxes: [GCControllerAxisInput]
-    private let touchpads: (any GCDirectionPadElement, any GCDirectionPadElement)?
+    private let touchpads: (GCControllerDirectionPad, GCControllerDirectionPad)?
 
     init?(_ controller: GCController) {
         guard let input = controller.input.unmapped else { return nil }
@@ -54,9 +54,7 @@ final class ControllerLayoutReader: @unchecked Sendable {
             systemAxes = []
         }
         self.systemButtons = systemButtons
-        if let primary = input.dpads[GCInputDualShockTouchpadOne], let secondary = input.dpads[GCInputDualShockTouchpadTwo] {
-            touchpads = (primary, secondary)
-        } else { touchpads = nil }
+        touchpads = Self.touchpadSurfaces(of: controller)
         identity = ControllerLayoutIdentity(category: controller.productCategory, profile: "physical",
                                             controls: controls.map { $0.id.identityName })
     }
@@ -95,6 +93,15 @@ final class ControllerLayoutReader: @unchecked Sendable {
             .init(primaryX: $0.0.xAxis.value, primaryY: $0.0.yAxis.value,
                   secondaryX: $0.1.xAxis.value, secondaryY: $0.1.yAxis.value, clicked: clicked)
         }
+    }
+
+    static func touchpadSurfaces(of controller: GCController)
+        -> (GCControllerDirectionPad, GCControllerDirectionPad)? {
+        // Unmapped input omits DualSense touch surfaces even when the native profile exposes both.
+        let input = controller.physicalInputProfile
+        guard let primary = input.dpads[GCInputDualShockTouchpadOne],
+              let secondary = input.dpads[GCInputDualShockTouchpadTwo] else { return nil }
+        return (primary, secondary)
     }
 
     func streamSample(_ physical: ControllerMappingSample, mapsGameInput: Bool) -> ControllerInputSample {
@@ -251,9 +258,15 @@ enum ControllerStreamHandlers {
                 deliver(now() - max(0, input.lastEventLatency), false)
             }
         }
-        if !mapsGameInput {
+        let surfaces = ControllerLayoutReader.touchpadSurfaces(of: controller).map { [$0.0, $0.1] } ?? []
+        let touchElements = Set(surfaces.flatMap { [$0, $0.xAxis, $0.yAxis, $0.up, $0.down, $0.left, $0.right] }
+            .map(ObjectIdentifier.init))
+        if !mapsGameInput || !touchElements.isEmpty {
             // Live reads use the hold timer's uptime clock, not a profile-specific event clock.
-            controller.extendedGamepad?.valueChangedHandler = { @Sendable _, _ in deliver(now(), false) }
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable _, element in
+                guard !mapsGameInput || touchElements.contains(ObjectIdentifier(element)) else { return }
+                deliver(now(), false)
+            }
         }
     }
 }

@@ -13,7 +13,7 @@ struct ControllerTouchpadMouseTests {
     private let neutral = InputForwarder.neutralControllerAnalog
 
     private func rig() -> (InputForwarder, InputRecordingBackend) {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
