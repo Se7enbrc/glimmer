@@ -20,6 +20,16 @@ struct ControllerArrivalTests {
 
     private typealias Arrival = InputForwarder.ControllerArrival
 
+    @Test func focusLossBeforeFirstArrivalDoesNotCreateAnUnknownController() {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        forwarder.backend = InputRecordingBackend()
+        let pad = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: pad)
+        forwarder.neutralizeControllers()
+        #expect(forwarder.releases.pending.isEmpty)
+    }
+
     @Test func touchContactsEndOnFocusLossAndRestartWithNewIDsInMiniPlayer() throws {
         let forwarder = InputForwarder()
         defer { forwarder.detach() }
