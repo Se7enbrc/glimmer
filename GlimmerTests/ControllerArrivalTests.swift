@@ -268,8 +268,15 @@ struct ControllerArrivalTests {
         #expect(backend.calls.isEmpty)
 
         forwarder.isReady = true
+        let arrival = try #require(forwarder.attachedControllers[ObjectIdentifier(pad)]?.arrival)
+        try #require(forwarder.inputCore.announceController(slot: slot, arrival: arrival) == 0)
+        let held = GamepadAnalog(leftTrigger: 127, rightTrigger: 255,
+                                leftStickX: 12000, leftStickY: -12000, rightStickX: -8000, rightStickY: 8000)
+        forwarder.inputCore.sendController(slot: slot, buttons: 0, analog: held)
+        try #require(backend.calls.last?.analog == held)
+        let beforeFocusLoss = backend.calls.count
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
-        let sends = backend.calls.filter { $0.num == Int16(slot) }
+        let sends = backend.calls.dropFirst(beforeFocusLoss).filter { $0.num == Int16(slot) }
         #expect(sends.count == 1)
         let sent = try #require(sends.first)
         let analog = sent.analog
