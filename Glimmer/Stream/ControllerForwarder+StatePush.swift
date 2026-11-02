@@ -132,7 +132,7 @@ extension InputForwarder {
         let slots = Set(attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
             + Array(controllerButtons.keys))
         for slot in slots.sorted()
-            where controllerButtons[slot] != 0 || releases.held.contains(.controller(slot)) {
+            where (controllerButtons[slot] ?? 0) != 0 || releases.held.contains(.controller(slot)) {
             releases.hold(.controller(slot))
             releases.release(.controller(slot))
             controllerButtons[slot] = 0

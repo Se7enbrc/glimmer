@@ -18,10 +18,12 @@ import Testing
 struct ControllerInputRateTests {
 
     @MainActor
-    @Test func motionOwnershipSendsGyroNullBlocksLateCallbacksAndResumesRequestedSensors() async throws {
+    @Test(arguments: [false, true])
+    func motionOwnershipSendsGyroNullBlocksLateCallbacksAndResumesRequestedSensors(separatesGravity: Bool) async throws {
         let sampler = ControllerMotion()
         let controller = MotionTestController()
         let profile = controller.testMotion
+        profile.separatesGravity = separatesGravity
         let backend = InputRecordingBackend()
         sampler.streamActivated(backend: backend)
         await withCheckedContinuation { continuation in
@@ -29,7 +31,8 @@ struct ControllerInputRateTests {
         }
         defer { sampler.unregister(slot: 0) }
         let caps = sampler.register(slot: 0, controller: controller, inputEnabled: true)
-        #expect(caps & UInt16(StreamProtocol.LI_CCAP_ACCEL | StreamProtocol.LI_CCAP_GYRO) != 0)
+        #expect(caps & UInt16(StreamProtocol.LI_CCAP_ACCEL) != 0)
+        #expect(caps & UInt16(StreamProtocol.LI_CCAP_GYRO) != 0)
         sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_ACCEL), reportRateHz: 100)
         sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), reportRateHz: 100)
         let lateCallback = try #require(profile.valueChangedHandler)
@@ -142,13 +145,14 @@ private final class MotionTestController: GCController {
 }
 
 private final class MotionTestProfile: GCMotion {
+    var separatesGravity = true
     private var active = false
     private var handler: GCMotionValueChangedHandler?
     override var valueChangedHandler: GCMotionValueChangedHandler? {
         get { handler }
         set { handler = newValue }
     }
-    override var hasGravityAndUserAcceleration: Bool { true }
+    override var hasGravityAndUserAcceleration: Bool { separatesGravity }
     override var hasRotationRate: Bool { true }
     override var sensorsRequireManualActivation: Bool { true }
     override var sensorsActive: Bool {

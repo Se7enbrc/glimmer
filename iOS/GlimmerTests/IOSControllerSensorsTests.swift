@@ -7,6 +7,19 @@ import Testing
 @testable import Glimmer
 
 struct IOSControllerSensorsTests {
+    @Test(arguments: [false, true])
+    func totalAccelerationDoesNotRequireSeparateGravity(separatesGravity: Bool) throws {
+        let native = TestMotion()
+        native.separatesGravity = separatesGravity
+        let adapter = IOSControllerMotion(native)
+        defer { adapter.invalidate() }
+        let capture = adapter.output()
+        #expect(capture.capabilities.contains(.accelerometer))
+        #expect(capture.capabilities.contains(.gyroscope))
+        #expect(try #require(adapter.read()).acceleration == SIMD3<Float>(0.25, -0.5, 1))
+        #expect(!IOSControllerMotion(nil).output().capabilities.contains(.accelerometer))
+    }
+
     @Test func motionPreservesNativeUnitsAndInvalidatesQueuedCallbacks() throws {
         let native = TestMotion()
         let adapter = IOSControllerMotion(native)
@@ -58,6 +71,7 @@ struct IOSControllerSensorsTests {
 }
 
 private final class TestMotion: GCMotion {
+    var separatesGravity = true
     private var active = false
     private var handler: GCMotionValueChangedHandler?
     override var sensorsRequireManualActivation: Bool { true }
@@ -69,7 +83,7 @@ private final class TestMotion: GCMotion {
         get { handler }
         set { handler = newValue }
     }
-    override var hasGravityAndUserAcceleration: Bool { true }
+    override var hasGravityAndUserAcceleration: Bool { separatesGravity }
     override var hasRotationRate: Bool { true }
     override var acceleration: GCAcceleration { GCAcceleration(x: 0.25, y: -0.5, z: 1) }
     override var rotationRate: GCRotationRate { GCRotationRate(x: 2, y: 3, z: -4) }

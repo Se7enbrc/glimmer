@@ -1,6 +1,14 @@
 # Changelog
 
-## 2026.10.8 - Unreleased
+## 2026.11.0 - Unreleased
+
+- PlayStation controllers connected before a stream starts keep their controller
+  type and touchpad support without needing to reconnect.
+
+- Controllers with raw accelerometer readings advertise motion support correctly
+  on Mac, iPhone and iPad.
+
+## 2026.10.8 - 2026-10-29
 
 - Complete controller shortcuts are captured before they reach the PC, and their
   hold timers use the same clock as incoming controller events.
