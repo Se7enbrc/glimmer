@@ -89,8 +89,8 @@ class ReleaseWorkflowTests(FixtureTestCase):
         for forbidden in ("permission-actions:", "skip-token-revoke:",
                           "SPARKLE_ED_PRIVATE_KEY", "DEVELOPER_ID_P12_BASE64"):
             self.assertNotIn(forbidden, workflow)
-        for job in self.jobs("release-publication.yml", ("publish", "tap")):
-            publication = job.split("- name: Select publication credentials", 1)[1]
+        for name, job in zip(("publication", "tap"), self.jobs("release-publication.yml", ("publish", "tap"))):
+            publication = job.split(f"- name: Mint {name} token", 1)[1]
             self.assertNotIn("permission-workflows:", publication)
             self.assertNotIn("GLIMMER_RC_APP", publication)
 
@@ -100,7 +100,7 @@ class ReleaseWorkflowTests(FixtureTestCase):
         prepare = job.index("run: scripts/ci-release.sh prepare-promotion")
         mint = job.index("- name: Mint a scoped release tag token")
         tag = job.index("- name: Create final version tag at the verified candidate")
-        credentials = job.index("- name: Select publication credentials")
+        credentials = job.index("- name: Mint publication token")
         publish = job.index("- name: Publish candidate or promote accepted bytes")
         self.assertLess(checkout, prepare)
         self.assertLess(prepare, mint)
@@ -187,37 +187,23 @@ class ReleaseWorkflowTests(FixtureTestCase):
                         else:
                             self.assertFalse(any(call.startswith("checkout") for call in calls))
 
-    def test_publication_credentials_require_a_complete_pair_or_explicit_pat_fallback(self):
+    def test_publication_uses_only_unconditional_repository_scoped_app_tokens(self):
+        root = Path(__file__).resolve().parents[2] / ".github/workflows"
+        for workflow in ("release.yml", "release-publication.yml"):
+            source = (root / workflow).read_text()
+            self.assertNotIn("secrets.RELEASE_CONTENTS_TOKEN", source)
+            self.assertNotIn("mode=pat", source)
         jobs = self.jobs("release-publication.yml", ("publish", "tap"))
-        for token, job in zip(("publication-token", "tap-token"), jobs):
-            self.assertIn("client-id: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}", job)
-            self.assertIn("private-key: ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}", job)
-            self.assertNotIn("app-id:", job)
-            self.assertNotIn("vars.GLIMMER_RELEASE", job)
-            self.assertIn("if: steps.credentials.outputs.mode == 'app'", job)
-            selection = job.split("          RELEASE_CONTENTS_TOKEN:\n", 1)[1].split("        run:", 1)[0]
-            self.assertEqual(" ".join(selection.split()),
-                             "${{ steps.credentials.outputs.mode == 'pat' && secrets.RELEASE_CONTENTS_TOKEN || "
-                             f"steps.{token}.outputs.token " + "}}")
-            self.assertLess(job.index("Select publication credentials"),
-                            job.index(f"id: {token}\n"))
-            shell = self.shell(job, "Select publication credentials")
-            for client, key, mode in (("fixture-client", "fixture-key", "app"), ("", "", "pat"),
-                                      ("fixture-client", "", None), ("", "fixture-key", None)):
-                with self.subTest(client=bool(client), key=bool(key)), tempfile.TemporaryDirectory() as temporary:
-                    root = Path(temporary)
-                    output, summary = root / "output", root / "summary"
-                    output.touch()
-                    summary.touch()
-                    result = subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", shell],
-                                            env={"RELEASE_APP_CLIENT_ID": client, "RELEASE_APP_PRIVATE_KEY": key,
-                                                 "GITHUB_OUTPUT": str(output), "GITHUB_STEP_SUMMARY": str(summary)},
-                                            capture_output=True, text=True)
-                    self.assertEqual(result.returncode == 0, mode is not None, result.stderr)
-                    self.assertEqual(output.read_text(), f"mode={mode}\n" if mode else "")
-                    if mode == "pat":
-                        self.assertIn("PAT fallback", summary.read_text())
-                        self.assertIn("both App secrets are absent", summary.read_text())
-                    if mode is None:
-                        self.assertIn("Configure both", result.stderr)
-                    self.assertNotIn("fixture-key", result.stdout + result.stderr + summary.read_text())
+        for token, repository, job in zip(("publication-token", "tap-token"),
+                                          ("glimmer", "homebrew-glimmer"), jobs):
+            step = job.rsplit("      - name: Mint ", 1)[1].split("      - name:", 1)[0]
+            self.assertIn(f"id: {token}\n", step)
+            self.assertIn("client-id: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}", step)
+            self.assertIn("private-key: ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}", step)
+            self.assertIn(f"repositories: {repository}\n", step)
+            self.assertIn("permission-contents: write", step)
+            self.assertNotIn("if:", step)
+            self.assertNotIn("continue-on-error:", job)
+            self.assertNotIn("credentials.outputs", job)
+            selection = job.split("          RELEASE_CONTENTS_TOKEN:", 1)[1].split("        run:", 1)[0]
+            self.assertEqual(selection.strip(), "${{ steps." + token + ".outputs.token }}")
