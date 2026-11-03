@@ -6,6 +6,18 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.11.0 (RC 4)</title>
+      <description><![CDATA[
+<ul><li>Settings › Quality is simpler on Mac, iPhone and iPad. Display comes first, with presets named for what they send (Native and Retina scaled on Mac, each with its size) and HDR beside them. Network holds Bandwidth and, on Mac, the Wi-Fi helper.</li><li>Bandwidth is one choice: Automatic starts at the most the connection can carry and steps down only while it struggles, Maximum stays there, and Saver uses less. iPhone and iPad offer Automatic and Saver, and the separate Connection page is gone. Your saved choices carry over.</li><li>On Mac, full screen is one choice everywhere: Cover the screen or Use a Space. A built-in display with a notch still remembers its own choice, so a Space you pick for an external display doesn't change the laptop's.</li><li>PlayStation controllers connected before a stream starts keep their controller type and touchpad support without needing to reconnect.</li><li>Controllers with raw accelerometer readings advertise motion support correctly on Mac, iPhone and iPad.</li><li>PlayStation touchpad swipes reach the PC with default controls and custom controller layouts.</li><li>Starting a Mac stream with a PlayStation controller no longer crashes while reading its touchpad.</li></ul>
+]]></description>
+      <pubDate>Tue, 03 Nov 2026 17:53:54 GMT</pubDate>
+      <sparkle:version>20261041</sparkle:version>
+      <sparkle:shortVersionString>2026.11.0</sparkle:shortVersionString>
+      <sparkle:channel>rc</sparkle:channel>
+      <sparkle:minimumSystemVersion>15.7</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.11.0-rc.4/Glimmer-2026.11.0.zip" type="application/octet-stream" sparkle:edSignature="SlcZEBmfaCAY18htRLVh57ByxAmavEmgN/reRJCiG4o6v8esiAHOxIh3PZ+meoT8YHNIdBgTZG/teBhsqmYBAg==" length="8263326" />
+    </item>
+    <item>
       <title>2026.11.0 (RC 3)</title>
       <description><![CDATA[
 <ul><li>Turn adaptive stream quality on or off under Connection in Settings › Quality on Mac, next to Bandwidth. It no longer hides in Diagnostics, and your choice is kept.</li><li>PlayStation controllers connected before a stream starts keep their controller type and touchpad support without needing to reconnect.</li><li>Controllers with raw accelerometer readings advertise motion support correctly on Mac, iPhone and iPad.</li><li>PlayStation touchpad swipes reach the PC with default controls and custom controller layouts.</li><li>Starting a Mac stream with a PlayStation controller no longer crashes while reading its touchpad.</li></ul>
