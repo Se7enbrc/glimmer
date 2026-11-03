@@ -263,9 +263,8 @@ struct QualityPane: View {
 
             if model.qualityPreset == .custom { customSection }
 
-            // Bandwidth in its own card, segmented like "Show the stream": two
-            // values, read at a glance. The number under "Your next stream"
-            // moves with it; the session takes it at launch.
+            // Bandwidth in its own card, segmented like "Show the stream"; the
+            // number under "Your next stream" moves with it.
             Section {
                 Picker("Bandwidth", selection: $model.bitrateMode) {
                     ForEach(BitrateMode.allCases) { mode in
@@ -281,6 +280,7 @@ struct QualityPane: View {
                     + "On Wi-Fi it follows what the radio can carry. Bandwidth saver uses less.")
             }
 
+            SettingsAdaptiveQualitySection()
             // Beside Bandwidth: the couch player's network controls, in the pane's first screen.
             Section("Wi-Fi") {
                 Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {

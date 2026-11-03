@@ -37,9 +37,9 @@ thermal and Low Power notifications, and on iPhone the data-service RAT hint.
 `AdaptiveBandwidth.defaultsKey` (`adaptiveBandwidthEnabled`) is read once per
 stream. Its registered default is on for beta builds only: TestFlight and Xcode
 installs on iOS, diagnostic builds and `GlimmerUpdateChannel=rc` Macs. The
-Diagnostics toggle (iOS Settings, Mac Diagnostics pane) overrides it for
-before/after trials. Off keeps the configured launch rate and never actuates;
-decisions are still recorded when telemetry is on.
+Connection toggle (iOS Settings › Connection, Mac Settings › Quality) saves an
+explicit choice that overrides it. Off keeps the configured launch rate and
+never actuates; decisions are still recorded when telemetry is on.
 
 ### Owner decisions
 

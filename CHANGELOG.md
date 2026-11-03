@@ -2,6 +2,10 @@
 
 ## 2026.11.0 - Unreleased
 
+- Turn adaptive stream quality on or off under Connection in Settings › Quality
+  on Mac, next to Bandwidth. It no longer hides in Diagnostics, and your choice
+  is kept.
+
 - PlayStation controllers connected before a stream starts keep their controller
   type and touchpad support without needing to reconnect.
 

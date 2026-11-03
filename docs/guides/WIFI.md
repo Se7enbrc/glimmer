@@ -36,15 +36,9 @@ it again once the connection recovers. The game stays running on the PC while
 Glimmer reconnects in the same stream view. A longer adjustment says “Adjusting
 stream quality…”; brief changes may show no message.
 
-To compare it with a fixed bitrate:
-
-1. Open Settings › Diagnostics.
-2. Turn off “Adaptive stream quality”.
-3. Start a new stream.
-
-On Mac, if the switch is hidden, open Settings › About and Option-click the
-version number to reveal the extra Diagnostics controls. Production iPhone and
-iPad builds omit Diagnostics.
+Turn it on or off under Connection in Settings › Quality on Mac, or in Settings
+› Connection on iPhone and iPad. Your choice is kept and applies to the next
+stream.
 
 ### Low Data Mode on iPhone and iPad
 
