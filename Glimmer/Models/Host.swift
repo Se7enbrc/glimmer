@@ -106,9 +106,9 @@ extension LibraryApp {
 extension QualityPreset {
     var subtitle: String {
         switch self {
-        case .matchDisplay: return "Every pixel of this Mac's display. Needs a solid network."
-        case .hidpi: return "This Mac's usual Retina scale. A touch softer, far less bandwidth."
-        case .custom: return "Pick your own resolution and refresh rate."
+        case .matchDisplay: return "Every pixel of this display."
+        case .hidpi: return "This Mac's default Retina size."
+        case .custom: return "Your own size and refresh rate, full screen or in a window."
         }
     }
 }

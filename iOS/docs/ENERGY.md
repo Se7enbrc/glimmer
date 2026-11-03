@@ -49,8 +49,8 @@ device. Record results separately for each device and OS build.
 
 Repeat the scored interval without attached instruments. Alternate baseline and
 candidate at least three times with equivalent starting conditions. Keep the
-stats HUD and adaptive-quality setting matched; beta and production have
-separate defaults for adaptive quality, but neither includes custom recording.
+stats HUD and Bandwidth setting matched; beta and production have separate
+Bandwidth defaults, but neither includes custom recording.
 
 For a watts claim, use an independently measured device-energy source with known
 sampling units and boundaries. Report joules, average watts (`joules / 1800`),

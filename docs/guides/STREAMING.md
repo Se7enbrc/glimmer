@@ -67,20 +67,22 @@ On Mac:
 1. Open Settings › Quality.
 2. Choose your next stream's mode.
 
-| Mode            | Picture                                |
-| --------------- | -------------------------------------- |
-| Sharpest        | Native Mac pixels.                     |
-| Balanced        | Half-width, half-height.               |
-| Custom          | Resolution, frame rate, window choice. |
-| Highest quality | More detail within connection limits.  |
+| Mode          | Picture                                |
+| ------------- | -------------------------------------- |
+| Native        | Every pixel of the display.            |
+| Retina scaled | The Mac's default Retina size.         |
+| Custom        | Resolution, frame rate, window choice. |
+
+Under Network, “Bandwidth” offers Automatic, Maximum and Saver. Maximum uses
+more detail within connection limits.
 
 {% hint style="info" %}
 
 Fullscreen fills the panel around the camera by default, without creating a
-separate desktop. To swipe away and back, turn on “Keep picture below the
-camera” in Settings › Quality, or “Use a full-screen Space” on a display without
-a notch. The next stream opens in its own macOS Space. On a Mac with a notch,
-the picture stays below the camera. Choices stay saved.
+separate desktop. To swipe away and back, set “Full screen” to “Use a Space” in
+Settings › Quality. The next stream opens in its own macOS Space. On a Mac with
+a notch, the picture stays below the camera. Glimmer remembers the choice
+separately for a built-in display with a notch and for other displays.
 
 {% endhint %}
 
@@ -139,11 +141,11 @@ with H.264 as a fallback. It requests 10-bit HDR on an HDR-capable display when
 the PC also supports it. Format selection is automatic; there is no iOS codec or
 HDR switch.
 
-In beta builds,
-[adaptive stream quality](WIFI.md#adaptive-stream-quality-in-beta-builds) lowers
-the bitrate when the connection struggles and raises it as it recovers. A longer
-change says “Adjusting stream quality…”. The game keeps running on the PC during
-the adjustment.
+With
+[Bandwidth set to Automatic](WIFI.md#bandwidth-automatic-maximum-and-saver),
+Glimmer lowers the bitrate when the connection struggles and raises it as it
+recovers. A longer change says “Adjusting stream quality…”. The game keeps
+running on the PC during the adjustment.
 
 Next: [match the PC display](../HOST_SETUP.md) or
 [automate launching](../AUTOMATION.md).

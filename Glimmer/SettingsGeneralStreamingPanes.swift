@@ -14,7 +14,7 @@ import SwiftUI
 struct GeneralPane: View {
     var reconcileLoginItem: @MainActor () async -> SMAppService.Status? = { await LoginItemManager.reconcile() }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) var model
     @AppStorage("launchAtLogin", store: PersistentStorage.defaults) private var launchAtLogin: Bool = false
     @AppStorage("launchMinimized", store: PersistentStorage.defaults) private var launchMinimized: Bool = false
 
@@ -192,20 +192,20 @@ enum CommonResolution: CaseIterable {
 }
 
 struct QualityPane: View {
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) var adaptiveBandwidth = false
 
     /// The privileged AWDL network helper (parks awdl0 during streams). Shared
     /// singleton so this toggle and the stream lifecycle drive one instance.
     /// Lives in Quality because parking AirDrop's radio is a stream-smoothness
     /// lever, not a general app setting.
-    @ObservedObject private var awdl = AWDLHelperManager.shared
+    @ObservedObject var awdl = AWDLHelperManager.shared
 
     /// Defer the helper register/unregister off the SwiftUI transaction - an
     /// inline XPC-backed SMAppService call mid-update dismisses the Settings
     /// window.
-    private func scheduleHelperToggle(_ enable: Bool) {
+    func scheduleHelperToggle(_ enable: Bool) {
         Task { @MainActor in
             if enable { AWDLHelperManager.shared.enable() } else { AWDLHelperManager.shared.disable() }
         }
@@ -238,116 +238,10 @@ struct QualityPane: View {
         // alone exposes the value but not per-property Bindings).
         @Bindable var model = model
         Form {
-            // Header is "Preset" now that the pane itself is named Quality -
-            // "Quality" twice in a row read as a stutter.
-            Section {
-                Picker("", selection: $model.qualityPreset) {
-                    ForEach(QualityPreset.allCases) { preset in
-                        VStack(alignment: .leading) {
-                            Text(preset.displayName).fontWeight(.medium)
-                            Text(preset.subtitle).font(.footnote).foregroundStyle(.secondary)
-                        }
-                        .tag(preset)
-                    }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-                // Nothing else lives in this card: a switch or a picker under
-                // the radio rows read as extra preset rows (owner's screenshot).
-            } header: {
-                Text("Preset")
-            } footer: {
-                // Said once for the pane, under whichever card ends the preset choice.
-                if model.qualityPreset != .custom { Text("Changes here apply to the next stream.") }
-            }
+            displaySection
+            networkSection
 
-            if model.qualityPreset == .custom { customSection }
-
-            // Bandwidth in its own card, segmented like "Show the stream"; the
-            // number under "Your next stream" moves with it.
-            Section {
-                Picker("Bandwidth", selection: $model.bitrateMode) {
-                    ForEach(BitrateMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help("Highest quality asks for the most the link can carry: twice the usual bitrate over Ethernet, "
-                    + "or half as much again over Wi-Fi, held to what the radio is doing. "
-                    + "Bandwidth saver asks for the usual bitrate.")
-            } footer: {
-                Text("Highest quality gives every frame more bits, which keeps fine detail from turning to grain. "
-                    + "On Wi-Fi it follows what the radio can carry. Bandwidth saver uses less.")
-            }
-
-            SettingsAdaptiveQualitySection()
-            // Beside Bandwidth: the couch player's network controls, in the pane's first screen.
-            Section("Wi-Fi") {
-                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
-                        Text("Pauses AirDrop and Continuity while you stream, so they can't take over "
-                            + "the Wi-Fi and freeze the picture. They come back the moment you stop. "
-                            + "Needs a one-time approval.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .accessibilityLabel("Smooth out Wi-Fi stutter while streaming")
-                .help("Installs a small helper that pauses AirDrop's radio for each stream.")
-                if case .requiresApproval = awdl.state {
-                    HStack(spacing: 8) {
-                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(.orange)
-                        Spacer()
-                        Button("Open Login Items") { awdl.openSystemSettings() }
-                    }
-                }
-                if case .unavailable(let why) = awdl.state {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
-                            .font(.footnote).foregroundStyle(.red)
-                        if let url = awdl.recoveryDocURL {
-                            Link("How to manage login items (Apple Support)", destination: url)
-                                .font(.footnote)
-                        }
-                    }
-                }
-            }
-
-            // One HDR switch for every preset, on by default; off asks the PC
-            // for SDR. Read at session start, like Bandwidth.
-            Section {
-                Toggle("HDR", isOn: $model.streamHDR)
-                    .toggleStyle(.switch)
-                    .help("Sends a 10-bit high-dynamic-range stream when the PC and this display both support it. "
-                        + "Off asks the PC for SDR.")
-            } footer: {
-                Text("Brighter highlights and deeper color when the PC and this display both support HDR.")
-            }
-
-            if model.effectiveDisplayMode == .fullScreen {
-                Section {
-                    if model.currentDisplayHasNotch {
-                        Toggle("Keep picture below the camera", isOn: Binding(
-                            get: { !model.streamCoversNotch }, set: { model.streamCoversNotch = !$0 }))
-                            .toggleStyle(.switch)
-                            .help("Uses a macOS full-screen Space below the notch. Off covers the whole panel.")
-                    } else {
-                        Toggle("Use a full-screen Space", isOn: $model.streamUsesFullScreenSpace)
-                            .toggleStyle(.switch)
-                            .help("Opens the next stream in a separate macOS Space. Off covers the current desktop.")
-                    }
-                } footer: {
-                    if model.currentDisplayHasNotch {
-                        Text("Off, a thin strip of the picture hides behind the notch.")
-                    }
-                    Text("macOS may turn on Game Mode. Change it in Game Overlay › Settings › Game Mode.")
-                }
-            }
-
-            Section {
+            Section("Stats") {
                 Toggle("Stream stats", isOn: $model.showStreamStats)
                 // Footnote tracks the actual configured chord so it stays
                 // accurate if the user rebinds the hotkey in Input.
@@ -402,7 +296,7 @@ struct QualityPane: View {
 
     /// Custom's choices, in a card of their own straight under the preset card: rows inside that
     /// card read as more presets. Window is a Custom thing; the panel-native presets are full screen.
-    @ViewBuilder private var customSection: some View {
+    @ViewBuilder var customSection: some View {
         @Bindable var model = model
         Section {
             Picker("Show the stream", selection: $model.streamDisplayMode) {
@@ -480,10 +374,10 @@ struct QualityPane: View {
             }
         } footer: {
             // A window's one surprise: the game takes the mouse while the pointer is over it.
-            Text(model.streamDisplayMode == .window
-                ? "Changes here apply to the next stream. The game takes your mouse while the pointer is over "
-                    + "the window. Hold Esc or switch apps to get it back."
-                : "Changes here apply to the next stream.")
+            if model.streamDisplayMode == .window {
+                Text("The game takes your mouse while the pointer is over the window. "
+                    + "Hold Esc or switch apps to get it back.")
+            }
         }
     }
 
@@ -514,7 +408,7 @@ struct QualityPane: View {
 // most cleanly as its own view. Reads + writes the manager directly via
 // @Environment; no separate binding plumbing.
 struct StatsCustomRowsPicker: View {
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) var model
 
     /// Row catalogue grouped by section for display. The order here
     /// matches the rendering order in StreamStatsSnapshot.rows() - the

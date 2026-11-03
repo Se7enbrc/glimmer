@@ -774,7 +774,7 @@
 		BFEB080D8DA444E99209EFF1 /* VideoDecoder+Overlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */; };
 		D678220340FD4652A784D2A5 /* StatsOverlayFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */; };
 		8A8E63DBF702E6940E68DE19 /* SettingsReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE12E33A6D8A713FDB5D30F /* SettingsReset.swift */; };
-		C9A1A6A864B5A75FE6B1E2C6 /* SettingsAdaptiveQualitySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D0E0D3DC21140B4535E3B06 /* SettingsAdaptiveQualitySection.swift */; };
+		C9A1A6A864B5A75FE6B1E2C6 /* QualityPane+Sections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D0E0D3DC21140B4535E3B06 /* QualityPane+Sections.swift */; };
 		3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */; };
 		E35AE6DC87012F351661D2E3 /* AppModel+ResetSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFA616643A323C75F719E9F /* AppModel+ResetSettings.swift */; };
 		56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */; };
@@ -1635,7 +1635,7 @@
 		3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Video/VideoDecoder+Overlay.swift"; sourceTree = "<group>"; };
 		1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StatsOverlayFormatting.swift"; sourceTree = "<group>"; };
 		2CE12E33A6D8A713FDB5D30F /* SettingsReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/SettingsReset.swift"; sourceTree = SOURCE_ROOT; };
-		2D0E0D3DC21140B4535E3B06 /* SettingsAdaptiveQualitySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/SettingsAdaptiveQualitySection.swift"; sourceTree = SOURCE_ROOT; };
+		2D0E0D3DC21140B4535E3B06 /* QualityPane+Sections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/QualityPane+Sections.swift"; sourceTree = SOURCE_ROOT; };
 		98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/SettingsResetSection.swift"; sourceTree = SOURCE_ROOT; };
 		3FFA616643A323C75F719E9F /* AppModel+ResetSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/AppModel+ResetSettings.swift"; sourceTree = SOURCE_ROOT; };
 		837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/SettingsResetTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -1788,7 +1788,7 @@
 				DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */,
 				74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */,
 				A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */,
-				2D0E0D3DC21140B4535E3B06 /* SettingsAdaptiveQualitySection.swift */,
+				2D0E0D3DC21140B4535E3B06 /* QualityPane+Sections.swift */,
 				98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */,
 				A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */,
 				13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */,
@@ -2779,7 +2779,7 @@
 				E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */,
 				60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */,
 				CAF9EA985F46440091EE1715 /* ControllerBindingRecorder.swift in Sources */,
-				C9A1A6A864B5A75FE6B1E2C6 /* SettingsAdaptiveQualitySection.swift in Sources */,
+				C9A1A6A864B5A75FE6B1E2C6 /* QualityPane+Sections.swift in Sources */,
 				3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */,
 				388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */,
 				BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */,

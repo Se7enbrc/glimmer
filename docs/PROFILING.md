@@ -770,7 +770,7 @@ the next stream unless noted.
 
 | Key                          | Default          | Effect                                                                      |
 | ---------------------------- | ---------------- | --------------------------------------------------------------------------- |
-| `bitrateBoostWifi`           | float 1.5        | Highest quality Wi-Fi multiplier; radio gate and cap still apply.           |
+| `bitrateBoostWifi`           | float 1.5        | Maximum Wi-Fi multiplier; radio gate and cap still apply.                   |
 | `hidGamepadClaimAll`         | bool NO          | Claim GameController pads through raw HID too; reconnect/relaunch to apply. |
 | `diagFileLogDebug`           | bool NO          | Verbose in-app/session file log; also in the hidden Telemetry pane.         |
 | `pacerTickOffMain`           | bool YES         | NO moves ticks to the main run loop.                                        |

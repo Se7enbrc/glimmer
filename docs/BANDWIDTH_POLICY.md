@@ -37,9 +37,10 @@ thermal and Low Power notifications, and on iPhone the data-service RAT hint.
 `AdaptiveBandwidth.defaultsKey` (`adaptiveBandwidthEnabled`) is read once per
 stream. Its registered default is on for beta builds only: TestFlight and Xcode
 installs on iOS, diagnostic builds and `GlimmerUpdateChannel=rc` Macs. The
-Connection toggle (iOS Settings › Connection, Mac Settings › Quality) saves an
-explicit choice that overrides it. Off keeps the configured launch rate and
-never actuates; decisions are still recorded when telemetry is on.
+Bandwidth choice (Settings › Quality › Network) saves an explicit choice that
+overrides it: Automatic writes adaptive on, while Saver, and Maximum on Mac,
+write it off. Off keeps the configured launch rate and never actuates; decisions
+are still recorded when telemetry is on.
 
 ### Owner decisions
 
@@ -123,12 +124,11 @@ or PHY observation establishes downlink capacity by itself.
 
 ## Inputs and recording
 
-Disabling adaptive quality removes policy creation, watchdog scheduling, RTT
-sample collection and policy receive histograms for that session, even with
-telemetry on. Mac also omits the policy path monitor. Mobile retains route facts
-through startup for packet-size selection, then stops observation when
-adaptation is off. Essential watchdog recovery and explicit window resizing
-remain available.
+Turning adaptive off removes policy creation, watchdog scheduling, RTT sample
+collection and policy receive histograms for that session, even with telemetry
+on. Mac also omits the policy path monitor. Mobile retains route facts through
+startup for packet-size selection, then stops observation when adaptation is
+off. Essential watchdog recovery and explicit window resizing remain available.
 
 The shared `BandwidthSignals` adapter owns an event-driven `NWPathMonitor`,
 current data-service RAT classification, thermal and Low Power notifications. It

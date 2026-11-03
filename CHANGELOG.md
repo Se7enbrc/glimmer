@@ -2,9 +2,19 @@
 
 ## 2026.11.0 - Unreleased
 
-- Turn adaptive stream quality on or off under Connection in Settings › Quality
-  on Mac, next to Bandwidth. It no longer hides in Diagnostics, and your choice
-  is kept.
+- Settings › Quality is simpler on Mac, iPhone and iPad. Display comes first,
+  with presets named for what they send (Native and Retina scaled on Mac, each
+  with its size) and HDR beside them. Network holds Bandwidth and, on Mac, the
+  Wi-Fi helper.
+
+- Bandwidth is one choice: Automatic starts at the most the connection can carry
+  and steps down only while it struggles, Maximum stays there, and Saver uses
+  less. iPhone and iPad offer Automatic and Saver, and the separate Connection
+  page is gone. Your saved choices carry over.
+
+- On Mac, full screen is one choice everywhere: Cover the screen or Use a Space.
+  A built-in display with a notch still remembers its own choice, so a Space you
+  pick for an external display doesn't change the laptop's.
 
 - PlayStation controllers connected before a stream starts keep their controller
   type and touchpad support without needing to reconnect.

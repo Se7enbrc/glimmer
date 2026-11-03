@@ -127,7 +127,7 @@ final class IPadNavigationTests: XCTestCase {
             }
             settings.tap()
             XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-            let pages = ["General", "Quality", "Input", "Connection"]
+            let pages = ["General", "Quality", "Input"]
             for page in pages {
                 app.buttons[page].tap()
                 XCTAssertTrue(app.navigationBars[page].waitForExistence(timeout: 5))

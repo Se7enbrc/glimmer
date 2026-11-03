@@ -10,11 +10,11 @@ controller layouts and continue running games on each device.
 | Sound    | [Audio](AUDIO.md)                                                                                                 |
 | Controls | [Controllers, layouts and touch controls](guides/CONTROLLERS.md) · [Keyboard and mouse](guides/KEYBOARD_MOUSE.md) |
 
-| Setup      | Guide                                                                               |
-| ---------- | ----------------------------------------------------------------------------------- |
-| Connection | [Wi-Fi and adaptive stream quality](guides/WIFI.md) · [PCs and wake](guides/PCS.md) |
-| Launching  | [Buttons or Covers](guides/LAUNCHER.md) · [Mac automation](AUTOMATION.md)           |
-| Data       | [Privacy](PRIVACY.md)                                                               |
+| Setup      | Guide                                                                     |
+| ---------- | ------------------------------------------------------------------------- |
+| Connection | [Wi-Fi and bandwidth](guides/WIFI.md) · [PCs and wake](guides/PCS.md)     |
+| Launching  | [Buttons or Covers](guides/LAUNCHER.md) · [Mac automation](AUTOMATION.md) |
+| Data       | [Privacy](PRIVACY.md)                                                     |
 
 Use touch controls on iPhone and iPad, including while the picture plays on a
 connected display. On Mac, use Mini Player, the menu bar, Wake on LAN, the Wi-Fi

@@ -19,7 +19,7 @@ private PC details. Glimmer does not log keys, PINs, certificates or button
 presses. No MetricKit subscriber or custom upload service is installed.
 
 Old files from an earlier beta remain untouched. Do not copy pairing identity or
-certificate storage when investigating a problem. Settings → Connection contains
-Adaptive stream quality; it controls the connection, not recording.
+certificate storage when investigating a problem. Settings › Quality › Network
+contains Bandwidth; it controls the connection, not recording.
 
 Next: [test the exact TestFlight candidate](TESTFLIGHT.md).

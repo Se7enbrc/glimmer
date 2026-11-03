@@ -80,8 +80,8 @@ package enum QualityPreset: String, CaseIterable, Identifiable, Sendable {
     /// numbers live in the Quality pane's "Your next stream" summary.
     package var displayName: String {
         switch self {
-        case .matchDisplay: return "Sharpest"
-        case .hidpi: return "Balanced"
+        case .matchDisplay: return "Native"
+        case .hidpi: return "Retina scaled"
         case .custom: return "Custom"
         }
     }
