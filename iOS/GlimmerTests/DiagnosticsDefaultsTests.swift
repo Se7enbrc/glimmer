@@ -78,7 +78,8 @@ struct DiagnosticsDefaultsTests {
 
     @Test func settingsKeepAdaptiveQualityWithoutRecording() {
         #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("diagnostics") == false)
-        #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("connection"))
+        // Bandwidth (Automatic or Saver) lives in Quality now that Connection is gone.
+        #expect(GlimmerSettings.Page.allCases.map(\.rawValue) == ["general", "quality", "pcs", "input"])
     }
 }
 
