@@ -21,16 +21,16 @@ diagnostic files are neither read nor removed.
 
 ## Flavours and settings
 
-Beta still enables adaptive stream quality by default; production does not.
-Saved choices take precedence. Production continues to omit receive queue/jitter
-samples. Both show the same switch in Settings → Connection, in the former
-Diagnostics page's position. The recording toggle is removed.
+Beta still defaults Bandwidth to Automatic; production defaults to Saver. Saved
+choices take precedence. Production continues to omit receive queue/jitter
+samples. Both show the same Bandwidth choice in Settings › Quality › Network.
+The recording toggle is removed.
 
 The existing `GLIMMER_DIAGNOSTICS` beta compiler flag now selects only that
-adaptive-quality default and its in-memory receive timing on iOS. It cannot
-enable a shared recorder. Keeping the flavours preserves their existing
-stream-control defaults and archive identities; no release workflow or protected
-release script changes are needed.
+Bandwidth default and its in-memory receive timing on iOS. It cannot enable a
+shared recorder. Keeping the flavours preserves their existing stream-control
+defaults and archive identities; no release workflow or protected release script
+changes are needed.
 
 The compiled-content inspector rejects custom recording types and controls in
 both flavours. Release archive and export validation retain their flavour,

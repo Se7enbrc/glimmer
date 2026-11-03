@@ -311,7 +311,7 @@ count.
    stop streaming, quit Glimmer and install the downloaded app.
 2. Record candidate tag, source SHA, build number, macOS, audio devices and Game
    Mode state.
-3. Test at Highest quality with [telemetry](PROFILING.md#opt-in-telemetry) and
+3. Test at Maximum bandwidth with [telemetry](PROFILING.md#opt-in-telemetry) and
    bookmarks.
 4. Mark each check passed, failed or not tested. Stop the final session to write
    its scorecard.

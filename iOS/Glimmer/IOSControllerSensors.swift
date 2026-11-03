@@ -20,7 +20,7 @@ final class IOSControllerMotion: @unchecked Sendable {
     }
 
     func output() -> ControllerMotionCapture {
-        ControllerMotionCapture(hasAcceleration: motion?.hasGravityAndUserAcceleration == true,
+        ControllerMotionCapture(hasAcceleration: motion != nil,
             hasRotation: motion?.hasRotationRate == true, read: { [self] in read() },
             setHandler: { [self] in setHandler($0) }, setSensorsActive: { [self] in setSensorsActive($0) })
     }

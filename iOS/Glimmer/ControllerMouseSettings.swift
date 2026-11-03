@@ -13,7 +13,7 @@ struct GlimmerSettings: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     enum Page: String, CaseIterable, Identifiable {
-        case general, quality, pcs, input, connection
+        case general, quality, pcs, input
 
         var id: Self { self }
         var title: String {
@@ -22,7 +22,6 @@ struct GlimmerSettings: View {
             case .quality: "Quality"
             case .pcs: "PCs"
             case .input: "Input"
-            case .connection: "Connection"
             }
         }
         var symbol: String {
@@ -31,7 +30,6 @@ struct GlimmerSettings: View {
             case .quality: "gauge.with.dots.needle.67percent"
             case .pcs: "display"
             case .input: "gamecontroller"
-            case .connection: "network"
             }
         }
     }
@@ -87,8 +85,6 @@ private struct GlimmerSettingsPage: View {
     @AppStorage("leaveGamesRunning", store: PersistentStorage.defaults) private var leaveGamesRunning = false
     @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
 
-    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
-
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -113,8 +109,6 @@ private struct GlimmerSettingsPage: View {
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings
-
-            case .connection: connectionSettings
             }
         }
         .navigationTitle(page.title)
@@ -176,15 +170,6 @@ private struct GlimmerSettingsPage: View {
         }
         ControllerMouseSettingsSection()
     }
-
-    private var connectionSettings: some View {
-        Section {
-            Toggle("Adaptive stream quality", isOn: $adaptiveBandwidth)
-        } footer: {
-            Text("Adaptive stream quality lowers the bitrate when the connection struggles "
-                 + "and raises it again once it recovers.")
-        }
-    }
 }
 
 @MainActor
@@ -215,6 +200,7 @@ private struct StreamQualitySettings: View {
     @AppStorage("showStreamStats", store: PersistentStorage.defaults) private var showStats = false
     @AppStorage("statsOverlayPreset", store: PersistentStorage.defaults)
     private var preset: StatsOverlayPreset = .minimal
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -225,11 +211,24 @@ private struct StreamQualitySettings: View {
                 streamProfilePicker
             }
         } header: {
-            Text("Stream")
+            Text("Display")
         } footer: {
             Text(streamExplanation)
         }
         Section {
+            // iOS has no fixed maximum rate, so it offers the two choices it can keep.
+            Picker("Bandwidth", selection: Binding(
+                get: { adaptiveBandwidth ? BandwidthChoice.automatic : .saver },
+                set: { adaptiveBandwidth = $0 == .automatic })) {
+                ForEach([BandwidthChoice.automatic, .saver]) { Text($0.displayName).tag($0) }
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("Network")
+        } footer: {
+            Text("Automatic starts high and steps down only while the connection struggles. Saver uses less.")
+        }
+        Section("Stats") {
             Toggle("Stream stats", isOn: $showStats)
             Picker("Overlay detail", selection: $preset) {
                 ForEach(StatsOverlayPreset.allCases.filter { $0 != .custom || preset == .custom }, id: \.self) {

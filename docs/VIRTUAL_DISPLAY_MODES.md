@@ -13,8 +13,8 @@ display reports remain authoritative.
 
 | Choice                 | Request rule                                                                                                                                                      | Source                                                                                                            |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Mac Sharpest           | Panel-native pixels from Core Graphics; both dimensions rounded down to even. FPS is `NSScreen.maximumFramesPerSecond`, or 60 if unavailable.                     | [QualityCalculator.swift](../Glimmer/QualityCalculator.swift), `mainDisplayMode`, `effectiveValuesForPreset`      |
-| Mac Balanced           | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Sharpest.                                 | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
+| Mac Native             | Panel-native pixels from Core Graphics; both dimensions rounded down to even. FPS is `NSScreen.maximumFramesPerSecond`, or 60 if unavailable.                     | [QualityCalculator.swift](../Glimmer/QualityCalculator.swift), `mainDisplayMode`, `effectiveValuesForPreset`      |
+| Mac Retina scaled      | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Native.                                   | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
 | Mac Custom             | Width 640–7680, height 480–4320, integer FPS 30–240. Round dimensions down to even. Full screen preserves FPS; windowed caps to the display, with a 30 fps floor. | [bounds](../GlimmerEngine/Models/StreamSizeBounds.swift), [window cap](../Glimmer/Models/StreamDisplayMode.swift) |
 | Mac common-size menu   | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160. These change Custom's size, not its FPS.                                                                       | [CommonResolution](../Glimmer/SettingsGeneralStreamingPanes.swift)                                                |
 | iPhone and iPad Native | Target the window's physical pixels, preserving orientation and rounding down to even; choose the closest listed mobile mode under the display/120 fps cap.       | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), [catalog](../iOS/Glimmer/StreamDisplayModes.swift)     |
@@ -42,42 +42,42 @@ linked Apple specifications give the physical panel sizes.
 
 ## Mac displays
 
-Each row gives Sharpest and the actual Balanced request. FPS normally equals the
-maximum shown. The matching samples also include 48, 50 and 60 for MacBook Pro
-and Pro Display XDR fixed-refresh use, and common lower integer rates for
+Each row gives Native and the actual Retina scaled request. FPS normally equals
+the maximum shown. The matching samples also include 48, 50 and 60 for MacBook
+Pro and Pro Display XDR fixed-refresh use, and common lower integer rates for
 Custom. Fractional rates such as 59.94 are not selectable as Glimmer FPS.
 
-| Models and Apple specifications                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Sharpest    | Balanced    | Maximum Hz |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------- | ---------- |
-| [MacBook Air (15-inch, M5)](https://support.apple.com/en-us/126321), [MacBook Air (15-inch, M4, 2025)](https://support.apple.com/en-us/122210), [MacBook Air (15-inch, M3, 2024)](https://support.apple.com/en-us/118552), [MacBook Air (15-inch, M2, 2023)](https://support.apple.com/en-us/111346)                                                                                                                                                                                                                                                                                                     | 2880 × 1864 | 1440 × 932  | 60         |
-| [MacBook Air (13-inch, M5)](https://support.apple.com/en-us/126320), [MacBook Air (13-inch, M4, 2025)](https://support.apple.com/en-us/122209), [MacBook Air (13-inch, M3, 2024)](https://support.apple.com/en-us/118551), [MacBook Air (M2, 2022)](https://support.apple.com/en-us/111867)                                                                                                                                                                                                                                                                                                              | 2560 × 1664 | 1280 × 832  | 60         |
-| [MacBook Air (M1, 2020)](https://support.apple.com/en-us/111883), [MacBook Pro (13-inch, M2, 2022)](https://support.apple.com/en-us/111869), [MacBook Pro (13-inch, M1, 2020)](https://support.apple.com/en-us/111893)                                                                                                                                                                                                                                                                                                                                                                                   | 2560 × 1600 | 1280 × 800  | 60         |
-| [MacBook Pro (14-inch, M5 Pro or M5 Max)](https://support.apple.com/en-us/126318), [MacBook Pro (14-inch, M5)](https://support.apple.com/en-us/125405), [MacBook Pro (14-inch, 2024)](https://support.apple.com/en-us/121552), [MacBook Pro (14-inch, 2024)](https://support.apple.com/en-us/121553), [MacBook Pro (14-inch, Nov 2023)](https://support.apple.com/en-us/117735), [MacBook Pro (14-inch, Nov 2023)](https://support.apple.com/en-us/117736), [MacBook Pro (14-inch, 2023)](https://support.apple.com/en-us/111340), [MacBook Pro (14-inch, 2021)](https://support.apple.com/en-us/111902) | 3024 × 1964 | 1512 × 982  | 120        |
-| [MacBook Pro (16-inch, M5 Pro or M5 Max)](https://support.apple.com/en-us/126319), [MacBook Pro (16-inch, 2024)](https://support.apple.com/en-us/121554), [MacBook Pro (16-inch, Nov 2023)](https://support.apple.com/en-us/117737), [MacBook Pro (16-inch, 2023)](https://support.apple.com/en-us/111838), [MacBook Pro (16-inch, 2021)](https://support.apple.com/en-us/111901)                                                                                                                                                                                                                        | 3456 × 2234 | 1728 × 1116 | 120        |
-| [iMac (24-inch, 2024, Four ports)](https://support.apple.com/en-us/121557), [iMac (24-inch, 2024, Two ports)](https://support.apple.com/en-us/121556), [iMac (24-inch, 2023, Four ports)](https://support.apple.com/en-us/117734), [iMac (24-inch, 2023, Two ports)](https://support.apple.com/en-us/117733), [iMac (24-inch, M1, 2021)](https://support.apple.com/en-us/111895)                                                                                                                                                                                                                         | 4480 × 2520 | 2240 × 1260 | 60         |
-| [MacBook Neo](https://support.apple.com/en-us/126322)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 2408 × 1506 | 2408 × 1506 | 60         |
+| Models and Apple specifications                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Native      | Retina scaled | Maximum Hz |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| [MacBook Air (15-inch, M5)](https://support.apple.com/en-us/126321), [MacBook Air (15-inch, M4, 2025)](https://support.apple.com/en-us/122210), [MacBook Air (15-inch, M3, 2024)](https://support.apple.com/en-us/118552), [MacBook Air (15-inch, M2, 2023)](https://support.apple.com/en-us/111346)                                                                                                                                                                                                                                                                                                     | 2880 × 1864 | 1440 × 932    | 60         |
+| [MacBook Air (13-inch, M5)](https://support.apple.com/en-us/126320), [MacBook Air (13-inch, M4, 2025)](https://support.apple.com/en-us/122209), [MacBook Air (13-inch, M3, 2024)](https://support.apple.com/en-us/118551), [MacBook Air (M2, 2022)](https://support.apple.com/en-us/111867)                                                                                                                                                                                                                                                                                                              | 2560 × 1664 | 1280 × 832    | 60         |
+| [MacBook Air (M1, 2020)](https://support.apple.com/en-us/111883), [MacBook Pro (13-inch, M2, 2022)](https://support.apple.com/en-us/111869), [MacBook Pro (13-inch, M1, 2020)](https://support.apple.com/en-us/111893)                                                                                                                                                                                                                                                                                                                                                                                   | 2560 × 1600 | 1280 × 800    | 60         |
+| [MacBook Pro (14-inch, M5 Pro or M5 Max)](https://support.apple.com/en-us/126318), [MacBook Pro (14-inch, M5)](https://support.apple.com/en-us/125405), [MacBook Pro (14-inch, 2024)](https://support.apple.com/en-us/121552), [MacBook Pro (14-inch, 2024)](https://support.apple.com/en-us/121553), [MacBook Pro (14-inch, Nov 2023)](https://support.apple.com/en-us/117735), [MacBook Pro (14-inch, Nov 2023)](https://support.apple.com/en-us/117736), [MacBook Pro (14-inch, 2023)](https://support.apple.com/en-us/111340), [MacBook Pro (14-inch, 2021)](https://support.apple.com/en-us/111902) | 3024 × 1964 | 1512 × 982    | 120        |
+| [MacBook Pro (16-inch, M5 Pro or M5 Max)](https://support.apple.com/en-us/126319), [MacBook Pro (16-inch, 2024)](https://support.apple.com/en-us/121554), [MacBook Pro (16-inch, Nov 2023)](https://support.apple.com/en-us/117737), [MacBook Pro (16-inch, 2023)](https://support.apple.com/en-us/111838), [MacBook Pro (16-inch, 2021)](https://support.apple.com/en-us/111901)                                                                                                                                                                                                                        | 3456 × 2234 | 1728 × 1116   | 120        |
+| [iMac (24-inch, 2024, Four ports)](https://support.apple.com/en-us/121557), [iMac (24-inch, 2024, Two ports)](https://support.apple.com/en-us/121556), [iMac (24-inch, 2023, Four ports)](https://support.apple.com/en-us/117734), [iMac (24-inch, 2023, Two ports)](https://support.apple.com/en-us/117733), [iMac (24-inch, M1, 2021)](https://support.apple.com/en-us/111895)                                                                                                                                                                                                                         | 4480 × 2520 | 2240 × 1260   | 60         |
+| [MacBook Neo](https://support.apple.com/en-us/126322)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 2408 × 1506 | 2408 × 1506   | 60         |
 
 ### Apple external displays
 
-| Display and Apple specifications                                                                                                      | Sharpest    | Balanced    | Maximum Hz |
-| ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------- | ---------- |
-| [Studio Display (2022)](https://support.apple.com/en-us/111890), [Studio Display (2026)](https://www.apple.com/studio-display/specs/) | 5120 × 2880 | 2560 × 1440 | 60         |
-| [Studio Display XDR](https://www.apple.com/studio-display-xdr/specs/)                                                                 | 5120 × 2880 | 2560 × 1440 | 120        |
-| [Pro Display XDR](https://support.apple.com/en-us/111892)                                                                             | 6016 × 3384 | 3008 × 1692 | 60         |
+| Display and Apple specifications                                                                                                      | Native      | Retina scaled | Maximum Hz |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| [Studio Display (2022)](https://support.apple.com/en-us/111890), [Studio Display (2026)](https://www.apple.com/studio-display/specs/) | 5120 × 2880 | 2560 × 1440   | 60         |
+| [Studio Display XDR](https://www.apple.com/studio-display-xdr/specs/)                                                                 | 5120 × 2880 | 2560 × 1440   | 120        |
+| [Pro Display XDR](https://support.apple.com/en-us/111892)                                                                             | 6016 × 3384 | 3008 × 1692   | 60         |
 
 Studio Display XDR is capped at 60 Hz on M1, M1 Pro, M1 Max, M1 Ultra, M2 and M3
 Macs. Its Apple specification lists the compatible Mac and iPad models. The
 Apple-display sample includes both 60 and 120 Hz for Studio Display XDR, and
 48/50/60 for Pro Display XDR. MacBook Neo's integer half size is 1204 × 753, so
-Balanced retains 2408 × 1506. The built-in sample also includes the optional
-half size **1204 × 752**, rounded down to even, for Mac Custom.
+Retina scaled retains 2408 × 1506. The built-in sample also includes the
+optional half size **1204 × 752**, rounded down to even, for Mac Custom.
 
 ### Macs with separate displays
 
-These Apple Silicon Macs have no built-in panel. Sharpest, Balanced and the FPS
-come from the attached display, not the chip's maximum video-output capability.
-The sample includes Apple displays and common external sizes, but cannot cover
-every third-party display or a portrait Mac display automatically.
+These Apple Silicon Macs have no built-in panel. Native, Retina scaled and the
+FPS come from the attached display, not the chip's maximum video-output
+capability. The sample includes Apple displays and common external sizes, but
+cannot cover every third-party display or a portrait Mac display automatically.
 
 - [Mac mini (M6)](https://support.apple.com/en-us/128108),
   [Mac mini (M5 Pro)](https://support.apple.com/en-us/128108),
@@ -252,9 +252,9 @@ combinations**, in **51 resolution entries**. One entry holds several
 `<g_refresh_rate>` adds that rate to every resolution and does not deduplicate a
 rate already present locally.
 
-The mode budget prioritizes every named Apple hardware native and Mac Balanced
-request, including 60/120 Hz where the same size is shared or the screen caps
-the rate. It also keeps 48/50 Hz for MacBook Pro and Pro Display XDR
+The mode budget prioritizes every named Apple hardware native and Mac Retina
+scaled request, including 60/120 Hz where the same size is shared or the screen
+caps the rate. It also keeps 48/50 Hz for MacBook Pro and Pro Display XDR
 fixed-refresh use. The remaining standard modes are:
 
 | Sizes                                                     | Refresh rates in the sample |
@@ -332,7 +332,7 @@ still needs a Windows installation check.
 - The iOS 27.1 Duo Simulator inner mode, 2852 × 2006 @ 60. The mobile sample
   includes it; the published Duo hardware sizes remain in both files.
 - iPhone/iPad half-size modes and MacBook Neo's half size. No current Glimmer
-  preset requests them. All actual Mac Balanced sizes remain.
+  preset requests them. All actual Mac Retina scaled sizes remain.
 - Additional Custom rates: 24, 72, 90, 100, 144, 165 and 200 Hz throughout the
   catalog. 24 is also below Glimmer's 30 fps minimum. 48/50 remain only on the
   Apple displays above, and 30 remains only at 1080p.

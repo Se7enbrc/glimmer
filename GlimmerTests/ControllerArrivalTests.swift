@@ -20,8 +20,18 @@ struct ControllerArrivalTests {
 
     private typealias Arrival = InputForwarder.ControllerArrival
 
+    @Test func focusLossBeforeFirstArrivalDoesNotCreateAnUnknownController() {
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
+        defer { forwarder.detach() }
+        forwarder.backend = InputRecordingBackend()
+        let pad = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: pad)
+        forwarder.neutralizeControllers()
+        #expect(forwarder.releases.pending.isEmpty)
+    }
+
     @Test func touchContactsEndOnFocusLossAndRestartWithNewIDsInMiniPlayer() throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let window = ControllerFocusTestWindow()
         window.focused = true
@@ -59,7 +69,7 @@ struct ControllerArrivalTests {
 
     @Test(arguments: [false, true])
     func controllerTouchesRetireOnConnectionLossOrTeardown(teardown: Bool) {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
@@ -103,7 +113,7 @@ struct ControllerArrivalTests {
     }
 
     @Test func miniPlayerKeepsHeldControllerInputWhileKeyboardAndMouseRelease() throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let window = ControllerFocusTestWindow()
         forwarder.attach(to: window)
@@ -149,7 +159,7 @@ struct ControllerArrivalTests {
         let prior = GCController.shouldMonitorBackgroundEvents
         defer { GCController.shouldMonitorBackgroundEvents = prior }
         GCController.shouldMonitorBackgroundEvents = false
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         forwarder.setMiniPlayer(true)
         #expect(!GCController.shouldMonitorBackgroundEvents)
@@ -167,7 +177,7 @@ struct ControllerArrivalTests {
     }
 
     @Test func miniPlayerPreservesQuitDwellUntilControllerOwnershipEnds() {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let window = ControllerFocusTestWindow()
         forwarder.attach(to: window)
@@ -185,7 +195,7 @@ struct ControllerArrivalTests {
 
     /// Detach removes observers before a new pad can attach during stop.
     @Test func detachRemovesGamepadObservers() {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         forwarder.detach()
         #expect(forwarder.connectObserver == nil)
         #expect(forwarder.disconnectObserver == nil)
@@ -193,7 +203,7 @@ struct ControllerArrivalTests {
 
     /// Input before the stream is ready must not leave a deliver stamp.
     @Test func unreadyPadDoesNotStampInputDelivery() throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()
         forwarder.attach(gamepad: pad)
@@ -207,7 +217,7 @@ struct ControllerArrivalTests {
 
     /// Detach clears the stream's handler from a connected pad.
     @Test func detachClearsGamepadHandler() {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         let pad = GCController.withExtendedGamepad()
         forwarder.attach(gamepad: pad)
         let installed = pad.extendedGamepad?.valueChangedHandler != nil
@@ -218,7 +228,7 @@ struct ControllerArrivalTests {
 
     @Test(arguments: [false, true])
     func leavingStreamRestoresControllerSystemState(sessionEnded: Bool) throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()
         pad.playerIndex = .index4
@@ -243,7 +253,7 @@ struct ControllerArrivalTests {
 
     /// A stick or trigger held at Cmd-Tab must release on the PC without removing the pad.
     @Test func focusLossNeutralizesReadyPadWithoutRemovingItsSlot() throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()
         forwarder.attach(gamepad: pad)
@@ -258,8 +268,15 @@ struct ControllerArrivalTests {
         #expect(backend.calls.isEmpty)
 
         forwarder.isReady = true
+        let arrival = try #require(forwarder.attachedControllers[ObjectIdentifier(pad)]?.arrival)
+        try #require(forwarder.inputCore.announceController(slot: slot, arrival: arrival) == 0)
+        let held = GamepadAnalog(leftTrigger: 127, rightTrigger: 255,
+                                leftStickX: 12000, leftStickY: -12000, rightStickX: -8000, rightStickY: 8000)
+        forwarder.inputCore.sendController(slot: slot, buttons: 0, analog: held)
+        try #require(backend.calls.last?.analog == held)
+        let beforeFocusLoss = backend.calls.count
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
-        let sends = backend.calls.filter { $0.num == Int16(slot) }
+        let sends = backend.calls.dropFirst(beforeFocusLoss).filter { $0.num == Int16(slot) }
         #expect(sends.count == 1)
         let sent = try #require(sends.first)
         let analog = sent.analog
@@ -339,7 +356,7 @@ struct ControllerArrivalTests {
 
     /// A pad GameController has no haptics for is not offered rumble.
     @Test func rumbleNeedsHaptics() throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()
         try #require(pad.haptics == nil)
@@ -352,7 +369,7 @@ struct ControllerArrivalTests {
 
     /// MISC_FLAG is advertised only when a DualSense Mute actually reaches the PC.
     @Test func muteIsAdvertisedOnlyWhenForwarded() {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()
         let misc = UInt32(bitPattern: StreamProtocol.MISC_FLAG)
@@ -376,7 +393,7 @@ struct ControllerArrivalTests {
     /// One unplugged mid-stream stays on the ledger until the next stream start, in case
     /// its removal went into a link that had already died.
     @Test func aPadThatLeftIsRetired() throws {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         forwarder.backend = InputRecordingBackend()
         defer { forwarder.detach() }
         let pad = GCController.withExtendedGamepad()

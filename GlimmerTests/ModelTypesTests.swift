@@ -106,8 +106,6 @@ struct ModelTypesTests {
         #expect(BitrateMode.persisted(rawValue: nil) == .highestQuality)
         #expect(BitrateMode.persisted(rawValue: "bandwidthSaver") == .bandwidthSaver)
         #expect(BitrateMode.persisted(rawValue: "turbo") == .highestQuality)
-        #expect(BitrateMode.highestQuality.displayName == "Highest quality")
-        #expect(BitrateMode.bandwidthSaver.displayName == "Bandwidth saver")
         #expect(BitrateMode.defaultsKey == "bitrateMode")
         #expect(BitrateMode.bandwidthSaver.id == "bandwidthSaver")
     }
@@ -124,9 +122,20 @@ struct ModelTypesTests {
 
     @Test func qualityPresetsAreNamedByOutcome() {
         #expect(QualityPreset.allCases == [.matchDisplay, .hidpi, .custom])
-        #expect(QualityPreset.allCases.map(\.displayName) == ["Sharpest", "Balanced", "Custom"])
+        #expect(QualityPreset.allCases.map(\.displayName) == ["Native", "Retina scaled", "Custom"])
         #expect(QualityPreset.defaultPreset == .matchDisplay)
-        #expect(QualityPreset.custom.subtitle == "Pick your own resolution and refresh rate.")
+        #expect(QualityPreset.custom.subtitle == "Your own size and refresh rate, full screen or in a window.")
+    }
+
+    @Test func bandwidthChoiceRoundTripsTheTwoStoredSettings() {
+        for choice in BandwidthChoice.allCases {
+            #expect(BandwidthChoice(bitrateMode: choice.bitrateMode, adaptive: choice.adaptive) == choice)
+        }
+        #expect(BandwidthChoice(bitrateMode: .highestQuality, adaptive: true) == .automatic)
+        #expect(BandwidthChoice(bitrateMode: .highestQuality, adaptive: false) == .maximum)
+        // A saved saver choice stays Saver even if adaptive was left on.
+        #expect(BandwidthChoice(bitrateMode: .bandwidthSaver, adaptive: true) == .saver)
+        #expect(BandwidthChoice.allCases.map(\.displayName) == ["Automatic", "Maximum", "Saver"])
     }
 
     @Test func settingsPanesKeepTheirStableRawValues() {
@@ -138,7 +147,7 @@ struct ModelTypesTests {
     }
 
     @Test func userFacingNamesFollowTheCopyRules() {
-        let copy: [String] = BitrateMode.allCases.map(\.displayName)
+        let copy: [String] = BandwidthChoice.allCases.map(\.displayName)
             + HostCodecPreference.allCases.map(\.displayName)
             + QualityPreset.allCases.flatMap { [$0.displayName, $0.subtitle] }
             + SettingsPane.allCases.map(\.title)

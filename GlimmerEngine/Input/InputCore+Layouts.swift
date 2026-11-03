@@ -70,7 +70,7 @@ extension InputCore {
             guard slot < 16 else { return }
             let previous = layouts?.states[Int(slot)]
             guard configuration != nil || previous != nil else { return }
-            releases.hold(.controller(slot))
+            // A new slot has nothing to release; a neutral packet would create it before its arrival.
             releases.release(.controller(slot))
             releaseControllerTouches(slot: slot)
             let wasMouse = controllerMouseStates[slot]?.isMouse == true

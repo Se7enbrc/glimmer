@@ -19,7 +19,7 @@ private final class MacControllerMotion: @unchecked Sendable {
     init(_ controller: GCController) { self.controller = controller }
 
     func capture() -> ControllerMotionCapture {
-        ControllerMotionCapture(hasAcceleration: controller?.motion?.hasGravityAndUserAcceleration == true,
+        ControllerMotionCapture(hasAcceleration: controller?.motion != nil,
             hasRotation: controller?.motion?.hasRotationRate == true, read: { [self] in read() },
             setHandler: { [self] handler in
                 guard let motion = controller?.motion else { return }

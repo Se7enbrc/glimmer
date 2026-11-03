@@ -30,11 +30,11 @@ device with the PC, choose a game and play.
 
 ## Picture and connection
 
-| Question                       | Answer                                                                                                                                                                                                          |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| iPad picture cropped?          | The picture fills Split View and Stage Manager windows. Choose Native for the closest window size; see [iPad display modes](guides/STREAMING.md#play-on-iphone-or-ipad).                                        |
-| “Adjusting stream quality…”?   | Glimmer is reconnecting at a different quality while keeping the game running. [Adaptive stream quality](guides/WIFI.md#adaptive-stream-quality-in-beta-builds) is currently enabled by default in beta builds. |
-| HDR or AV1 on iPhone and iPad? | Yes, when the PC, device and display support it. See [video support](guides/STREAMING.md#check-video-support).                                                                                                  |
+| Question                       | Answer                                                                                                                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| iPad picture cropped?          | The picture fills Split View and Stage Manager windows. Choose Native for the closest window size; see [iPad display modes](guides/STREAMING.md#play-on-iphone-or-ipad).                                   |
+| “Adjusting stream quality…”?   | Glimmer is reconnecting at a different quality while keeping the game running. [Bandwidth set to Automatic](guides/WIFI.md#bandwidth-automatic-maximum-and-saver) is currently the default in beta builds. |
+| HDR or AV1 on iPhone and iPad? | Yes, when the PC, device and display support it. See [video support](guides/STREAMING.md#check-video-support).                                                                                             |
 
 ## More
 

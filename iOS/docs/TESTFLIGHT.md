@@ -80,11 +80,11 @@ device or automatically repair account signing state.
    availability in **Internal**. Enter a short **What to Test** description
    covering the actual changes and known limitations. Internal distribution
    continues while an external build awaits Beta App Review. Beta enables
-   adaptive stream quality by default; production leaves it off. Saved choices
-   take precedence. Neither flavour records custom diagnostics. Installation
-   through TestFlight never changes the compiled flavour. Both ignore old
-   recording preferences and leave earlier files untouched. Only a production
-   archive is eligible as App Store submission source.
+   Bandwidth to Automatic; production defaults to Saver. Saved choices take
+   precedence. Neither flavour records custom diagnostics. Installation through
+   TestFlight never changes the compiled flavour. Both ignore old recording
+   preferences and leave earlier files untouched. Only a production archive is
+   eligible as App Store submission source.
 
 Every export sets `testFlightInternalTestingOnly = false`. This removes the
 Internal Only restriction; it does not grant Beta App Review approval or publish

@@ -11,6 +11,39 @@ import Testing
 
 @MainActor
 struct ControllerLayoutDeliveryTests {
+    @Test func nativeTouchSurfacesRemainAvailableWhenUnmappedInputOmitsThem() throws {
+        let controller = try TouchpadDeliveryController.make()
+        #expect(controller.input.unmapped?.dpads[GCInputDualShockTouchpadOne] == nil)
+        #expect(controller.input.unmapped?.dpads[GCInputDualShockTouchpadTwo] == nil)
+        controller.surfaces.primary.setValueForXAxis(0.5, yAxis: -0.25)
+        controller.surfaces.secondary.setValueForXAxis(-0.75, yAxis: 0.5)
+        let surfaces = try #require(ControllerLayoutReader.touchpadSurfaces(of: controller))
+        #expect(surfaces.0.xAxis.value == 0.5 && surfaces.0.yAxis.value == -0.25)
+        #expect(surfaces.1.xAxis.value == -0.75 && surfaces.1.yAxis.value == 0.5)
+    }
+
+    @Test(arguments: [false, true])
+    func nativeTouchCallbacksSurviveCustomLayoutsWithoutDuplicatingButtons(mapsGameInput: Bool) throws {
+        let controller = try TouchpadDeliveryController.make()
+        let pad = try #require(controller.extendedGamepad)
+        let delivered = Mutex(0)
+        ControllerStreamHandlers.install(controller: controller, input: controller.input, queue: .main,
+            mapsGameInput: mapsGameInput, shortcutElements: [], read: { .init() },
+            receive: { _, _ in delivered.withLock { $0 += 1 } })
+        defer {
+            pad.valueChangedHandler = nil
+            controller.input.elementValueDidChangeHandler = nil
+            ControllerButtonRoutes.set(controller, nil)
+        }
+        let callback = try #require(pad.valueChangedHandler)
+        callback(pad, controller.surfaces.primary)
+        callback(pad, controller.surfaces.secondary.xAxis)
+        #expect(delivered.withLock { $0 } == 2)
+        callback(pad, pad.buttonA)
+        callback(pad, pad.leftThumbstick)
+        #expect(delivered.withLock { $0 } == (mapsGameInput ? 2 : 4))
+    }
+
     @Test func menuDismissalUsesFreshBPressAndRestoresThePreviousOwner() throws {
         let controller = GCController.withExtendedGamepad()
         let button = try #require(controller.extendedGamepad?.buttonB)
@@ -203,6 +236,47 @@ struct ControllerLayoutDeliveryTests {
         #expect(restored.wait(timeout: .now() + 2) == .success)
         pad.valueChangedHandler?(pad, pad.buttonA)
         #expect(calls.withLock { $0 } == 2)
+    }
+}
+
+private final class TouchpadDeliveryController: GCController {
+    private let device = GCController.withExtendedGamepad()
+    let surfaces: TouchpadDeliveryProfile
+    private var assignedQueue = DispatchQueue.main
+    override var extendedGamepad: GCExtendedGamepad? { device.extendedGamepad }
+    override var physicalInputProfile: GCPhysicalInputProfile { surfaces }
+    override var input: GCControllerLiveInput { device.input }
+    override var handlerQueue: DispatchQueue {
+        get { assignedQueue }
+        set { assignedQueue = newValue }
+    }
+
+    private init(surfaces: TouchpadDeliveryProfile) {
+        self.surfaces = surfaces
+        super.init()
+    }
+
+    static func make() throws -> TouchpadDeliveryController {
+        let device = GCController.withExtendedGamepad()
+        let pad = try #require(device.extendedGamepad)
+        return TouchpadDeliveryController(surfaces: .init(device: device, pad: pad))
+    }
+}
+
+private final class TouchpadDeliveryProfile: GCPhysicalInputProfile {
+    private let retainedController: GCController
+    let primary: GCControllerDirectionPad
+    let secondary: GCControllerDirectionPad
+
+    init(device: GCController, pad: GCExtendedGamepad) {
+        retainedController = device
+        primary = pad.leftThumbstick
+        secondary = pad.rightThumbstick
+        super.init()
+    }
+
+    override var dpads: [String: GCControllerDirectionPad] {
+        [GCInputDualShockTouchpadOne: primary, GCInputDualShockTouchpadTwo: secondary]
     }
 }
 

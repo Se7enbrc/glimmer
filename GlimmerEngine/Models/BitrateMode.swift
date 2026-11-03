@@ -23,15 +23,38 @@ package enum BitrateMode: String, CaseIterable, Identifiable, Sendable {
     /// GlimmerApp so the raw read agrees with the declared default.
     package static let defaultsKey = "bitrateMode"
 
-    package var displayName: String {
-        switch self {
-        case .highestQuality: return "Highest quality"
-        case .bandwidthSaver: return "Bandwidth saver"
-        }
-    }
-
     /// Absent or unrecognised lands on the default rather than guessing.
     package static func persisted(rawValue: String?) -> BitrateMode {
         rawValue.flatMap(BitrateMode.init(rawValue:)) ?? defaultMode
     }
+}
+
+/// The one Bandwidth control people see: the start rate and whether it adapts,
+/// stored as the two settings sessions already read. iOS offers Automatic and Saver.
+public enum BandwidthChoice: String, CaseIterable, Identifiable, Sendable {
+    case automatic
+    case maximum
+    case saver
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .maximum: return "Maximum"
+        case .saver: return "Saver"
+        }
+    }
+
+    /// Saver wins over adaptive so a saved saver choice never reads as Automatic.
+    package init(bitrateMode: BitrateMode, adaptive: Bool) {
+        switch (bitrateMode, adaptive) {
+        case (.bandwidthSaver, _): self = .saver
+        case (.highestQuality, true): self = .automatic
+        case (.highestQuality, false): self = .maximum
+        }
+    }
+
+    package var bitrateMode: BitrateMode { self == .saver ? .bandwidthSaver : .highestQuality }
+    public var adaptive: Bool { self == .automatic }
 }

@@ -439,10 +439,10 @@ public final class InputForwarder {
         self.init(cruiseTuning: CruiseTraversal.Tuning.current())
     }
 
-    init(cruiseTuning: CruiseTraversal.Tuning) {
+    init(cruiseTuning: CruiseTraversal.Tuning, observeGamepads: Bool = true) {
         self.cruiseTuning = cruiseTuning
         connectInputCore()
-        setupGamepadObservers()
+        if observeGamepads { setupGamepadObservers() }
     }
 
     isolated deinit {

@@ -130,17 +130,17 @@ set `dd_config_revert_on_disconnect` to `enabled`.
 
 | Client         | Quality choice                    | What the PC receives                                                                            |
 | -------------- | --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Mac            | Sharpest                          | Native display pixels at the display's maximum frame rate.                                      |
-| Mac            | Balanced                          | Half the width and height, rounded down to even pixels, at the same frame rate.                 |
+| Mac            | Native                            | Native display pixels at the display's maximum frame rate.                                      |
+| Mac            | Retina scaled                     | Half the width and height, rounded down to even pixels, at the same frame rate.                 |
 | Mac            | Custom                            | Your saved size and frame rate. The menu offers 720p, 1080p, 1440p and 4K.                      |
 | iPhone or iPad | Native · 120 fps                  | Landscape native pixels rounded down to even, capped to the display's maximum of 60 or 120 fps. |
 | iPhone or iPad | 1080p · 60 fps or 1080p · 120 fps | 1920 × 1080, capped to the display's maximum.                                                   |
 
 {% hint style="info" %}
 
-MacBook Neo's Balanced choice keeps its native size because half would be too
-small. On a 16-inch MacBook Pro, Balanced sends **1728 × 1116**, not 1728
-× 1117. On Mac, Custom in a window caps the frame rate to the display; full
+MacBook Neo's Retina scaled choice keeps its native size because half would be
+too small. On a 16-inch MacBook Pro, Retina scaled sends **1728 × 1116**, not
+1728 × 1117. On Mac, Custom in a window caps the frame rate to the display; full
 screen keeps your chosen rate.
 
 The files cover the

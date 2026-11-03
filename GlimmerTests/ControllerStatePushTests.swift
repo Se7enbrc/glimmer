@@ -25,7 +25,7 @@ struct ControllerStatePushTests {
     }
 
     private func rig(chord: ControllerQuitChord = .none) throws -> Rig {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         forwarder.controllerQuitChordProvider = { chord }
         let controller = GCController.withExtendedGamepad()
         let pad = try #require(controller.extendedGamepad)
@@ -254,7 +254,7 @@ struct ControllerStatePushTests {
     // MARK: - Touchpad
 
     private func touchRig() -> (InputForwarder, InputRecordingBackend) {
-        let forwarder = InputForwarder()
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true

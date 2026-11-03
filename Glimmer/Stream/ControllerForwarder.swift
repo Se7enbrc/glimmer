@@ -502,7 +502,8 @@ extension InputForwarder {
         gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
         gamepad.extendedGamepad?.buttonMenu.preferredSystemGestureState = .disabled
         gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
-        gamepad.extendedGamepad?.valueChangedHandler = { [weak self, inputCore] pad, _ in
+        // GameController invokes this on its capture queue; nested sampling closures must not inherit MainActor.
+        gamepad.extendedGamepad?.valueChangedHandler = { @Sendable [weak self, inputCore] pad, _ in
             InputTimingContext.begin(source: .controller, timestamp: pad.lastEventTimestamp)
             defer { InputTimingContext.end() }
             guard let self else { return }
