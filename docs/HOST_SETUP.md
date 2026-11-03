@@ -5,9 +5,17 @@ icon: desktop
 
 # Give your PC a display to stream
 
-Set up Sunshine and one virtual display for your Mac, iPhone and iPad. The
-[default sample](vdd/all-glimmer-clients.xml) includes their display sizes, so
-changing devices does not mean editing the PC's modes again.
+Macs, iPhones and iPads don't match a typical 16:9 monitor, so give the PC a
+display at your device's size. There are two ways:
+
+- Use a Sunshine fork that builds the display for you, like
+  [Apollo](#or-use-a-sunshine-fork-that-builds-the-display).
+- Use Sunshine with a virtual display driver, below. The
+  [default sample](vdd/all-glimmer-clients.xml) includes every Glimmer device's
+  display sizes, so changing devices does not mean editing the PC's modes again.
+
+Glimmer works with Sunshine and Sunshine-compatible forks. Pick whichever suits
+your PC.
 
 ## Windows: install Sunshine and the display
 
@@ -23,8 +31,7 @@ changing devices does not mean editing the PC's modes again.
 
 This guide targets the driver bundled with **25.7.23**, the current release. Its
 title says “Beta”. Use its supplied installation instructions; Windows on ARM
-needs the manual installation path. Stock Sunshine works with this setup.
-[Apollo](#or-use-apollo) is an optional alternative.
+needs the manual installation path.
 
 {% endhint %}
 
@@ -140,10 +147,10 @@ The files cover the
 [listed Apple displays and selected custom modes](VIRTUAL_DISPLAY_MODES.md).
 Each stays within 90 modes because larger lists can stop the display from
 starting. Arbitrary Custom values and other external displays may need
-replacement modes or Apollo. The iPhone/iPad sample uses its budget for native
-panels and window shapes. Glimmer selects only its listed modes on both mobile
-devices; it has no half-resolution or Custom choice. A listed mode does not
-promise that the PC can encode it fast enough.
+replacement modes or a fork like Apollo. The iPhone/iPad sample uses its budget
+for native panels and window shapes. Glimmer selects only its listed modes on
+both mobile devices; it has no half-resolution or Custom choice. A listed mode
+does not promise that the PC can encode it fast enough.
 
 {% endhint %}
 
@@ -154,13 +161,14 @@ promise that the PC can encode it fast enough.
 3. Start a new stream. If it still fails, check Sunshine's Troubleshooting →
    Logs for the display or encoder error.
 
-## Or use Apollo
+## Or use a Sunshine fork that builds the display
 
-[Apollo](https://github.com/ClassicOldSong/Apollo) is a Sunshine fork for
-Windows. Its bundled SudoVDA display matches the client's requested size and
-refresh rate at stream start, without a mode list. Glimmer is built and tested
-against stock Sunshine; Apollo is a separate project that was last updated in
-May 2026 and does not track Sunshine's current releases.
+Some Sunshine forks create a virtual display at the size and refresh rate
+Glimmer asks for when each stream starts, so there's no mode list to maintain.
+[Apollo](https://github.com/ClassicOldSong/Apollo) is one: a Windows fork whose
+bundled SudoVDA display does this. Other forks with the same feature should work
+the same way; follow their own setup guide. Keep one Sunshine or fork installed
+on the PC at a time.
 
 1. Stop Sunshine's service before installing
    [Apollo](https://github.com/ClassicOldSong/Apollo/releases).
