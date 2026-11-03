@@ -11,6 +11,9 @@
 - PlayStation touchpad swipes reach the PC with default controls and custom
   controller layouts.
 
+- Starting a Mac stream with a PlayStation controller no longer crashes while
+  reading its touchpad.
+
 ## 2026.10.8 - 2026-10-29
 
 - Complete controller shortcuts are captured before they reach the PC, and their

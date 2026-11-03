@@ -22,6 +22,39 @@ struct ControllerTouchpadMouseTests {
         return (forwarder, backend)
     }
 
+    @Test(arguments: [false, true])
+    func nativePlayStationCallbackRunsOnCaptureQueue(dualSense: Bool) async throws {
+        let forwarder = InputForwarder(cruiseTuning: .current(), observeGamepads: false)
+        let controller = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: controller)
+        defer { forwarder.detach() }
+        let handler = try #require(controller.extendedGamepad?.valueChangedHandler)
+        let pad: GCExtendedGamepad = dualSense ? GCDualSenseGamepad() : GCDualShockGamepad()
+        #expect(forwarder.touchpadElements(of: pad) != nil)
+        let core = forwarder.inputCore
+        let backend = InputRecordingBackend()
+        core.publish(.init(ready: true, focused: true, mask: 1), backend: backend)
+        let id = ObjectIdentifier(controller)
+        core.withLock { core.controllers[id]?.buttons = StreamProtocol.A_FLAG }
+        await withCheckedContinuation { continuation in
+            Self.deliverNativeCallback(handler, pad: pad, queue: forwarder.controllerCaptureQueue) {
+                continuation.resume()
+            }
+        }
+        #expect(core.withLock { core.controllers[id]?.buttons } == 0)
+        #expect(backend.calls.last?.buttons == 0)
+    }
+
+    nonisolated private static func deliverNativeCallback(_ handler: @escaping GCExtendedGamepadValueChangedHandler,
+                                                          pad: GCExtendedGamepad, queue: DispatchQueue,
+                                                          done: @escaping @Sendable () -> Void) {
+        queue.async(execute: DispatchWorkItem {
+            dispatchPrecondition(condition: .onQueue(queue))
+            handler(pad, pad.buttonA)
+            done()
+        })
+    }
+
     @Test func gameControllerCoordinatesFlipYAndRetainTheExistingContactSentinel() {
         #expect(ControllerTouchpadMouseState.contact((1, 1)) == SIMD2<Float>(1, 0))
         #expect(ControllerTouchpadMouseState.contact((-1, -1)) == SIMD2<Float>(0, 1))
