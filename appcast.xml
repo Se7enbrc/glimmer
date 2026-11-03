@@ -6,6 +6,18 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.11.0 (RC 3)</title>
+      <description><![CDATA[
+<ul><li>Turn adaptive stream quality on or off under Connection in Settings › Quality on Mac, next to Bandwidth. It no longer hides in Diagnostics, and your choice is kept.</li><li>PlayStation controllers connected before a stream starts keep their controller type and touchpad support without needing to reconnect.</li><li>Controllers with raw accelerometer readings advertise motion support correctly on Mac, iPhone and iPad.</li><li>PlayStation touchpad swipes reach the PC with default controls and custom controller layouts.</li><li>Starting a Mac stream with a PlayStation controller no longer crashes while reading its touchpad.</li></ul>
+]]></description>
+      <pubDate>Tue, 03 Nov 2026 13:40:23 GMT</pubDate>
+      <sparkle:version>20261040</sparkle:version>
+      <sparkle:shortVersionString>2026.11.0</sparkle:shortVersionString>
+      <sparkle:channel>rc</sparkle:channel>
+      <sparkle:minimumSystemVersion>15.7</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.11.0-rc.3/Glimmer-2026.11.0.zip" type="application/octet-stream" sparkle:edSignature="jHWoXPHZhbiiveIPKd6hUAX7cVvnGBBmLQjjLXhJ6lEArIq3LstY6BCe45xrn9Im/tUMDxsP9hKlPQjO2XbZBw==" length="8257315" />
+    </item>
+    <item>
       <title>2026.11.0 (RC 2)</title>
       <description><![CDATA[
 <ul><li>PlayStation controllers connected before a stream starts keep their controller type and touchpad support without needing to reconnect.</li><li>Controllers with raw accelerometer readings advertise motion support correctly on Mac, iPhone and iPad.</li><li>PlayStation touchpad swipes reach the PC with default controls and custom controller layouts.</li></ul>
