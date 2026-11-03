@@ -123,7 +123,7 @@ struct StreamMenuRenderTests {
         let tablet = UIDevice.current.userInterfaceIdiom == .pad
         let size = tablet ? CGSize(width: 768, height: 1024) : CGSize(width: 390, height: 844)
         let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-settings"
-        try await NativeUIRenderTests().record(NavigationStack { settings.settingsPage(.connection) },
+        try await NativeUIRenderTests().record(NavigationStack { settings.settingsPage(.quality) },
             name: name, size: size, dark: dark, textSize: .large, portrait: true)
     }
 }
