@@ -169,6 +169,8 @@ public final class InputForwarder {
     /// `setMiniPlayer` (InputForwarder+WindowPointer.swift).
     var isMiniPlayer = false
     var controllerOwnershipSuspended = false
+    var streamControls: MacStreamControls?
+    var onControllerMenu: (@MainActor (UInt8) -> Void)?
     let controllerBackgroundEventsID = UUID()
     /// The pointer entered or left the mini player; the window shows its
     /// close button off this edge.

@@ -123,6 +123,7 @@ extension InputForwarder {
     }
 
     public func detach() {
+        streamControls?.close(resume: false)
         ControllerBackgroundEvents.setEnabled(false, for: controllerBackgroundEventsID)
         ControllerHaptics.shared.setBackgroundPlayEnabled(false, for: controllerBackgroundEventsID)
         releaseControllerTouches()

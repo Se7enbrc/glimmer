@@ -10,6 +10,65 @@ import Testing
 @testable import Glimmer
 
 struct InputCoreTests {
+    @Test func streamMenuConsumesInputAndRearmsClosingButtons() {
+        let (core, backend) = rig()
+        let captured = OSAllocatedUnfairLock(initialState: [UInt32]())
+        core.localControllerInput = { _, sample in captured.withLock { $0.append(sample.buttons) } }
+        core.snapshot.focused = false
+        core.receive(slot: 0, buttons: StreamProtocol.B_FLAG, analog: InputCore.neutral)
+        #expect(captured.withLock { $0 } == [UInt32(StreamProtocol.B_FLAG)])
+        #expect(backend.calls.isEmpty)
+        core.localControllerInput = nil
+        core.snapshot.focused = true
+        core.receive(slot: 0, buttons: StreamProtocol.B_FLAG, analog: InputCore.neutral)
+        #expect(backend.calls.isEmpty)
+        core.receive(slot: 0, buttons: 0, analog: InputCore.neutral)
+        core.receive(slot: 0, buttons: StreamProtocol.B_FLAG, analog: InputCore.neutral)
+        #expect(backend.calls.last?.buttons == StreamProtocol.B_FLAG)
+    }
+
+    @Test func streamMenuRearmWaitsForHeldSticksAndClearsOnRemoval() {
+        let (core, backend) = rig()
+        let held = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767,
+                                 leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        core.localControllerInput = { _, _ in }
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: held)
+        core.localControllerInput = nil
+        core.receive(slot: 0, buttons: 0, analog: held)
+        #expect(backend.calls.isEmpty)
+        core.removeLayout(slot: 0)
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+    }
+
+    @Test func streamMenuRejectsUnregisteredAndUnreadyInput() {
+        let (core, _) = rig()
+        let count = OSAllocatedUnfairLock(initialState: 0)
+        core.localControllerInput = { _, _ in count.withLock { $0 += 1 } }
+        core.receive(slot: 3, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        core.snapshot.ready = false
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        #expect(count.withLock { $0 } == 0)
+    }
+
+    @Test func registeredControllersReachLocalMenuWithoutStreamFocus() {
+        let (core, backend) = rig()
+        let identity = NSObject()
+        let id = ObjectIdentifier(identity)
+        let token = core.registerController(id: id, slot: 0, buttons: 0, analog: InputCore.neutral)
+        let captured = OSAllocatedUnfairLock(initialState: [UInt32]())
+        core.localControllerInput = { _, sample in captured.withLock { $0.append(sample.buttons) } }
+        core.snapshot.focused = false
+        core.receiveController(id: id, token: token, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral,
+                               chordButtons: StreamProtocol.A_FLAG, capturedAt: .infinity)
+        #expect(captured.withLock { $0 } == [UInt32(StreamProtocol.A_FLAG)])
+        #expect(backend.calls.isEmpty)
+        core.removeController(id: id)
+        core.receiveController(id: id, token: token, buttons: StreamProtocol.B_FLAG, analog: InputCore.neutral,
+                               chordButtons: StreamProtocol.B_FLAG, capturedAt: .infinity)
+        #expect(captured.withLock { $0.count } == 1)
+    }
+
     private func rig() -> (InputCore, InputRecordingBackend) {
         let core = InputCore()
         let backend = InputRecordingBackend()

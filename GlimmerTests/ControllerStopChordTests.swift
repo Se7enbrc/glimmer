@@ -68,7 +68,7 @@ struct ControllerStopChordTests {
         #expect(rig.core.controllerMouseStates[0]?.isMouse != true)
     }
 
-    @Test func menuAloneKeepsItsPlatformActionAndChordsCancelIt() throws {
+    @Test func menuAloneOpensControlsOnEveryPlatformAndChordsCancelIt() throws {
         let rig = try ChordCaptureRig()
         defer { rig.stop() }
         let pad = try #require(rig.controller.extendedGamepad)
@@ -78,13 +78,8 @@ struct ControllerStopChordTests {
         rig.deliver()
         let now = ProcessInfo.processInfo.systemUptime
         rig.core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: now + 3)
-        #if os(iOS)
         #expect(menus.withLock { $0 } == 1)
         #expect(rig.core.controllerMouseStates[0]?.isMouse != true)
-        #else
-        #expect(menus.withLock { $0 } == 0)
-        #expect(rig.core.controllerMouseStates[0]?.isMouse == true)
-        #endif
         #expect(rig.actions.withLock { $0.isEmpty })
         let full = Int32(bitPattern: ControllerLayoutShortcuts.fixedStop.reduce(UInt32(0)) { result, source in
             if case .button(let button) = source { return result | button.rawValue }
@@ -97,12 +92,8 @@ struct ControllerStopChordTests {
                          chordButtons: StreamProtocol.PLAY_FLAG, capturedAt: now + 5)
         rig.core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, chordButtons: 0, capturedAt: now + 6)
         #expect(rig.actions.withLock { $0 } == [.stop])
-        #if os(iOS)
         #expect(menus.withLock { $0 } == 1)
         #expect(rig.core.controllerMouseStates[0]?.isMouse != true)
-        #else
-        #expect(rig.core.controllerMouseStates[0]?.isMouse == true)
-        #endif
     }
 
     @Test(arguments: ControllerShortcutAction.allCases, 0..<4)

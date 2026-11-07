@@ -277,6 +277,7 @@ extension InputForwarder {
     func detach(gamepad: GCController) {
         controllerLayouts?.release(gamepad)
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
+        streamControls?.controllerRemoved(slot: state.slot)
         inputCore.removeController(id: ObjectIdentifier(gamepad))
         gamepad.extendedGamepad?.valueChangedHandler = nil
         state.restoreSystemState()
@@ -539,7 +540,7 @@ extension InputForwarder {
     /// that used to live here moved to ControllerBattery.swift, with the
     /// host-facing battery uplink.)
     func resyncControllers() {
-        guard !ControllerLayoutEditing.active else { return }
+        guard !ControllerLayoutEditing.active, streamControls == nil else { return }
         controllerOwnershipSuspended = false
         publishInputSnapshot()
         guard forwardsControllerEvents else { return }

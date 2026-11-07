@@ -77,6 +77,8 @@ package final class InputCore: @unchecked Sendable {
     package var onMotionInputEnabled: (@Sendable (UInt8, Bool) -> Void)?
     package var controllerMenuOpensControls = false
     package var onControllerMenu: (@Sendable (UInt8) -> Void)?
+    package var localControllerInput: (@Sendable (UInt8, ControllerMappingSample) -> Void)?
+    package var localControllerRearm: [UInt8: ControllerLayoutRearm] = [:]
     package var onMouseMode: (@Sendable (UInt8, Bool) -> Void)?
     package var pointerResidual = SIMD2<Double>.zero
     var scrollQuantizer = ScrollQuantizer()
@@ -136,8 +138,10 @@ package final class InputCore: @unchecked Sendable {
                          physicalSample: ControllerMappingSample? = nil,
                          rawSupplement: (center: Int32, shoulders: Int32)? = nil) -> ControllerAcceptance {
         withLock {
-            guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return .gated }
             if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return .gated }
+            if routeLocalController(slot: slot, sample: physicalSample
+                ?? ControllerMappingSample(buttons: buttons, analog: analog, extras: extras)) { return .gated }
+            guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return .gated }
             guard snapshot.controllersAnnounced else {
                 flushReleases()
                 if !activityPublished { activityPublished = true; onActivity?() }

@@ -364,11 +364,12 @@ Mini Player retains background controller input, while keyboard/mouse follow
 focus. Background monitoring has shared ownership with diagnostics and shortcut
 recording and restores its original value after the last owner leaves.
 
-The configured mouse toggle held over 750 ms then released toggles per-slot
-controller mouse. Stop chords cancel toggles. Mouse buttons share the release
-ledger; stick polling runs only while moving/scrolling. Touchpad coordinates
-come from GameController. Nintendo layout swaps only outgoing A/B and X/Y after
-positional mouse/chord handling.
+Holding Menu for two seconds and releasing opens native stream controls on all
+platforms. Stop chords take priority. The menu changes mouse mode for its
+opening controller, releases PC input, and rearms held controls before resuming
+play. Mouse buttons share the release ledger; stick polling runs only while
+moving/scrolling. Touchpad coordinates come from GameController. Nintendo layout
+swaps only outgoing A/B and X/Y after positional mouse/chord handling.
 
 ### Raw HID and gestures
 

@@ -22,6 +22,7 @@ extension AppModel {
     func nativeStreamConfig(for host: Host, app: LibraryApp) -> StreamConfig {
         var config = nativeStreamConfig(for: host)
         config.windowTitle = Self.streamWindowTitle(hostName: host.displayName, appName: app.name)
+        config.appName = app.name
         return config
     }
 

@@ -11,7 +11,7 @@ import GameController
 extension InputForwarder {
 
     var forwardsControllerEvents: Bool {
-        isReady && (isMiniPlayer || window?.isKeyWindow != false)
+        isReady && streamControls == nil && (isMiniPlayer || window?.isKeyWindow != false)
     }
 
     func updateControllerBackgroundEvents() {

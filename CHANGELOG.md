@@ -1,6 +1,15 @@
 # Changelog
 
-## 2026.11.0 - Unreleased
+## 2026.11.1 - Unreleased
+
+- Hold the controller's Menu button for 2 seconds to open stream controls on
+  Mac, just like iPhone and iPad. Use the controller to resume, show stats,
+  switch mouse mode, or disconnect.
+
+- AV1 streams from AMD PCs can decode at their padded size while displaying the
+  requested picture without the extra rows.
+
+## 2026.11.0
 
 - Settings › Quality is simpler on Mac, iPhone and iPad. Display comes first,
   with presets named for what they send (Native and Retina scaled on Mac, each

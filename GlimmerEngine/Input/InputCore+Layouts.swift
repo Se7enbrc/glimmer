@@ -57,6 +57,7 @@ package final class ControllerLayoutRouting {
 extension InputCore {
     package func removeLayout(slot: UInt8) {
         withLock {
+            localControllerRearm[slot] = nil
             guard slot < 16 else { return }
             layouts?.states[Int(slot)] = nil
             if layouts?.states.allSatisfy({ $0 == nil }) == true { layouts = nil }

@@ -16,6 +16,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
     private var editingObservation: NSObjectProtocol?
     private var hidObservation: NSObjectProtocol?
     private var window: NSWindow?
+    private weak var returnWindow: NSWindow?
     private var loading: Task<Void, Never>?
 
     init(forwarder: InputForwarder, scope: ControllerLayoutScope) {
@@ -159,8 +160,9 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         }
     }
 
-    func showControls() {
+    func showControls(returnTo: NSWindow? = nil) {
         guard let forwarder else { return }
+        returnWindow = returnTo
         forwarder.inputOwnershipLost(reason: "controller controls")
         if let window { window.makeKeyAndOrderFront(nil); return }
         let view = NavigationStack {
@@ -173,6 +175,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
                     }
                 }
         }
+        .onExitCommand { [weak self] in self?.window?.close() }
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
         window.title = "Controller layouts"
         window.setContentSize(NSSize(width: 620, height: 680))
@@ -188,7 +191,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         guard let closing = notification.object as? NSWindow, closing === window else { return }
         closing.contentViewController = nil
         window = nil
-        forwarder?.window?.makeKeyAndOrderFront(nil)
+        (returnWindow ?? forwarder?.window)?.makeKeyAndOrderFront(nil)
     }
 
     private func editingChanged() {
