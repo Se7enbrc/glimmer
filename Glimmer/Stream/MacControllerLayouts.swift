@@ -172,10 +172,10 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
                         Button("Done") { [weak self] in
                             self?.window?.close()
                         }
+                        .keyboardShortcut(.cancelAction)
                     }
                 }
         }
-        .onExitCommand { [weak self] in self?.window?.close() }
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
         window.title = "Controller layouts"
         window.setContentSize(NSSize(width: 620, height: 680))

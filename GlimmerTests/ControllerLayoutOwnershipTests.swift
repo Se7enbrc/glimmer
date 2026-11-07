@@ -67,6 +67,25 @@ struct ControllerLayoutOwnershipTests {
         #expect(ControllerLayoutEditing.capture == nil)
     }
 
+    @Test func escapeFromTheControllerClosesLayoutsAndReturnsToTheMenu() async throws {
+        let forwarder = InputForwarder()
+        let menu = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
+                            styleMask: .titled, backing: .buffered, defer: false)
+        menu.isReleasedWhenClosed = false
+        let layouts = MacControllerLayouts(forwarder: forwarder, scope: .allGames)
+        defer { layouts.stop(); forwarder.detach(); menu.close() }
+        layouts.showControls(returnTo: menu)
+        try await waitUntil { ControllerLayoutEditing.active }
+        let editor = try #require(NSApplication.shared.windows.first { $0.title == "Controller layouts" })
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: editor.windowNumber, context: nil,
+            characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false, keyCode: 53))
+        if !editor.performKeyEquivalent(with: event) { editor.firstResponder?.keyDown(with: event) }
+        try await waitUntil { !ControllerLayoutEditing.active }
+        #expect(editor.contentViewController == nil)
+        #expect(menu.isVisible)
+    }
+
     private func waitUntil(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
