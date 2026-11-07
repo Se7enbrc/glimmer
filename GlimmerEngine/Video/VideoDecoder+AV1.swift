@@ -196,11 +196,8 @@ extension VideoDecoder {
         return seqTier0
     }
 
-    /// §5.5.1 frame-size bits, frame-id config, and the enable_* feature
-    /// flags that precede color_config. The max_frame_* pair is returned as
-    /// the coded frame size (it feeds the format description, not av1C); the
-    /// remaining fields are consumed in spec order and discarded. Returns nil
-    /// on a parse error.
+    /// Read the sequence maxima (§5.5.1) and consume the feature flags before
+    /// color_config. These bounds feed the format description, not av1C.
     nonisolated private func parseFrameSizeAndFeatureFlags(
         _ reader: inout BitReader,
         reducedStillPicture: UInt32) -> (width: Int, height: Int)? {
