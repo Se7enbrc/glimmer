@@ -270,6 +270,8 @@ extension VideoDecoder {
             self.spsData = nil
             self.ppsData = nil
             self.vpsData = nil
+            self.av1SequenceHeader = nil
+            self.av1PaddingBox.withLock { $0 = nil }
             // HDR caches: clear so the next session starts cold.
             self.hdrMetadataStore.publish(.empty)
             self.colorAttachmentCache.withLock { $0 = nil }

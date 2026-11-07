@@ -272,12 +272,7 @@ extension VideoDecoder {
         // enqueue happens later in `presentFrame`, which re-reads displayLayer.
         guard displayLayer != nil else { return }
 
-        // Some AV1 encoders pad the coded frame to their block size (AMF
-        // grows 1080 to 1082 rows for its 64x16 blocks); the format
-        // description must carry the padded size for VT to decode at all,
-        // so the visible rows can exceed the negotiated rect and the
-        // renderer must never see the padding.
-        let pixelBuffer = cropToStreamSize(pixelBuffer)
+        applyAV1CleanAperture(to: pixelBuffer)
 
         #if os(macOS)
         let enqueueSignpostID = OSSignposter.render.makeSignpostID()
@@ -354,132 +349,33 @@ extension VideoDecoder {
         }
     }
 
-    // MARK: - Coded-size padding crop
+    // MARK: - AV1 padding
 
-    /// Pooled crop destination, reused while the crop geometry is unchanged.
-    /// Stored behind `cropBox`, so the lock owns thread-safe access; the SDK
-    /// leaves the pool type un-annotated, hence the explicit conformance.
-    package struct CropDestination: @unchecked Sendable {
-        let pool: CVPixelBufferPool
-        let cropWidth: Int
-        let cropHeight: Int
-        let pixelFormat: OSType
+    nonisolated func acceptsAV1Padding(width: Int, height: Int) -> Bool {
+        // This is a conservative padding allowance, not an encoder block-size claim.
+        let maximumPadding = 16
+        return streamWidth > 0 && streamHeight > 0
+            && width >= Int(streamWidth) && width <= Int(streamWidth) + maximumPadding
+            && height >= Int(streamHeight) && height <= Int(streamHeight) + maximumPadding
     }
 
-    /// Copy the negotiated display region out of an oversized decoded frame.
-    /// Returns the source untouched for the normal case (decoded size already
-    /// equals the negotiated rect) and for formats the plane copy cannot
-    /// service, so a surprise geometry never costs us the frame.
-    nonisolated func cropToStreamSize(_ buffer: CVPixelBuffer) -> CVPixelBuffer {
-        let codedWidth = CVPixelBufferGetWidth(buffer)
-        let codedHeight = CVPixelBufferGetHeight(buffer)
-        let displayWidth = Int(streamWidth)
-        let displayHeight = Int(streamHeight)
-        guard streamWidth > 0, streamHeight > 0,
-              displayWidth < codedWidth || displayHeight < codedHeight
-        else { return buffer }
-        let cropWidth = min(max(displayWidth, 1), codedWidth)
-        let cropHeight = min(max(displayHeight, 1), codedHeight)
-        let pixelFormat = CVPixelBufferGetPixelFormatType(buffer)
-        guard let destination = pooledCropBuffer(
-            cropWidth: cropWidth, cropHeight: cropHeight, pixelFormat: pixelFormat)
-        else { return buffer }
-        guard VideoDecoder.copyPixelData(from: buffer, to: destination) else {
-            return buffer
-        }
-        CVBufferPropagateAttachments(buffer, destination)
-        return destination
-    }
-
-    /// Pooling exists because a crop fires per frame: allocating an IOSurface
-    /// at 60-240 fps would turn the padding fix into an allocation storm.
-    private nonisolated func pooledCropBuffer(
-        cropWidth: Int, cropHeight: Int, pixelFormat: OSType
-    ) -> CVPixelBuffer? {
-        // The handed-out buffer is a CF type the SDK leaves un-annotated, so
-        // the Sendable-result flavour of withLock cannot express the return.
-        cropBox.withLockUnchecked { state in
-            if state?.cropWidth != cropWidth || state?.cropHeight != cropHeight
-                || state?.pixelFormat != pixelFormat {
-                let attributes: [CFString: Any] = [
-                    kCVPixelBufferPixelFormatTypeKey: pixelFormat,
-                    kCVPixelBufferWidthKey: cropWidth,
-                    kCVPixelBufferHeightKey: cropHeight
-                ]
-                let poolAttributes: [CFString: Any] = [
-                    kCVPixelBufferPoolMinimumBufferCountKey: 8
-                ]
-                var pool: CVPixelBufferPool?
-                let status = CVPixelBufferPoolCreate(
-                    kCFAllocatorDefault,
-                    poolAttributes as CFDictionary,
-                    attributes as CFDictionary,
-                    &pool)
-                guard status == kCVReturnSuccess, let pool else {
-                    log.error("CVPixelBufferPoolCreate (crop) failed: \(status)")
-                    return nil
-                }
-                state = CropDestination(
-                    pool: pool, cropWidth: cropWidth, cropHeight: cropHeight,
-                    pixelFormat: pixelFormat)
-            }
-            guard let pool = state?.pool else { return nil }
-            var buffer: CVPixelBuffer?
-            guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &buffer) == kCVReturnSuccess,
-                  let buffer else { return nil }
-            return buffer
-        }
-    }
-
-    /// Plane-wise copy of the destination-sized region. Copying whole strides
-    /// (capped by the destination row) also carries each row's alignment
-    /// padding, which sits outside the visible region and stays harmless.
-    /// Sub-sampled planes shrink with the height, so the cropped chroma rows
-    /// line up with the kept luma rows for every 4:2:x layout.
-    private nonisolated static func copyPixelData(
-        from source: CVPixelBuffer, to destination: CVPixelBuffer
-    ) -> Bool {
-        guard CVPixelBufferLockBaseAddress(source, .readOnly) == kCVReturnSuccess,
-              CVPixelBufferLockBaseAddress(destination, []) == kCVReturnSuccess
-        else {
-            CVPixelBufferUnlockBaseAddress(source, .readOnly)
-            CVPixelBufferUnlockBaseAddress(destination, [])
-            return false
-        }
-        defer {
-            CVPixelBufferUnlockBaseAddress(source, .readOnly)
-            CVPixelBufferUnlockBaseAddress(destination, [])
-        }
-        let sourcePlanes = CVPixelBufferGetPlaneCount(source)
-        guard sourcePlanes == CVPixelBufferGetPlaneCount(destination) else { return false }
-        if sourcePlanes == 0 {
-            // Single-plane grey: one contiguous copy over the visible rows.
-            guard let src = CVPixelBufferGetBaseAddress(source),
-                  let dst = CVPixelBufferGetBaseAddress(destination) else { return false }
-            let rowBytes = min(CVPixelBufferGetBytesPerRow(source),
-                               CVPixelBufferGetBytesPerRow(destination))
-            let rows = min(CVPixelBufferGetHeight(source), CVPixelBufferGetHeight(destination))
-            for row in 0..<rows {
-                dst.advanced(by: row * CVPixelBufferGetBytesPerRow(destination))
-                    .copyMemory(from: src.advanced(by: row * CVPixelBufferGetBytesPerRow(source)),
-                                byteCount: rowBytes)
-            }
-            return true
-        }
-        for plane in 0..<sourcePlanes {
-            guard let src = CVPixelBufferGetBaseAddressOfPlane(source, plane),
-                  let dst = CVPixelBufferGetBaseAddressOfPlane(destination, plane)
-            else { return false }
-            let srcStride = CVPixelBufferGetBytesPerRowOfPlane(source, plane)
-            let dstStride = CVPixelBufferGetBytesPerRowOfPlane(destination, plane)
-            let rowBytes = min(srcStride, dstStride)
-            let rows = min(CVPixelBufferGetHeightOfPlane(source, plane),
-                           CVPixelBufferGetHeightOfPlane(destination, plane))
-            for row in 0..<rows {
-                dst.advanced(by: row * dstStride)
-                    .copyMemory(from: src.advanced(by: row * srcStride), byteCount: rowBytes)
-            }
-        }
-        return true
+    nonisolated func applyAV1CleanAperture(to buffer: CVPixelBuffer) {
+        guard (streamVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0,
+              let coded = av1PaddingBox.withLock({ $0 }),
+              CVPixelBufferGetWidth(buffer) == coded.width,
+              CVPixelBufferGetHeight(buffer) == coded.height
+        else { return }
+        // Preserve the decoded IOSurface and let the display layer crop. Offsets
+        // select the top-left negotiated rect instead of a centered crop.
+        let aperture: [CFString: Any] = [
+            kCVImageBufferCleanApertureWidthKey: Int(streamWidth),
+            kCVImageBufferCleanApertureHeightKey: Int(streamHeight),
+            kCVImageBufferCleanApertureHorizontalOffsetKey: Double(Int(streamWidth) - coded.width) / 2,
+            kCVImageBufferCleanApertureVerticalOffsetKey: Double(Int(streamHeight) - coded.height) / 2
+        ]
+        CVBufferRemoveAttachment(buffer, kCVImageBufferPreferredCleanApertureKey)
+        CVBufferRemoveAttachment(buffer, kCVImageBufferDisplayDimensionsKey)
+        CVBufferSetAttachment(buffer, kCVImageBufferCleanApertureKey,
+                              aperture as CFDictionary, .shouldPropagate)
     }
 }

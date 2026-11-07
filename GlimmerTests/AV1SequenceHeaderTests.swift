@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -88,8 +89,7 @@ struct AV1SequenceHeaderTests {
     }
 
     @Test func parsesPaddedCodedDimensions() throws {
-        // Issue #223: AMF's AV1 encoder signals 1920x1082 because 1080 is not
-        // a multiple of its fixed 64x16 coding blocks.
+        // Issue #223 reports 1920x1082 for a negotiated 1920x1080 stream.
         let decoder = VideoDecoder()
         let parsed = try #require(
             decoder.parseAV1SequenceHeader(Self.sequenceHeader(decoderModel: false,
@@ -120,59 +120,95 @@ struct AV1SequenceHeaderTests {
         #expect(dims.height == 1080)
     }
 
-    @Test func decodedPaddingIsCroppedBeforePresentation() throws {
+    @Test(arguments: [(1920, 1082), (1936, 1096), (1920, 1080), (3840, 2160),
+                      (65536, 65536), (1920, 1078), (1918, 1082), (1937, 1080)])
+    func sequenceGeometryIsBounded(size: (Int, Int)) throws {
         let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, width: size.0, height: size.1)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dims = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        let accepted = [(1920, 1082), (1936, 1096), (1920, 1080)].contains { $0 == size }
+        #expect(dims.width == (accepted ? Int32(size.0) : 1920))
+        #expect(dims.height == (accepted ? Int32(size.1) : 1080))
+    }
+
+    @Test func rebuildWithoutHeaderRetainsGeometryAndColour() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, color: (9, 16, 9), width: 1920, height: 1082)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let header = try #require(decoder.av1SequenceHeader)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: Data([0x12, 0x00])))
+        let format = try #require(decoder.formatDescription)
+        #expect(CMVideoFormatDescriptionGetDimensions(format).height == 1082)
+        #expect(decoder.av1SequenceHeader == header)
+        #expect(CMFormatDescriptionGetExtension(format,
+            extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
+            == kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String)
+        decoder.teardown()
+        #expect(decoder.av1SequenceHeader == nil)
+        #expect(decoder.av1PaddingBox.withLock { $0 } == nil)
+    }
+
+    @Test(arguments: [kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                      kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange])
+    func cleanApertureKeepsIOSurfaceAndTopLeftDisplayRegion(pixelFormat: OSType) throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_AV1_MAIN10
         decoder.streamWidth = 32
         decoder.streamHeight = 16
+        try #require(decoder.rebuildAV1FormatDescription(
+            obuData: Self.sequenceHeader(decoderModel: false, width: 34, height: 18)))
         var created: CVPixelBuffer?
-        let status = CVPixelBufferCreate(kCFAllocatorDefault, 32, 18,
-            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, nil, &created)
-        #expect(status == kCVReturnSuccess)
+        try #require(CVPixelBufferCreate(kCFAllocatorDefault, 34, 18, pixelFormat,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &created) == kCVReturnSuccess)
         let padded = try #require(created)
-        // Mark every row of both planes with its index so a wrong row mapping
-        // or a mis-copied subsampled plane cannot pass.
-        CVPixelBufferLockBaseAddress(padded, [])
-        let luma = try #require(CVPixelBufferGetBaseAddressOfPlane(padded, 0))
-        let lumaStride = CVPixelBufferGetBytesPerRowOfPlane(padded, 0)
-        for row in 0..<18 {
-            for column in 0..<32 { luma.storeBytes(of: UInt8(row), toByteOffset: row * lumaStride + column, as: UInt8.self) }
-        }
-        let chroma = try #require(CVPixelBufferGetBaseAddressOfPlane(padded, 1))
-        let chromaStride = CVPixelBufferGetBytesPerRowOfPlane(padded, 1)
-        for row in 0..<9 {
-            for column in 0..<16 { chroma.storeBytes(of: UInt8(128 + row), toByteOffset: row * chromaStride + column, as: UInt8.self) }
-        }
-        CVPixelBufferUnlockBaseAddress(padded, [])
+        let surface = try #require(CVPixelBufferGetIOSurface(padded)?.takeUnretainedValue())
+        CVBufferSetAttachment(padded, kCVImageBufferColorPrimariesKey,
+                              kCVImageBufferColorPrimaries_ITU_R_2020, .shouldPropagate)
+        CVBufferSetAttachment(padded, kCVImageBufferPreferredCleanApertureKey,
+            [kCVImageBufferCleanApertureWidthKey: 34, kCVImageBufferCleanApertureHeightKey: 18]
+                as CFDictionary, .shouldPropagate)
+        CVBufferSetAttachment(padded, kCVImageBufferDisplayDimensionsKey,
+            [kCVImageBufferDisplayWidthKey: 34, kCVImageBufferDisplayHeightKey: 18]
+                as CFDictionary, .shouldPropagate)
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        decoder.isStreaming = true
+        defer { decoder.teardown() }
+        decoder.enqueueDecodedFrame(padded, hostPTS: CMTime(value: 1, timescale: 60))
+        #expect(CVPixelBufferGetIOSurface(padded)?.takeUnretainedValue() === surface)
+        #expect(CVBufferCopyAttachment(padded, kCVImageBufferPreferredCleanApertureKey, nil) == nil)
+        #expect(CVBufferCopyAttachment(padded, kCVImageBufferDisplayDimensionsKey, nil) == nil)
+        #expect(CVPixelBufferGetWidth(padded) == 34)
+        #expect(CVPixelBufferGetHeight(padded) == 18)
+        let description = try #require(decoder.cachedHDRFormatDescription)
+        #expect(CMVideoFormatDescriptionGetCleanAperture(description, originIsAtTopLeft: true)
+            == CGRect(x: 0, y: 0, width: 32, height: 16))
+        #expect(CMVideoFormatDescriptionMatchesImageBuffer(description, imageBuffer: padded))
+        #expect(CMFormatDescriptionGetExtension(description,
+            extensionKey: kCMFormatDescriptionExtension_ColorPrimaries) as? String
+            == kCVImageBufferColorPrimaries_ITU_R_2020 as String)
+    }
 
-        let cropped = decoder.cropToStreamSize(padded)
-        #expect(cropped !== padded)
-        #expect(CVPixelBufferGetWidth(cropped) == 32)
-        #expect(CVPixelBufferGetHeight(cropped) == 16)
-        CVPixelBufferLockBaseAddress(cropped, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(cropped, .readOnly) }
-        let croppedLuma = try #require(CVPixelBufferGetBaseAddressOfPlane(cropped, 0))
-        let croppedLumaStride = CVPixelBufferGetBytesPerRowOfPlane(cropped, 0)
-        for row in 0..<16 {
-            for column in 0..<32 {
-                let got = croppedLuma.load(fromByteOffset: row * croppedLumaStride + column, as: UInt8.self)
-                #expect(got == UInt8(row))
-            }
-        }
-        #expect(CVPixelBufferGetHeightOfPlane(cropped, 1) == 8)
-        let croppedChroma = try #require(CVPixelBufferGetBaseAddressOfPlane(cropped, 1))
-        let croppedChromaStride = CVPixelBufferGetBytesPerRowOfPlane(cropped, 1)
-        for row in 0..<8 {
-            for column in 0..<16 {
-                let got = croppedChroma.load(fromByteOffset: row * croppedChromaStride + column, as: UInt8.self)
-                #expect(got == UInt8(128 + row))
-            }
-        }
-        // Repeated crops reuse the pool: a second pass returns a distinct
-        // buffer object but identical geometry, and unpadded frames pass
-        // through untouched.
-        let second = decoder.cropToStreamSize(padded)
-        #expect(CVPixelBufferGetHeight(second) == 16)
-        #expect(decoder.cropToStreamSize(second) === second)
+    @Test(arguments: [StreamProtocol.VIDEO_FORMAT_H264, StreamProtocol.VIDEO_FORMAT_H265,
+                      StreamProtocol.VIDEO_FORMAT_AV1_MAIN8], [(32, 18), (64, 36), (32, 16)])
+    func apertureOnlyAppliesToMatchingAV1Padding(codec: Int32, size: (Int, Int)) throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = codec
+        decoder.streamWidth = 32
+        decoder.streamHeight = 16
+        try #require(decoder.rebuildAV1FormatDescription(
+            obuData: Self.sequenceHeader(decoderModel: false, width: 32, height: 18)))
+        var created: CVPixelBuffer?
+        try #require(CVPixelBufferCreate(kCFAllocatorDefault, size.0, size.1,
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, nil, &created) == kCVReturnSuccess)
+        let buffer = try #require(created)
+        decoder.applyAV1CleanAperture(to: buffer)
+        let attachment = CVBufferCopyAttachment(buffer, kCVImageBufferCleanApertureKey, nil)
+        #expect((attachment != nil) == (codec == StreamProtocol.VIDEO_FORMAT_AV1_MAIN8 && size == (32, 18)))
     }
 
     @Test(arguments: [false, true], [1, 16, 18])

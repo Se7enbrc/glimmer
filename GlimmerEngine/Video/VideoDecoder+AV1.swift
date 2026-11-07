@@ -22,11 +22,8 @@ extension VideoDecoder {
         let monochrome: UInt8    // 0/1
         let subsamplingX: UInt8  // 0/1
         let subsamplingY: UInt8  // 0/1
-        // Coded geometry: max_frame_{width,height}_minus_1 + 1 from §5.5.1.
-        // Encoders that pad to their block size signal the padded size here
-        // (AMD AMF's AV1 encoder grows 1080 to 1082 rows to cover its 64x16
-        // blocks), and VideoToolbox must be handed that coded size or it
-        // rejects every frame as bad data (-12909).
+        // Sequence maxima from max_frame_{width,height}_minus_1 + 1 (§5.5.1).
+        // These may include encoder padding or exceed an overridden frame size.
         let codedWidth: Int
         let codedHeight: Int
         let color: ColorConfig

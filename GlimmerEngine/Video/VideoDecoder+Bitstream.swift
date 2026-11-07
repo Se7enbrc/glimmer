@@ -95,15 +95,15 @@ extension VideoDecoder {
 
     nonisolated func rebuildAV1FormatDescription(obuData: Data) -> Bool {
         // av1C and colour extensions come from the sequence header so 4:4:4 and HDR describe themselves to VT.
-        // On parse failure, Main 4:2:0 uses the negotiated depth hint; VT re-derives it from the OBU at decode time.
+        // Headerless rebuilds retain the active configuration; only a cold start uses negotiated hints.
         // The av1C atom follows the AV1 ISO Base Media File Format record and AV1 §5.5.1/§5.5.2 colour config.
         guard !obuData.isEmpty else { return false }
 
-        let parsed = parseAV1SequenceHeader(obuData)
+        let parsed = parseAV1SequenceHeader(obuData) ?? av1SequenceHeader
         if let parsed {
             log.info(
                 """
-                AV1 seq header parsed: profile=\(parsed.seqProfile, privacy: .public) \
+                AV1 seq configuration: profile=\(parsed.seqProfile, privacy: .public) \
                 bitDepth=\(parsed.bitDepth, privacy: .public) \
                 mono=\(parsed.monochrome, privacy: .public) \
                 ssx=\(parsed.subsamplingX, privacy: .public) \
@@ -123,30 +123,15 @@ extension VideoDecoder {
         let seqTier: UInt8 = parsed?.seqTier ?? 0
         let level: UInt8 = 0  // 2.0; auto-negotiated by the decoder anyway
 
-        // The format description carries the CODED geometry, not the display
-        // rect: VT sizes its output pool and validates the bitstream against
-        // it. AMF's AV1 encoder pads 1080 up to 1082 rows for its fixed
-        // 64x16 blocks, and decoding that stream under a 1080-tall
-        // description fails with -12909 (bad data). Trust the parsed
-        // dimensions only when they cover the negotiated rect - a header
-        // coding LESS than the negotiated size is a mismatch, and the
-        // negotiated size remains the safer contract there.
+        // Sequence maxima are not necessarily the current frame size. Accept only
+        // small padding around the negotiated rect, including the reported 1082 rows.
         var codedWidth = Int(streamWidth)
         var codedHeight = Int(streamHeight)
-        if let parsed, parsed.codedWidth >= Int(streamWidth),
-           parsed.codedHeight >= Int(streamHeight) {
-            if parsed.codedWidth != codedWidth || parsed.codedHeight != codedHeight {
-                log.info(
-                    """
-                    AV1 coded size \(parsed.codedWidth, privacy: .public)x\
-                    \(parsed.codedHeight, privacy: .public) exceeds negotiated \
-                    \(codedWidth, privacy: .public)x\(codedHeight, privacy: .public); \
-                    presentation will crop the padding
-                    """
-                )
-            }
+        if let parsed, acceptsAV1Padding(width: parsed.codedWidth, height: parsed.codedHeight) {
             codedWidth = parsed.codedWidth
             codedHeight = parsed.codedHeight
+        } else if let parsed, parsed.codedWidth != codedWidth || parsed.codedHeight != codedHeight {
+            log.warning("AV1 sequence dimensions outside padding bounds; keeping negotiated geometry")
         }
 
         var av1cBytes: [UInt8] = []
@@ -191,6 +176,10 @@ extension VideoDecoder {
         self.tearDownDecompressionSession()
         self.formatDescription = newFormat
         self.av1SequenceHeader = parsed
+        self.av1PaddingBox.withLock { [codedWidth, codedHeight] in
+            $0 = codedWidth != Int(streamWidth) || codedHeight != Int(streamHeight)
+                ? (codedWidth, codedHeight) : nil
+        }
         self.cachedHDRFormatDescription = nil
         return true
     }
