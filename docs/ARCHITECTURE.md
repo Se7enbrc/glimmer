@@ -262,6 +262,16 @@ jitter headroom and recovers afterward. Due frames at rest can release on
 submit. `DisplayImmediately` is required because the pacer already chose the
 release time; RTP timestamps stay intact for order and telemetry.
 
+AV1 sequence maxima only replace negotiated geometry within bounded padding: up
+to 16 pixels per axis, or the exact next 64-pixel width and 16-pixel height
+boundaries.
+[AMF's documented alignment modes](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/wiki/AV1-Encoder#av1-specific-api)
+include general 64x16 alignment and a special 1920x1080 to 1920x1082 case.
+Larger or undersized maxima retain negotiated geometry. Only decoded buffers
+matching accepted padding receive a top-left clean aperture; their IOSurface and
+colour attachments are retained. This does not assume NVENC uses AMF's alignment
+policy.
+
 ### Colour and HDR
 
 Resolve declared colour tags before using negotiated fallbacks.

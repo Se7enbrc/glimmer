@@ -134,6 +134,25 @@ struct AV1SequenceHeaderTests {
         #expect(dims.height == (accepted ? Int32(size.1) : 1080))
     }
 
+    @Test(arguments: [((1366, 768), (1408, 768), true), ((1922, 1080), (1984, 1088), true),
+                      ((1281, 721), (1344, 736), true), ((1366, 768), (1407, 768), false),
+                      ((1366, 768), (1472, 768), false), ((1366, 768), (1408, 784), false),
+                      ((1366, 768), (1408, 767), false), ((1366, 768), (1365, 768), false)])
+    func amfAlignmentRequiresTheNext64By16Boundary(size: (visible: (Int, Int), coded: (Int, Int), accepted: Bool)) throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = Int32(size.visible.0)
+        decoder.streamHeight = Int32(size.visible.1)
+        let data = Self.sequenceHeader(decoderModel: false, width: size.coded.0, height: size.coded.1)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dimensions = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        #expect(dimensions.width == Int32(size.accepted ? size.coded.0 : size.visible.0))
+        #expect(dimensions.height == Int32(size.accepted ? size.coded.1 : size.visible.1))
+        try #require(decoder.rebuildAV1FormatDescription(obuData: Data([0x12, 0x00])))
+        let rebuilt = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        #expect(rebuilt.width == dimensions.width)
+        #expect(rebuilt.height == dimensions.height)
+    }
+
     @Test func rebuildWithoutHeaderRetainsGeometryAndColour() throws {
         let decoder = VideoDecoder()
         decoder.streamWidth = 1920
@@ -209,6 +228,29 @@ struct AV1SequenceHeaderTests {
         decoder.applyAV1CleanAperture(to: buffer)
         let attachment = CVBufferCopyAttachment(buffer, kCVImageBufferCleanApertureKey, nil)
         #expect((attachment != nil) == (codec == StreamProtocol.VIDEO_FORMAT_AV1_MAIN8 && size == (32, 18)))
+    }
+
+    @Test(arguments: [kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                      kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange])
+    func amfWidthPaddingKeepsTheTopLeftVisibleRegion(pixelFormat: OSType) throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_AV1_MAIN10
+        decoder.streamWidth = 1366
+        decoder.streamHeight = 768
+        try #require(decoder.rebuildAV1FormatDescription(
+            obuData: Self.sequenceHeader(decoderModel: false, width: 1408, height: 768)))
+        var created: CVPixelBuffer?
+        try #require(CVPixelBufferCreate(kCFAllocatorDefault, 1408, 768, pixelFormat,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &created) == kCVReturnSuccess)
+        let buffer = try #require(created)
+        let surface = try #require(CVPixelBufferGetIOSurface(buffer)?.takeUnretainedValue())
+        decoder.applyAV1CleanAperture(to: buffer)
+        var format: CMVideoFormatDescription?
+        try #require(CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault,
+            imageBuffer: buffer, formatDescriptionOut: &format) == noErr)
+        #expect(CMVideoFormatDescriptionGetCleanAperture(try #require(format), originIsAtTopLeft: true)
+            == CGRect(x: 0, y: 0, width: 1366, height: 768))
+        #expect(CVPixelBufferGetIOSurface(buffer)?.takeUnretainedValue() === surface)
     }
 
     @Test(arguments: [false, true], [1, 16, 18])

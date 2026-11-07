@@ -352,11 +352,14 @@ extension VideoDecoder {
     // MARK: - AV1 padding
 
     nonisolated func acceptsAV1Padding(width: Int, height: Int) -> Bool {
-        // This is a conservative padding allowance, not an encoder block-size claim.
-        let maximumPadding = 16
-        return streamWidth > 0 && streamHeight > 0
-            && width >= Int(streamWidth) && width <= Int(streamWidth) + maximumPadding
-            && height >= Int(streamHeight) && height <= Int(streamHeight) + maximumPadding
+        let visibleWidth = Int(streamWidth)
+        let visibleHeight = Int(streamHeight)
+        guard visibleWidth > 0, visibleHeight > 0, width >= visibleWidth, height >= visibleHeight else { return false }
+        // Keep the small-padding allowance, including AMF's special 1080 -> 1082 case.
+        if width - visibleWidth <= 16, height - visibleHeight <= 16 { return true }
+        // Wider AMF padding must match the next 64x16 boundary on both axes,
+        // not arbitrary sequence maxima. See the AMF alignment modes in ARCHITECTURE.md.
+        return width == ((visibleWidth + 63) / 64) * 64 && height == ((visibleHeight + 15) / 16) * 16
     }
 
     nonisolated func applyAV1CleanAperture(to buffer: CVPixelBuffer) {
