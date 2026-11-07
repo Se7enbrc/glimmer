@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -87,6 +88,129 @@ struct AV1SequenceHeaderTests {
         #expect(result?.subsamplingY == 0)
     }
 
+    @Test func parsesPaddedCodedDimensions() throws {
+        // Issue #223 reports 1920x1082 for a negotiated 1920x1080 stream.
+        let decoder = VideoDecoder()
+        let parsed = try #require(
+            decoder.parseAV1SequenceHeader(Self.sequenceHeader(decoderModel: false,
+                                                               width: 1920, height: 1082)))
+        #expect(parsed.codedWidth == 1920)
+        #expect(parsed.codedHeight == 1082)
+    }
+
+    @Test func parsedPaddingReachesTheFormatDescription() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, width: 1920, height: 1082)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dims = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        #expect(dims.width == 1920)
+        #expect(dims.height == 1082)
+    }
+
+    @Test func headerCodingLessThanNegotiatedKeepsTheNegotiatedSize() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, width: 64, height: 64)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dims = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        #expect(dims.width == 1920)
+        #expect(dims.height == 1080)
+    }
+
+    @Test(arguments: [(1920, 1082), (1936, 1096), (1920, 1080), (3840, 2160),
+                      (65536, 65536), (1920, 1078), (1918, 1082), (1937, 1080)])
+    func sequenceGeometryIsBounded(size: (Int, Int)) throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, width: size.0, height: size.1)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dims = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        let accepted = [(1920, 1082), (1936, 1096), (1920, 1080)].contains { $0 == size }
+        #expect(dims.width == (accepted ? Int32(size.0) : 1920))
+        #expect(dims.height == (accepted ? Int32(size.1) : 1080))
+    }
+
+    @Test func rebuildWithoutHeaderRetainsGeometryAndColour() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, color: (9, 16, 9), width: 1920, height: 1082)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let header = try #require(decoder.av1SequenceHeader)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: Data([0x12, 0x00])))
+        let format = try #require(decoder.formatDescription)
+        #expect(CMVideoFormatDescriptionGetDimensions(format).height == 1082)
+        #expect(decoder.av1SequenceHeader == header)
+        #expect(CMFormatDescriptionGetExtension(format,
+            extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
+            == kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String)
+        decoder.teardown()
+        #expect(decoder.av1SequenceHeader == nil)
+        #expect(decoder.av1PaddingBox.withLock { $0 } == nil)
+    }
+
+    @Test(arguments: [kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                      kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange])
+    func cleanApertureKeepsIOSurfaceAndTopLeftDisplayRegion(pixelFormat: OSType) throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_AV1_MAIN10
+        decoder.streamWidth = 32
+        decoder.streamHeight = 16
+        try #require(decoder.rebuildAV1FormatDescription(
+            obuData: Self.sequenceHeader(decoderModel: false, width: 34, height: 18)))
+        var created: CVPixelBuffer?
+        try #require(CVPixelBufferCreate(kCFAllocatorDefault, 34, 18, pixelFormat,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &created) == kCVReturnSuccess)
+        let padded = try #require(created)
+        let surface = try #require(CVPixelBufferGetIOSurface(padded)?.takeUnretainedValue())
+        CVBufferSetAttachment(padded, kCVImageBufferColorPrimariesKey,
+                              kCVImageBufferColorPrimaries_ITU_R_2020, .shouldPropagate)
+        CVBufferSetAttachment(padded, kCVImageBufferPreferredCleanApertureKey,
+            [kCVImageBufferCleanApertureWidthKey: 34, kCVImageBufferCleanApertureHeightKey: 18]
+                as CFDictionary, .shouldPropagate)
+        CVBufferSetAttachment(padded, kCVImageBufferDisplayDimensionsKey,
+            [kCVImageBufferDisplayWidthKey: 34, kCVImageBufferDisplayHeightKey: 18]
+                as CFDictionary, .shouldPropagate)
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        decoder.isStreaming = true
+        defer { decoder.teardown() }
+        decoder.enqueueDecodedFrame(padded, hostPTS: CMTime(value: 1, timescale: 60))
+        #expect(CVPixelBufferGetIOSurface(padded)?.takeUnretainedValue() === surface)
+        #expect(CVBufferCopyAttachment(padded, kCVImageBufferPreferredCleanApertureKey, nil) == nil)
+        #expect(CVBufferCopyAttachment(padded, kCVImageBufferDisplayDimensionsKey, nil) == nil)
+        #expect(CVPixelBufferGetWidth(padded) == 34)
+        #expect(CVPixelBufferGetHeight(padded) == 18)
+        let description = try #require(decoder.cachedHDRFormatDescription)
+        #expect(CMVideoFormatDescriptionGetCleanAperture(description, originIsAtTopLeft: true)
+            == CGRect(x: 0, y: 0, width: 32, height: 16))
+        #expect(CMVideoFormatDescriptionMatchesImageBuffer(description, imageBuffer: padded))
+        #expect(CMFormatDescriptionGetExtension(description,
+            extensionKey: kCMFormatDescriptionExtension_ColorPrimaries) as? String
+            == kCVImageBufferColorPrimaries_ITU_R_2020 as String)
+    }
+
+    @Test(arguments: [StreamProtocol.VIDEO_FORMAT_H264, StreamProtocol.VIDEO_FORMAT_H265,
+                      StreamProtocol.VIDEO_FORMAT_AV1_MAIN8], [(32, 18), (64, 36), (32, 16)])
+    func apertureOnlyAppliesToMatchingAV1Padding(codec: Int32, size: (Int, Int)) throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = codec
+        decoder.streamWidth = 32
+        decoder.streamHeight = 16
+        try #require(decoder.rebuildAV1FormatDescription(
+            obuData: Self.sequenceHeader(decoderModel: false, width: 32, height: 18)))
+        var created: CVPixelBuffer?
+        try #require(CVPixelBufferCreate(kCFAllocatorDefault, size.0, size.1,
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, nil, &created) == kCVReturnSuccess)
+        let buffer = try #require(created)
+        decoder.applyAV1CleanAperture(to: buffer)
+        let attachment = CVBufferCopyAttachment(buffer, kCVImageBufferCleanApertureKey, nil)
+        #expect((attachment != nil) == (codec == StreamProtocol.VIDEO_FORMAT_AV1_MAIN8 && size == (32, 18)))
+    }
+
     @Test(arguments: [false, true], [1, 16, 18])
     func colorDescriptionReachesTheFormat(fullRange: Bool, transfer: Int) throws {
         let decoder = VideoDecoder()
@@ -154,7 +278,8 @@ struct AV1SequenceHeaderTests {
     /// A profile 1, 10-bit sequence header OBU; the fuzz suite mutates it.
     static func sequenceHeader(
         decoderModel: Bool, color: (Int, Int, Int)? = nil, fullRange: Bool = false,
-        profile: Int = 1, monochrome: Bool = false
+        profile: Int = 1, monochrome: Bool = false,
+        width: Int = 1, height: Int = 1
     ) -> Data {
         var bits = BitFixtureWriter()
         bits.write(profile, count: 3)
@@ -181,10 +306,14 @@ struct AV1SequenceHeaderTests {
             bits.write(0, count: 5)
             bits.write(0, count: 1)
         }
-        bits.write(0, count: 4)
-        bits.write(0, count: 4)
-        bits.write(0, count: 1)
-        bits.write(0, count: 1)
+        // frame_width_bits_minus_1 / max_frame_width_minus_1 pairs sized to
+        // the requested coded dimensions (defaults keep the historic 1x1).
+        let widthFieldBits = Self.bitWidth(width - 1)
+        let heightFieldBits = Self.bitWidth(height - 1)
+        bits.write(widthFieldBits - 1, count: 4)
+        bits.write(heightFieldBits - 1, count: 4)
+        bits.write(width - 1, count: widthFieldBits)
+        bits.write(height - 1, count: heightFieldBits)
         bits.write(0, count: 1)
         bits.write(0, count: 1)
         bits.write(0, count: 1)
@@ -215,6 +344,17 @@ struct AV1SequenceHeaderTests {
         bits.write(0, count: 1) // film_grain_params_present
         bits.write(0, count: 1)
         return Data([0x0A, UInt8(bits.bytes.count)] + bits.bytes)
+    }
+
+    /// Bits needed to hold `value`, floored at 1 so minus_1 fields stay legal.
+    private static func bitWidth(_ value: Int) -> Int {
+        var remaining = value
+        var bits = 0
+        while remaining > 0 {
+            bits += 1
+            remaining >>= 1
+        }
+        return max(bits, 1)
     }
 }
 

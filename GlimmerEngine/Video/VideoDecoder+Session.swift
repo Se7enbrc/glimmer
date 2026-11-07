@@ -272,6 +272,8 @@ extension VideoDecoder {
         // enqueue happens later in `presentFrame`, which re-reads displayLayer.
         guard displayLayer != nil else { return }
 
+        applyAV1CleanAperture(to: pixelBuffer)
+
         #if os(macOS)
         let enqueueSignpostID = OSSignposter.render.makeSignpostID()
         let enqueueIntervalState = OSSignposter.render.beginInterval(
@@ -345,5 +347,35 @@ extension VideoDecoder {
         } else {
             _ = presentFrame(sb, modeGeneration: route.generation)
         }
+    }
+
+    // MARK: - AV1 padding
+
+    nonisolated func acceptsAV1Padding(width: Int, height: Int) -> Bool {
+        // This is a conservative padding allowance, not an encoder block-size claim.
+        let maximumPadding = 16
+        return streamWidth > 0 && streamHeight > 0
+            && width >= Int(streamWidth) && width <= Int(streamWidth) + maximumPadding
+            && height >= Int(streamHeight) && height <= Int(streamHeight) + maximumPadding
+    }
+
+    nonisolated func applyAV1CleanAperture(to buffer: CVPixelBuffer) {
+        guard (streamVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0,
+              let coded = av1PaddingBox.withLock({ $0 }),
+              CVPixelBufferGetWidth(buffer) == coded.width,
+              CVPixelBufferGetHeight(buffer) == coded.height
+        else { return }
+        // Preserve the decoded IOSurface and let the display layer crop. Offsets
+        // select the top-left negotiated rect instead of a centered crop.
+        let aperture: [CFString: Any] = [
+            kCVImageBufferCleanApertureWidthKey: Int(streamWidth),
+            kCVImageBufferCleanApertureHeightKey: Int(streamHeight),
+            kCVImageBufferCleanApertureHorizontalOffsetKey: Double(Int(streamWidth) - coded.width) / 2,
+            kCVImageBufferCleanApertureVerticalOffsetKey: Double(Int(streamHeight) - coded.height) / 2
+        ]
+        CVBufferRemoveAttachment(buffer, kCVImageBufferPreferredCleanApertureKey)
+        CVBufferRemoveAttachment(buffer, kCVImageBufferDisplayDimensionsKey)
+        CVBufferSetAttachment(buffer, kCVImageBufferCleanApertureKey,
+                              aperture as CFDictionary, .shouldPropagate)
     }
 }
