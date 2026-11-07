@@ -104,6 +104,8 @@ extension VideoDecoder {
             self.ppsData = nil
             self.vpsData = nil
             self.av1SequenceHeader = nil
+            // The padding contract restarts with the next stream.
+            self.av1PaddingBox.withLock { $0 = nil }
             // Invalidation retires VT ownership; discard any pending batch behind this cleanup too.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0

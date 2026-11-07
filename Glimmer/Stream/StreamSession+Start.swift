@@ -53,6 +53,23 @@ extension StreamSession {
                 let setup = buildStreamSubsystems(options)
                 setup.1.controllerLayouts = MacControllerLayouts(forwarder: setup.1,
                     scope: .game(pcID: server.uniqueId, appID: UInt32(clamping: appID)))
+                setup.1.onControllerMenu = { [weak input = setup.1, weak window = setup.0, weak self] slot in
+                    guard let input, let window, input.streamControls == nil,
+                          let token = input.controllerToken(slot: slot) else { return }
+                    MacStreamControls(input: input, stream: window, slot: slot, token: token,
+                                      appName: config.appName, pcName: server.serverName) {
+                        Task { [weak self] in
+                            guard let self, let network = await self.network else { return }
+                            await self.disconnectLeavingGameRunning()
+                            do { try await Self.quitRunningApp(network: network, expectedAppID: appID) } catch {
+                                let alert = NSAlert()
+                                alert.messageText = "Couldn't quit the game on \(server.serverName)."
+                                alert.informativeText = "Check the PC, then try again."
+                                alert.runModal()
+                            }
+                        }
+                    }.show()
+                }
                 #if DEBUG
                 JourneyMacPC.active?.prepare(setup)
                 #endif

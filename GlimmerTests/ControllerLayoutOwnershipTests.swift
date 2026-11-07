@@ -67,6 +67,34 @@ struct ControllerLayoutOwnershipTests {
         #expect(ControllerLayoutEditing.capture == nil)
     }
 
+    @Test(arguments: [0, 3, 25], [false, true])
+    func escapeFromTheControllerClosesLayoutsAndReturnsToTheMenu(level: Int, nested: Bool) async throws {
+        let forwarder = InputForwarder()
+        let menu = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
+                            styleMask: .titled, backing: .buffered, defer: false)
+        menu.isReleasedWhenClosed = false
+        menu.level = NSWindow.Level(rawValue: level)
+        let stream = NSWindow(contentRect: menu.frame, styleMask: .titled, backing: .buffered, defer: false)
+        stream.isReleasedWhenClosed = false
+        stream.level = menu.level
+        if nested { stream.addChildWindow(menu, ordered: .above) }
+        let layouts = MacControllerLayouts(forwarder: forwarder, scope: .allGames)
+        defer { layouts.stop(); forwarder.detach(); stream.removeChildWindow(menu); menu.close(); stream.close() }
+        layouts.showControls(returnTo: menu)
+        try await waitUntil { ControllerLayoutEditing.active }
+        let editor = try #require(NSApplication.shared.windows.first { $0.title == "Controller layouts" })
+        #expect(editor.parent === (nested ? stream : menu))
+        #expect(editor.level == menu.level)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: editor.windowNumber, context: nil,
+            characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false, keyCode: 53))
+        if !editor.performKeyEquivalent(with: event) { editor.firstResponder?.keyDown(with: event) }
+        try await waitUntil { !ControllerLayoutEditing.active }
+        #expect(editor.contentViewController == nil)
+        #expect(editor.parent == nil)
+        #expect(menu.isVisible)
+    }
+
     private func waitUntil(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }

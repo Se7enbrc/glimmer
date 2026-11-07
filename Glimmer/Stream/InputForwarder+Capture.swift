@@ -88,7 +88,7 @@ extension InputForwarder {
     /// Disassociate the cursor for relative aim only while this attached view
     /// owns key focus. Late focus callbacks must not capture after detach.
     func enterCapturedMode() {
-        guard !isMouseCaptured, let window, let inputView,
+        guard streamControls == nil, !isMouseCaptured, let window, let inputView,
               inputView.window === window, window.isKeyWindow,
               !window.ignoresMouseEvents else { return }
         inputCore.resetPointerMotion()

@@ -62,6 +62,15 @@ extension InputForwarder {
 
     func connectInputCore() {
         inputCore.withLock {
+            inputCore.controllerMenuOpensControls = true
+            inputCore.onControllerMenu = { [weak self, weak inputCore] slot in
+                let token = inputCore?.controllerToken(slot: slot)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.forwardsControllerEvents,
+                          token != nil, self.controllerToken(slot: slot) == token else { return }
+                    self.onControllerMenu?(slot)
+                }
+            }
             inputCore.onControllerShortcut = { [weak self] action in
                 Task { @MainActor in
                     guard let self, self.forwardsControllerEvents else { return }

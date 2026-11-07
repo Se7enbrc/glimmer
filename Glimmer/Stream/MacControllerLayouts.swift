@@ -16,6 +16,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
     private var editingObservation: NSObjectProtocol?
     private var hidObservation: NSObjectProtocol?
     private var window: NSWindow?
+    private weak var returnWindow: NSWindow?
     private var loading: Task<Void, Never>?
 
     init(forwarder: InputForwarder, scope: ControllerLayoutScope) {
@@ -56,6 +57,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         hidObservation = nil
         readers.removeAll()
         window?.delegate = nil
+        if let window { window.parent?.removeChildWindow(window) }
         window?.contentViewController = nil
         window?.close()
         window = nil
@@ -159,8 +161,9 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         }
     }
 
-    func showControls() {
+    func showControls(returnTo: NSWindow? = nil) {
         guard let forwarder else { return }
+        returnWindow = returnTo
         forwarder.inputOwnershipLost(reason: "controller controls")
         if let window { window.makeKeyAndOrderFront(nil); return }
         let view = NavigationStack {
@@ -170,6 +173,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
                         Button("Done") { [weak self] in
                             self?.window?.close()
                         }
+                        .keyboardShortcut(.cancelAction)
                     }
                 }
         }
@@ -179,16 +183,23 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.center()
+        if let parent = returnTo?.parent ?? returnTo {
+            window.level = parent.level
+            window.collectionBehavior = [.fullScreenAuxiliary]
+            window.setFrameOrigin(NSPoint(x: parent.frame.midX - window.frame.width / 2,
+                                          y: parent.frame.midY - window.frame.height / 2))
+            parent.addChildWindow(window, ordered: .above)
+        } else { window.center() }
         self.window = window
         window.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let closing = notification.object as? NSWindow, closing === window else { return }
+        closing.parent?.removeChildWindow(closing)
         closing.contentViewController = nil
         window = nil
-        forwarder?.window?.makeKeyAndOrderFront(nil)
+        (returnWindow ?? forwarder?.window)?.makeKeyAndOrderFront(nil)
     }
 
     private func editingChanged() {

@@ -117,6 +117,83 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Journey game"].isHittable)
     }
 
+    func testMenuHoldOpensControllerControlsAndReturnsInputSafely() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try controller(connect: true)
+        record("mac-stream-before-menu")
+        try press("menu", duration: 1200)
+        XCTAssertFalse(app.buttons["stream-resume"].exists)
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        record("mac-stream-controller-menu")
+        let index = receipts().count
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["Hide stream stats"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["Use gamepad mode"].waitForExistence(timeout: 5))
+        try press("a")
+        XCTAssertTrue(app.buttons["Use mouse mode"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForNonExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-done"].waitForExistence(timeout: 5))
+        record("mac-stream-controller-help")
+        try press("b")
+        for _ in 0..<5 { try moveMenuDown() }
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-cancel"].waitForExistence(timeout: 5))
+        record("mac-stream-controller-quit-confirmation")
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(receipts().dropFirst(index).contains { Int($0["pcButtons"] ?? 0) & 0x3000 != 0 })
+        try press("a")
+        XCTAssertTrue(receipts().dropFirst(index).contains { $0["pcButtons"] == 0x1000 })
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        for _ in 0..<6 { try moveMenuDown() }
+        record("mac-stream-controller-disconnect")
+        try press("a")
+        XCTAssertTrue(waitForReceipt("stop"))
+        XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
+    }
+
+    private func moveMenuDown() throws {
+        try controller(steps: [["element": "dpad", "value": 0, "y": -1, "milliseconds": 100],
+                               ["element": "dpad", "value": 0, "y": 0]])
+    }
+
+    func testMenuHoldQuitRequiresControllerConfirmation() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try controller(connect: true)
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        for _ in 0..<5 { try moveMenuDown() }
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-cancel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(receipts().contains { $0["quit"] != nil })
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(waitForReceipt("quit"))
+        XCTAssertTrue(waitForReceipt("stop"))
+        XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
+    }
+
     func testPlayStationAllInputsAndPartialChords() throws {
         try streamInputs(profile: "ps")
     }

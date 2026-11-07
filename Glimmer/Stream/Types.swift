@@ -92,6 +92,7 @@ struct StreamConfig: Sendable {
     /// Title for the Window-mode window ("Tower - Desktop"). Unused in full
     /// screen (a borderless cover has no title bar).
     var windowTitle: String = ""
+    var appName: String = "Game"
 
     init(width: Int, height: Int, fps: Int, bitrateKbps: Int) {
         request = StreamRequest(width: width, height: height, fps: fps, bitrateKbps: bitrateKbps,
