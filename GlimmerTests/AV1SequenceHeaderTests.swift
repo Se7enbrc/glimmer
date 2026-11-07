@@ -87,6 +87,94 @@ struct AV1SequenceHeaderTests {
         #expect(result?.subsamplingY == 0)
     }
 
+    @Test func parsesPaddedCodedDimensions() throws {
+        // Issue #223: AMF's AV1 encoder signals 1920x1082 because 1080 is not
+        // a multiple of its fixed 64x16 coding blocks.
+        let decoder = VideoDecoder()
+        let parsed = try #require(
+            decoder.parseAV1SequenceHeader(Self.sequenceHeader(decoderModel: false,
+                                                               width: 1920, height: 1082)))
+        #expect(parsed.codedWidth == 1920)
+        #expect(parsed.codedHeight == 1082)
+    }
+
+    @Test func parsedPaddingReachesTheFormatDescription() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, width: 1920, height: 1082)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dims = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        #expect(dims.width == 1920)
+        #expect(dims.height == 1082)
+    }
+
+    @Test func headerCodingLessThanNegotiatedKeepsTheNegotiatedSize() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 1920
+        decoder.streamHeight = 1080
+        let data = Self.sequenceHeader(decoderModel: false, width: 64, height: 64)
+        try #require(decoder.rebuildAV1FormatDescription(obuData: data))
+        let dims = CMVideoFormatDescriptionGetDimensions(try #require(decoder.formatDescription))
+        #expect(dims.width == 1920)
+        #expect(dims.height == 1080)
+    }
+
+    @Test func decodedPaddingIsCroppedBeforePresentation() throws {
+        let decoder = VideoDecoder()
+        decoder.streamWidth = 32
+        decoder.streamHeight = 16
+        var created: CVPixelBuffer?
+        let status = CVPixelBufferCreate(kCFAllocatorDefault, 32, 18,
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, nil, &created)
+        #expect(status == kCVReturnSuccess)
+        let padded = try #require(created)
+        // Mark every row of both planes with its index so a wrong row mapping
+        // or a mis-copied subsampled plane cannot pass.
+        CVPixelBufferLockBaseAddress(padded, [])
+        let luma = try #require(CVPixelBufferGetBaseAddressOfPlane(padded, 0))
+        let lumaStride = CVPixelBufferGetBytesPerRowOfPlane(padded, 0)
+        for row in 0..<18 {
+            for column in 0..<32 { luma.storeBytes(of: UInt8(row), toByteOffset: row * lumaStride + column, as: UInt8.self) }
+        }
+        let chroma = try #require(CVPixelBufferGetBaseAddressOfPlane(padded, 1))
+        let chromaStride = CVPixelBufferGetBytesPerRowOfPlane(padded, 1)
+        for row in 0..<9 {
+            for column in 0..<16 { chroma.storeBytes(of: UInt8(128 + row), toByteOffset: row * chromaStride + column, as: UInt8.self) }
+        }
+        CVPixelBufferUnlockBaseAddress(padded, [])
+
+        let cropped = decoder.cropToStreamSize(padded)
+        #expect(cropped !== padded)
+        #expect(CVPixelBufferGetWidth(cropped) == 32)
+        #expect(CVPixelBufferGetHeight(cropped) == 16)
+        CVPixelBufferLockBaseAddress(cropped, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(cropped, .readOnly) }
+        let croppedLuma = try #require(CVPixelBufferGetBaseAddressOfPlane(cropped, 0))
+        let croppedLumaStride = CVPixelBufferGetBytesPerRowOfPlane(cropped, 0)
+        for row in 0..<16 {
+            for column in 0..<32 {
+                let got = croppedLuma.load(fromByteOffset: row * croppedLumaStride + column, as: UInt8.self)
+                #expect(got == UInt8(row))
+            }
+        }
+        #expect(CVPixelBufferGetHeightOfPlane(cropped, 1) == 8)
+        let croppedChroma = try #require(CVPixelBufferGetBaseAddressOfPlane(cropped, 1))
+        let croppedChromaStride = CVPixelBufferGetBytesPerRowOfPlane(cropped, 1)
+        for row in 0..<8 {
+            for column in 0..<16 {
+                let got = croppedChroma.load(fromByteOffset: row * croppedChromaStride + column, as: UInt8.self)
+                #expect(got == UInt8(128 + row))
+            }
+        }
+        // Repeated crops reuse the pool: a second pass returns a distinct
+        // buffer object but identical geometry, and unpadded frames pass
+        // through untouched.
+        let second = decoder.cropToStreamSize(padded)
+        #expect(CVPixelBufferGetHeight(second) == 16)
+        #expect(decoder.cropToStreamSize(second) === second)
+    }
+
     @Test(arguments: [false, true], [1, 16, 18])
     func colorDescriptionReachesTheFormat(fullRange: Bool, transfer: Int) throws {
         let decoder = VideoDecoder()
@@ -154,7 +242,8 @@ struct AV1SequenceHeaderTests {
     /// A profile 1, 10-bit sequence header OBU; the fuzz suite mutates it.
     static func sequenceHeader(
         decoderModel: Bool, color: (Int, Int, Int)? = nil, fullRange: Bool = false,
-        profile: Int = 1, monochrome: Bool = false
+        profile: Int = 1, monochrome: Bool = false,
+        width: Int = 1, height: Int = 1
     ) -> Data {
         var bits = BitFixtureWriter()
         bits.write(profile, count: 3)
@@ -181,10 +270,14 @@ struct AV1SequenceHeaderTests {
             bits.write(0, count: 5)
             bits.write(0, count: 1)
         }
-        bits.write(0, count: 4)
-        bits.write(0, count: 4)
-        bits.write(0, count: 1)
-        bits.write(0, count: 1)
+        // frame_width_bits_minus_1 / max_frame_width_minus_1 pairs sized to
+        // the requested coded dimensions (defaults keep the historic 1x1).
+        let widthFieldBits = Self.bitWidth(width - 1)
+        let heightFieldBits = Self.bitWidth(height - 1)
+        bits.write(widthFieldBits - 1, count: 4)
+        bits.write(heightFieldBits - 1, count: 4)
+        bits.write(width - 1, count: widthFieldBits)
+        bits.write(height - 1, count: heightFieldBits)
         bits.write(0, count: 1)
         bits.write(0, count: 1)
         bits.write(0, count: 1)
@@ -215,6 +308,17 @@ struct AV1SequenceHeaderTests {
         bits.write(0, count: 1) // film_grain_params_present
         bits.write(0, count: 1)
         return Data([0x0A, UInt8(bits.bytes.count)] + bits.bytes)
+    }
+
+    /// Bits needed to hold `value`, floored at 1 so minus_1 fields stay legal.
+    private static func bitWidth(_ value: Int) -> Int {
+        var remaining = value
+        var bits = 0
+        while remaining > 0 {
+            bits += 1
+            remaining >>= 1
+        }
+        return max(bits, 1)
     }
 }
 

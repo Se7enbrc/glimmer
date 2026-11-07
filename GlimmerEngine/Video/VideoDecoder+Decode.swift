@@ -104,6 +104,9 @@ extension VideoDecoder {
             self.ppsData = nil
             self.vpsData = nil
             self.av1SequenceHeader = nil
+            // Release the crop pool; the geometry contract restarts with the
+            // next stream's setup().
+            self.cropBox.withLock { $0 = nil }
             // Invalidation retires VT ownership; discard any pending batch behind this cleanup too.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0

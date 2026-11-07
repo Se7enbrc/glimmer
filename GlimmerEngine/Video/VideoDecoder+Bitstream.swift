@@ -123,6 +123,32 @@ extension VideoDecoder {
         let seqTier: UInt8 = parsed?.seqTier ?? 0
         let level: UInt8 = 0  // 2.0; auto-negotiated by the decoder anyway
 
+        // The format description carries the CODED geometry, not the display
+        // rect: VT sizes its output pool and validates the bitstream against
+        // it. AMF's AV1 encoder pads 1080 up to 1082 rows for its fixed
+        // 64x16 blocks, and decoding that stream under a 1080-tall
+        // description fails with -12909 (bad data). Trust the parsed
+        // dimensions only when they cover the negotiated rect - a header
+        // coding LESS than the negotiated size is a mismatch, and the
+        // negotiated size remains the safer contract there.
+        var codedWidth = Int(streamWidth)
+        var codedHeight = Int(streamHeight)
+        if let parsed, parsed.codedWidth >= Int(streamWidth),
+           parsed.codedHeight >= Int(streamHeight) {
+            if parsed.codedWidth != codedWidth || parsed.codedHeight != codedHeight {
+                log.info(
+                    """
+                    AV1 coded size \(parsed.codedWidth, privacy: .public)x\
+                    \(parsed.codedHeight, privacy: .public) exceeds negotiated \
+                    \(codedWidth, privacy: .public)x\(codedHeight, privacy: .public); \
+                    presentation will crop the padding
+                    """
+                )
+            }
+            codedWidth = parsed.codedWidth
+            codedHeight = parsed.codedHeight
+        }
+
         var av1cBytes: [UInt8] = []
         // Marker bit + version (1), then seq_profile(3) + seq_level_idx_0(5)
         av1cBytes.append(0x81)  // marker=1, version=1
@@ -153,8 +179,8 @@ extension VideoDecoder {
         let status = CMVideoFormatDescriptionCreate(
             allocator: kCFAllocatorDefault,
             codecType: kCMVideoCodecType_AV1,
-            width: streamWidth,
-            height: streamHeight,
+            width: Int32(codedWidth),
+            height: Int32(codedHeight),
             extensions: extensions as CFDictionary,
             formatDescriptionOut: &newFormat)
         if status != noErr {

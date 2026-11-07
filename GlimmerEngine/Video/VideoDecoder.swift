@@ -248,6 +248,11 @@ public final class VideoDecoder {
     // Only the serial decode queue reads or publishes the active AV1 configuration.
     nonisolated(unsafe) var av1SequenceHeader: AV1SeqHeader?
 
+    // Pooled destination for the presentation crop that strips coded-size
+    // padding (see `cropToStreamSize`). Touched only from VT's output thread
+    // and teardown, hence the lock box.
+    nonisolated let cropBox = OSAllocatedUnfairLock<CropDestination?>(initialState: nil)
+
     // The decode queue runs everything VideoToolbox-related serially. The
     // submit callback fires on the native backend's receive thread; we hop here
     // ASYNCHRONOUSLY (decodeQueue.async) so the receive thread hands the frame
