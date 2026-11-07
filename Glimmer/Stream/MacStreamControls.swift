@@ -86,16 +86,28 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
         parent.addChildWindow(panel, ordered: .above)
         self.panel = panel
         panel.makeKeyAndOrderFront(nil)
-        let current = input.inputCore.withLock { Array(input.inputCore.controllers.values) }
-        for sample in current {
-            receive(slot: sample.slot, token: sample.token,
-                    sample: .init(buttons: sample.buttons, analog: sample.analog))
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let input else { return }
+        for state in input.attachedControllers.values {
+            guard let controller = state.controller, let pad = controller.extendedGamepad else { continue }
+            let sample = input.controllerLayouts?.sample(for: controller, slot: state.slot)?.physical
+                ?? .init(buttons: input.pressedButtonFlags(pad: pad), analog: InputForwarder.controllerAnalog(pad))
+            receive(slot: state.slot, token: input.controllerToken(slot: state.slot), sample: sample)
         }
         for state in input.attachedHIDControllers.values {
             let sample = state.device.state
             receive(slot: state.slot, token: input.controllerToken(slot: state.slot),
                     sample: .init(buttons: sample.buttons, analog: sample.analog))
         }
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        stopRepeating()
+        samples.removeAll()
+        repeats.removeAll()
+        sampleTokens.removeAll()
     }
 
     func receive(slot: UInt8, token: UUID?, sample: ControllerMappingSample) {
