@@ -20,12 +20,16 @@ struct ControllerLayoutAssignment: View {
     @State private var saving = false
     @State private var failure: String?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.streamControlsScale) private var streamScale
 
     var body: some View {
         ControllerSettingsNavigation {
             Form {
                 Section {
-                    Label(control.name, systemImage: control.symbol)
+                    Label(control.name, systemImage: control.symbol).font(.title2)
+                        #if os(macOS)
+                        .streamFont(.title2, scale: streamScale ?? 1)
+                        #endif
                     ControllerSettingsPicker(title: "Send to PC", value: destination.layoutName, selection: $destination) {
                         ForEach(ControllerLayoutDestination.choices(for: control.id), id: \.self) { choice in
                             Text(choice.layoutName).tag(choice)
@@ -110,6 +114,7 @@ struct ControllerLayoutCaptureSheet: View {
     @State private var failure: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.streamControlsScale) private var streamScale
 
     var body: some View {
         Group {
@@ -119,7 +124,10 @@ struct ControllerLayoutCaptureSheet: View {
                 ControllerSettingsNavigation {
                     Form {
                         Section {
-                            Label(capture.message, systemImage: "gamecontroller")
+                            Label(capture.message, systemImage: "gamecontroller").font(.title3)
+                                #if os(macOS)
+                                .streamFont(.title3, scale: streamScale ?? 1)
+                                #endif
                                 .accessibilityAddTraits(.updatesFrequently)
                             Text("Only \(device.name) is being recorded.")
                                 .foregroundStyle(.secondary)
