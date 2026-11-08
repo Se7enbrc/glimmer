@@ -179,6 +179,18 @@ final class MacControllerJourneyUITests: XCTestCase {
                                ["element": "dpad", "value": 0, "y": 0]])
     }
 
+    private func focusController(on label: String) throws {
+        for _ in 0..<40 {
+            // macOS omits focus from snapshot attributes; XCTest's public debug tree exposes keyboard focus.
+            let focused = app.debugDescription.split(separator: "\n").contains {
+                $0.contains("Button,") && $0.contains("label: '\(label)'") && $0.contains("Keyboard Focused")
+            }
+            if focused { return }
+            try moveMenuDown()
+        }
+        XCTFail("The controller could not focus \(label)")
+    }
+
     func testControllerOnlyLayoutEditorFromTheStreamMenu() throws {
         try launch()
         app.buttons["Journey game"].click()
@@ -193,31 +205,27 @@ final class MacControllerJourneyUITests: XCTestCase {
         try press("a")
         XCTAssertTrue(app.buttons["Change a button…"].waitForExistence(timeout: 5))
         record("mac-controller-layout-editor")
-        try moveMenuDown()
+        try focusController(on: "Change a button…")
         try press("a")
-        // Native initial focus depends on keyboard navigation; close the scope picker if it was first.
-        if app.menuItems["All games"].exists {
-            try press("b")
-            XCTAssertTrue(app.menuItems["All games"].waitForNonExistence(timeout: 5))
-            try moveMenuDown()
-            try press("a")
-        }
         XCTAssertTrue(app.staticTexts["Press a control"].waitForExistence(timeout: 5))
         try press("x")
         let picker = app.buttons["controller-settings-picker-Send to PC"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        try moveMenuDown()
+        try focusController(on: "Send to PC")
         try press("a")
         XCTAssertTrue(app.menuItems["X · Left"].waitForExistence(timeout: 5))
         try press("b")
         XCTAssertTrue(app.menuItems["X · Left"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(picker.exists)
+        try focusController(on: "Send to PC")
         try press("a")
         XCTAssertTrue(app.menuItems["X · Left"].waitForExistence(timeout: 5))
         try moveMenuDown()
         try press("a")
         XCTAssertTrue(app.menuItems["X · Left"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(picker.exists)
+        try focusController(on: "Send to PC")
+        // Toolbar buttons omit keyboard focus from accessibility; traverse Cancel, then Save from the known picker.
         try moveMenuDown()
         try moveMenuDown()
         try press("a")
