@@ -433,10 +433,11 @@ owns its switch; no private API or signed-plist edits.
 
 Borderless deactivation waits 200 ms before hiding to ignore transient focus
 changes. Actual visibility separately drives presentation/decode suppression.
-“Back to stream” restores the window; app activation alone must not pull it
-forward. Returning while input is released restores the picture and click target
-without recapturing input. The window uses `.readOnly` sharing so Mac screenshot
-and recording tools can capture the stream; journey tests use the same policy.
+“Back to stream” and keyboard app switching restore the window; clicking the
+launcher or Settings must not pull it forward. Returning while input is released
+restores the picture and click target without recapturing input. The window uses
+`.readOnly` sharing so Mac screenshot and recording tools can capture the
+stream; journey tests use the same policy.
 
 ## Crossing isolation: receive threads ↔ Swift actors
 

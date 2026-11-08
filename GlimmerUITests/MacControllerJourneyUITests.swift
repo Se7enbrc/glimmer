@@ -282,14 +282,9 @@ final class MacControllerJourneyUITests: XCTestCase {
             let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
             finder.activate()
             XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
-            if presentation == "cover" { XCTAssertTrue(window.waitForNonExistence(timeout: 5)) }
+            XCTAssertTrue(window.waitForNonExistence(timeout: 10))
             app.activate()
-            if presentation == "cover" {
-                let resume = app.buttons["Journey game, running. Resume stream"]
-                XCTAssertTrue(resume.waitForExistence(timeout: 5))
-                resume.click()
-            }
-            XCTAssertTrue(window.waitForExistence(timeout: 5))
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
             let count = receipts().filter { $0["keyboardEvent"] != nil }.count
             app.typeKey("w", modifierFlags: [])
             XCTAssertEqual(receipts().filter { $0["keyboardEvent"] != nil }.count, count)
