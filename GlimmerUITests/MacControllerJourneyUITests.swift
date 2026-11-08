@@ -13,10 +13,10 @@ final class MacControllerJourneyUITests: XCTestCase {
     private func launch(captureSystemKeys: Bool = false) throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
-        directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // Xcode can give the runner and app different temporary roots between appearance passes.
-        app.launchEnvironment["TMPDIR"] = FileManager.default.temporaryDirectory.path
+        directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("Glimmer-journey-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
         app.launchEnvironment["GLIMMER_JOURNEY_DIRECTORY"] = directory.path
         app.launchEnvironment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] = captureSystemKeys ? "1" : "0"
@@ -195,6 +195,13 @@ final class MacControllerJourneyUITests: XCTestCase {
         record("mac-controller-layout-editor")
         try moveMenuDown()
         try press("a")
+        // Native initial focus depends on keyboard navigation; close the scope picker if it was first.
+        if app.menuItems["All games"].exists {
+            try press("b")
+            XCTAssertTrue(app.menuItems["All games"].waitForNonExistence(timeout: 5))
+            try moveMenuDown()
+            try press("a")
+        }
         XCTAssertTrue(app.staticTexts["Press a control"].waitForExistence(timeout: 5))
         try press("x")
         let picker = app.buttons["controller-settings-picker-Send to PC"]

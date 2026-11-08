@@ -19,15 +19,30 @@ final class JourneyMacPC {
         guard let path = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_DIRECTORY"] else {
             preconditionFailure("A journey needs isolated receipt storage")
         }
-        let directory = PersistentStorage.checked(URL(fileURLWithPath: path))
+        guard let directory = Self.receiptDirectory(path) else {
+            preconditionFailure("Journey receipts need a unique directory under /tmp")
+        }
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
         } catch { preconditionFailure("Could not create isolated journey storage") }
         receipts = JourneyReceipts(directory: directory)
         network = JourneyMacNetwork(receipts: receipts)
         driver = JourneyControllerDriver(directory: directory, receipts: receipts)
         driver.start()
         receipts.record(["fixture": 1])
+    }
+
+    // Xcode assigns different temporary roots to the runner and app; only IPC uses this shared directory.
+    static func receiptDirectory(_ path: String) -> URL? {
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        let name = directory.lastPathComponent
+        let prefix = "Glimmer-journey-"
+        guard name.hasPrefix(prefix), UUID(uuidString: String(name.dropFirst(prefix.count))) != nil else { return nil }
+        let root = URL(fileURLWithPath: "/tmp", isDirectory: true).resolvingSymlinksInPath()
+        let resolved = directory.resolvingSymlinksInPath()
+        guard resolved == root.appendingPathComponent(name, isDirectory: true) else { return nil }
+        return resolved
     }
 
     func launcher() -> AppModel {
