@@ -59,6 +59,10 @@ final class ControllerLayoutNavigationHub {
         let index = command == .activate ? current ?? 0
             : current.map { ($0 + (backwards ? targets.count - 1 : 1)) % targets.count } ?? 0
         let target = targets[index]
+        #if DEBUG
+        JourneyMacPC.active?.receipts.record(["layoutTarget": Double(index), "layoutCount": Double(targets.count),
+            "layoutActivate": command == .activate ? 1 : 0, "layoutPrior": Double(current ?? -1)])
+        #endif
         if focusedControl !== target { focusedControl?.focus(false) }
         focusedControl = target
         target.scrollToVisible(target.bounds)
