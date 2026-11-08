@@ -11,6 +11,10 @@ struct JourneyFixtureTests {
     @Test func sharedReceiptsDoNotDependOnTheAppsTemporaryDirectory() throws {
         let directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
             .appendingPathComponent("Glimmer-journey-" + UUID().uuidString, isDirectory: true)
+        // The UI runner creates this directory before launch; macOS 15 only resolves existing symlink paths.
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: directory) }
         let resolved = try #require(JourneyMacPC.receiptDirectory(directory.path))
         #expect(resolved == directory.resolvingSymlinksInPath())
         #expect(PersistentStorage.testRoot != resolved)
