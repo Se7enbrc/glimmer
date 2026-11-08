@@ -129,6 +129,41 @@ struct ControllerLayoutOwnershipTests {
         #expect(Set(selected) == ["first", "second", "toggle"])
     }
 
+    @Test func controllerFocusSkipsUnavailableControlsAndStaysInItsWindow() throws {
+        let hub = ControllerLayoutNavigationHub(devices: { [] })
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 400),
+                              styleMask: .titled, backing: .buffered, defer: false)
+        let other = NSWindow(contentRect: window.frame, styleMask: .titled, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        other.isReleasedWhenClosed = false
+        defer { window.close(); other.close() }
+        var selected: [Int] = []
+        var controls: [ControllerLayoutFocusView] = []
+        for index in 0..<5 {
+            let view = ControllerLayoutFocusView(frame: NSRect(x: 20, y: CGFloat(320 - index * 50), width: 300, height: 40))
+            (index == 4 ? other : window).contentView?.addSubview(view)
+            view.enabled = index != 1
+            view.isHidden = index == 2
+            view.focus = { [weak view] in view?.focused = $0 }
+            view.activate = { selected.append(index) }
+            hub.addFocus(view)
+            controls.append(view)
+        }
+        #expect(hub.focus(.down, in: window))
+        #expect(hub.focus(.activate, in: window))
+        #expect(hub.focus(.down, in: window))
+        #expect(hub.focus(.activate, in: window))
+        #expect(hub.focus(.down, in: window))
+        #expect(hub.focus(.activate, in: window))
+        #expect(selected == [0, 3, 0])
+        #expect(!hub.focus(.dismiss, in: window))
+        #expect(hub.focus(.up, in: window))
+        #expect(hub.focus(.activate, in: window))
+        #expect(selected == [0, 3, 0, 3])
+        controls.forEach(hub.removeFocus)
+        #expect(!hub.focus(.activate, in: window))
+    }
+
     @Test func physicalLayoutNavigationIncludesSticksAndPositionalFaceButtons() {
         let right = ControllerMappingSample(buttons: 0, analog: SIMD8(0, 0, 30000, 0, 0, 0, 0, 0))
         #expect(ControllerLayoutNavigationHub.input(right).direction == .right)

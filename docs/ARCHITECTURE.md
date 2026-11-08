@@ -392,7 +392,10 @@ Mac layout editors route physical GameController and raw-HID input through a
 shared navigation owner. Positional face buttons activate or dismiss native
 controls; the directional pad and left stick traverse focus. Recording takes
 exclusive ownership synchronously, and navigation rearms after capture ends.
-Native menu tracking polls live controller values only while the menu is open.
+Native menu tracking polls live controller values only while the menu is open;
+older queued samples cannot replay a dismissal into the editor. Registered
+native focus anchors traverse visible, enabled controls in visual order, then
+toolbar actions, without requiring Full Keyboard Access.
 
 ### Raw HID and gestures
 

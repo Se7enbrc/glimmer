@@ -197,6 +197,8 @@ private struct ControllerSettingsFocus: ViewModifier {
     func body(content: Content) -> some View {
         #if os(macOS)
         content.focusable(false).focusable(true, interactions: .edit).focused($focused)
+            .background(ControllerLayoutFocusControl(enabled: enabled, focused: focused,
+                focus: { focused = $0 }, activate: action))
             .onKeyPress(.space) {
                 guard focused, enabled else { return .ignored }
                 action()

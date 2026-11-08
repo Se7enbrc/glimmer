@@ -15,6 +15,8 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Xcode can give the runner and app different temporary roots between appearance passes.
+        app.launchEnvironment["TMPDIR"] = FileManager.default.temporaryDirectory.path
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
         app.launchEnvironment["GLIMMER_JOURNEY_DIRECTORY"] = directory.path
         app.launchEnvironment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] = captureSystemKeys ? "1" : "0"
@@ -191,6 +193,32 @@ final class MacControllerJourneyUITests: XCTestCase {
         try press("a")
         XCTAssertTrue(app.buttons["Change a button…"].waitForExistence(timeout: 5))
         record("mac-controller-layout-editor")
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.staticTexts["Press a control"].waitForExistence(timeout: 5))
+        try press("x")
+        let picker = app.buttons["controller-settings-picker-Send to PC"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(picker.exists)
+        try press("a")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(picker.exists)
+        try moveMenuDown()
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(picker.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Custom layout"].waitForExistence(timeout: 5))
+        record("mac-controller-layout-saved")
+        try press("b")
+        XCTAssertTrue(app.buttons["Change a button…"].waitForNonExistence(timeout: 5))
         try press("b")
         XCTAssertTrue(app.windows["Controller layouts"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))

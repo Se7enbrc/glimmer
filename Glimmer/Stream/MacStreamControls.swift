@@ -200,8 +200,8 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
             input.publishControllerMouseActive()
         case .layouts:
             guard let layouts = input.controllerLayouts else { return }
-            layouts.showControls(returnTo: panel)
             panel?.orderOut(nil)
+            layouts.showControls(returnTo: panel)
         case .help: page = .help; selection = .done
         case .quit: page = .quit; selection = .cancel
         case .cancel, .done: page = .actions; selection = .resume
@@ -247,8 +247,19 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
 }
 
 private final class MacStreamControlsPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+    private var acceptsKeyFocus = true
+    override var canBecomeKey: Bool { acceptsKeyFocus }
     override var canBecomeMain: Bool { false }
+
+    override func orderOut(_ sender: Any?) {
+        acceptsKeyFocus = false
+        super.orderOut(sender)
+    }
+
+    override func makeKeyAndOrderFront(_ sender: Any?) {
+        acceptsKeyFocus = true
+        super.makeKeyAndOrderFront(sender)
+    }
 }
 
 extension InputForwarder {

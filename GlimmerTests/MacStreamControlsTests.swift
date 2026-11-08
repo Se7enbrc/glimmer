@@ -85,6 +85,23 @@ struct MacStreamControlsTests {
         Attachment.record(Array(png), named: "mac-stream-menu-\(page)-\(dark ? "dark" : "light").png")
     }
 
+    @Test func hiddenMenuCannotReclaimFocusFromControllerLayouts() async throws {
+        let input = InputForwarder()
+        let stream = StreamWindow(displayMode: .window)
+        let menu = MacStreamControls(input: input, stream: stream, slot: 0, token: UUID(),
+                                    appName: "Game", pcName: "PC", quitGame: {})
+        defer { menu.close(); input.detach(); stream.close() }
+        stream.window.makeKeyAndOrderFront(nil)
+        menu.show()
+        let panel = try #require(stream.window.childWindows?.first { $0.identifier?.rawValue == "stream-controls" })
+        #expect(panel.canBecomeKey)
+        panel.orderOut(nil)
+        #expect(!panel.canBecomeKey)
+        panel.makeKeyAndOrderFront(nil)
+        #expect(panel.canBecomeKey)
+        #expect(panel.isVisible)
+    }
+
     @Test func controllerActionsFollowTheSharedOrderAndQuitNeedsConfirmation() {
         let input = InputForwarder()
         let stream = StreamWindow(displayMode: .window)

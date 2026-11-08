@@ -12,6 +12,7 @@ import AppKit
 final class ControllerLayoutNavigationHub {
     static let shared = ControllerLayoutNavigationHub()
     private struct Surface { weak var view: NSView? }
+    private struct FocusTarget { weak var view: ControllerLayoutFocusView? }
     private struct Entry {
         let source: ControllerLayoutCaptureSource
         let release: () -> Void
@@ -23,13 +24,47 @@ final class ControllerLayoutNavigationHub {
     private var repeats: [String: LauncherControllerRepeat] = [:]
     private var samples: [String: ControllerMappingSample] = [:]
     private var surfaces: [ObjectIdentifier: Surface] = [:]
+    private var focusTargets: [ObjectIdentifier: FocusTarget] = [:]
+    private weak var focusedControl: ControllerLayoutFocusView?
     private var timer: Timer?
     private var menuDepth = 0
+    private var lastMenuRead: TimeInterval = 0
     private weak var priorWindow: NSWindow?
     private let devices: () -> [ControllerLayoutDevice]
 
     init(devices: @escaping () -> [ControllerLayoutDevice] = { ControllerLayoutsModel.shared.devices }) {
         self.devices = devices
+    }
+
+    func addFocus(_ view: ControllerLayoutFocusView) { focusTargets[ObjectIdentifier(view)] = FocusTarget(view: view) }
+    func removeFocus(_ view: ControllerLayoutFocusView) {
+        focusTargets[ObjectIdentifier(view)] = nil
+        if focusedControl === view { focusedControl = nil }
+    }
+
+    func focus(_ command: LauncherCommand, in window: NSWindow) -> Bool {
+        guard command != .dismiss, command != .menu else { return false }
+        let targets = focusTargets.values.compactMap(\.view).filter {
+            $0.window === window && $0.enabled && !$0.isHiddenOrHasHiddenAncestor && !$0.bounds.isEmpty
+        }.sorted { lhs, rhs in
+            let left = lhs.convert(lhs.bounds, to: nil), right = rhs.convert(rhs.bounds, to: nil)
+            let leftToolbar = left.midY > window.contentLayoutRect.maxY
+            let rightToolbar = right.midY > window.contentLayoutRect.maxY
+            if leftToolbar != rightToolbar { return !leftToolbar }
+            return abs(left.midY - right.midY) > 2 ? left.midY > right.midY : left.minX < right.minX
+        }
+        guard !targets.isEmpty else { return false }
+        let current = targets.firstIndex { $0.focused } ?? targets.firstIndex { $0 === focusedControl }
+        let backwards = command == .up || command == .left
+        let index = command == .activate ? current ?? 0
+            : current.map { ($0 + (backwards ? targets.count - 1 : 1)) % targets.count } ?? 0
+        let target = targets[index]
+        if focusedControl !== target { focusedControl?.focus(false) }
+        focusedControl = target
+        target.scrollToVisible(target.bounds)
+        target.focus(true)
+        if command == .activate { target.activate() }
+        return true
     }
 
     func add(_ view: NSView) {
@@ -109,8 +144,10 @@ final class ControllerLayoutNavigationHub {
             let epoch = UUID()
             let id = device.id
             let release = source.acquire { [weak self] sample, _ in
+                // Menu tracking reads live input while queued callbacks wait; never replay those older edges.
+                let capturedAt = ProcessInfo.processInfo.systemUptime
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, entries[id]?.epoch == epoch else { return }
+                    guard let self, entries[id]?.epoch == epoch, capturedAt > lastMenuRead else { return }
                     samples[id] = sample
                     poll()
                 }
@@ -161,13 +198,17 @@ final class ControllerLayoutNavigationHub {
         if window !== priorWindow { repeats.removeAll(); priorWindow = window }
         for (id, entry) in entries {
             // Native menus track on a nested run loop, so read live values while their callbacks wait.
-            if menuDepth > 0 { samples[id] = entry.source.read() }
+            if menuDepth > 0 {
+                lastMenuRead = ProcessInfo.processInfo.systemUptime
+                samples[id] = entry.source.read()
+            }
             guard let sample = samples[id] else { continue }
             var state = repeats[id] ?? LauncherControllerRepeat()
             let commands = state.commands(Self.input(sample), at: ProcessInfo.processInfo.systemUptime)
             repeats[id] = state
             for command in commands {
                 guard targetWindow === window else { return }
+                if menuDepth == 0, focus(command, in: window) { continue }
                 Self.send(command, to: window, trackingMenu: menuDepth > 0)
             }
         }
@@ -187,7 +228,7 @@ final class ControllerLayoutNavigationHub {
     }
 
     static func send(_ command: LauncherCommand, to window: NSWindow, trackingMenu: Bool = false,
-                     postEvent: (NSEvent) -> Void = { NSApp.postEvent($0, atStart: false) }) {
+                     postEvent: ((NSEvent) -> Void)? = nil) {
         let traversing = !trackingMenu && (command == .up || command == .down)
         let key = traversing ? (code: UInt16(48), characters: "\t")
             : command == .activate && trackingMenu ? (code: UInt16(36), characters: "\r") : command.key
@@ -197,8 +238,45 @@ final class ControllerLayoutNavigationHub {
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
                 context: nil, characters: key.characters, charactersIgnoringModifiers: key.characters,
                 isARepeat: false, keyCode: key.code) else { continue }
-            postEvent(event)
+            if let postEvent { postEvent(event) } else if trackingMenu {
+                NSApp.postEvent(event, atStart: false)
+            } else if type != .keyDown || !window.performKeyEquivalent(with: event) {
+                window.sendEvent(event)
+            }
         }
+    }
+}
+
+@MainActor
+final class ControllerLayoutFocusView: NSView {
+    var enabled = true
+    var focused = false
+    var focus: (Bool) -> Void = { _ in }
+    var activate: () -> Void = {}
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { ControllerLayoutNavigationHub.shared.removeFocus(self) } else {
+            ControllerLayoutNavigationHub.shared.addFocus(self)
+        }
+    }
+}
+
+struct ControllerLayoutFocusControl: NSViewRepresentable {
+    let enabled: Bool
+    let focused: Bool
+    let focus: (Bool) -> Void
+    let activate: () -> Void
+
+    func makeNSView(context: Context) -> ControllerLayoutFocusView { ControllerLayoutFocusView() }
+    func updateNSView(_ view: ControllerLayoutFocusView, context: Context) {
+        view.enabled = enabled
+        view.focused = focused
+        view.focus = focus
+        view.activate = activate
+    }
+    static func dismantleNSView(_ view: ControllerLayoutFocusView, coordinator: ()) {
+        ControllerLayoutNavigationHub.shared.removeFocus(view)
     }
 }
 
