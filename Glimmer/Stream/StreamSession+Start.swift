@@ -14,6 +14,7 @@ extension StreamSession {
         statsHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultStats },
         bookmarkHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultBookmark },
         releasePointerHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultReleasePointer },
+        releaseInputHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultReleaseInput },
         miniPlayerHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultMiniPlayer },
         initialStatsOverlay: Bool = false,
         initialStatsCorner: StatsOverlayCorner = .topLeft,
@@ -37,7 +38,8 @@ extension StreamSession {
             initialStatsOverlay: initialStatsOverlay, initialStatsCorner: initialStatsCorner,
             quitHotkeyProvider: quitHotkeyProvider, statsHotkeyProvider: statsHotkeyProvider,
             bookmarkHotkeyProvider: bookmarkHotkeyProvider, releasePointerHotkeyProvider: releasePointerHotkeyProvider,
-            miniPlayerHotkeyProvider: miniPlayerHotkeyProvider, controllerQuitChordProvider: controllerQuitChordProvider,
+            releaseInputHotkeyProvider: releaseInputHotkeyProvider, miniPlayerHotkeyProvider: miniPlayerHotkeyProvider,
+            controllerQuitChordProvider: controllerQuitChordProvider,
             customControllerChordProvider: customControllerChordProvider, onBackgroundedChanged: onBackgroundedChanged,
             onMiniPlayerChanged: onMiniPlayerChanged, onCancelConnect: onCancelConnect)
         guard let stream = try await start(server: server, request: config.request, appID: appID,

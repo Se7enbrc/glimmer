@@ -166,21 +166,32 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         returnWindow = returnTo
         forwarder.inputOwnershipLost(reason: "controller controls")
         if let window { window.makeKeyAndOrderFront(nil); return }
+        let scale = returnTo.map { MacStreamControlsView.scale(for: $0.frame.size) } ?? 1
         let view = NavigationStack {
             ControllerLayoutsView(initialScope: scope)
+                .onExitCommand { [weak self] in self?.window?.close() }
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { [weak self] in
                             self?.window?.close()
                         }
+                        .controllerSettingsFocus { [weak self] in self?.window?.close() }
                         .keyboardShortcut(.cancelAction)
                     }
                 }
         }
-        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        .environment(\.streamControlsScale, returnTo == nil ? nil : scale)
+        .streamFont(.title3, scale: scale)
+        let window = NSWindow(contentViewController: NSHostingController(rootView:
+            view.modifier(MacStreamGlassSurface())))
         window.title = "Controller layouts"
-        window.setContentSize(NSSize(width: 620, height: 680))
-        window.styleMask = [.titled, .closable, .resizable]
+        let available = returnTo?.frame.size ?? CGSize(width: 900, height: 900)
+        window.setContentSize(NSSize(width: max(460, min(680 * scale, available.width - 64)),
+                                     height: max(360, min(760 * scale, available.height - 64))))
+        window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
         window.delegate = self
         if let parent = returnTo?.parent ?? returnTo {

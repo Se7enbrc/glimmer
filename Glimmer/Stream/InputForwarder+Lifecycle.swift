@@ -164,6 +164,8 @@ extension InputForwarder {
         inputView?.delegate = nil
         inputView = nil
         window = nil
+        isInputReleased = false
+        inputRearming = false
         isReady = false
         initialConnectPending = false
 

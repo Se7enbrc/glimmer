@@ -157,6 +157,10 @@ public final class InputForwarder {
     package var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
     /// Read live like the quit/stats chords; toggles capture in every presentation.
+    var isInputReleased = false
+    var inputRearming = false
+    var onInputReleaseChanged: (@MainActor (Bool) -> Void)?
+    package var releaseInputHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleaseInput }
     package var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
     /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).

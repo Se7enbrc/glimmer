@@ -72,7 +72,7 @@ struct HostsPersistenceTests {
         #expect(AppModel(defaults: defaults).statsHotkey == model.statsHotkey)
     }
 
-    @Test(arguments: ["quitHotkey", "releasePointerHotkey", "miniPlayerHotkey"], [false, true])
+    @Test(arguments: ["quitHotkey", "releasePointerHotkey", "releaseInputHotkey", "miniPlayerHotkey"], [false, true])
     func statsMigrationNeverTakesASavedShortcut(owner: String, savedStats: Bool) throws {
         let defaults = settings.defaults
         let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
@@ -83,6 +83,28 @@ struct HostsPersistenceTests {
         #expect(defaults.data(forKey: owner) == occupied)
         defaults.removeObject(forKey: owner)
         #expect(HotkeyChord.persistedStats(defaults: defaults) == old)
+    }
+
+    @Test(arguments: ["quitHotkey", "statsHotkey", "releasePointerHotkey", "miniPlayerHotkey"])
+    func releaseInputDefaultDoesNotTakeAnExistingCustomBinding(owner: String) throws {
+        let defaults = settings.defaults
+        let occupied = try JSONEncoder().encode(HotkeyChord.defaultReleaseInput)
+        defaults.set(occupied, forKey: owner)
+        #expect(HotkeyChord.persistedReleaseInput(defaults: defaults).keyChar.isEmpty)
+        #expect(defaults.data(forKey: owner) == occupied)
+        defaults.removeObject(forKey: owner)
+        #expect(HotkeyChord.persistedReleaseInput(defaults: defaults).keyChar.isEmpty)
+    }
+
+    @Test func releaseInputBindingPersistsAndResetsToItsDefault() {
+        let defaults = settings.defaults
+        let model = AppModel(defaults: defaults)
+        #expect(model.releaseInputHotkey == .defaultReleaseInput)
+        let custom = HotkeyChord(ctrl: true, alt: true, shift: true, cmd: false, keyChar: "z")
+        model.releaseInputHotkey = custom
+        #expect(AppModel(defaults: defaults).releaseInputHotkey == custom)
+        SettingsReset.reset(defaults: defaults)
+        #expect(AppModel(defaults: defaults).releaseInputHotkey == .defaultReleaseInput)
     }
 
     @Test func statsMigrationLeavesBothOccupiedChordsAlone() throws {

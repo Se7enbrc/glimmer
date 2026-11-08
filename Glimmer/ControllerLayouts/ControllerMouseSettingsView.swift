@@ -9,7 +9,7 @@ struct ControllerMouseSettingsSection: View {
 
     var body: some View {
         Section("Controller mouse") {
-            NavigationLink {
+            ControllerSettingsNavigationLink {
                 ControllerMouseSettingsView(model: model)
             } label: {
                 LabeledContent("Controller mouse", value: model.mouse.title)
@@ -21,6 +21,7 @@ struct ControllerMouseSettingsSection: View {
 struct ControllerMouseSettingsView: View {
     var model = ControllerLayoutsModel.shared
     var previewDevice: ControllerLayoutDevice?
+    @Environment(\.dismiss) private var dismiss
     @State private var deviceID: String?
     @State private var action: ControllerMouseAction?
     @State private var resetting = false
@@ -84,12 +85,16 @@ struct ControllerMouseSettingsView: View {
             if let failure = failure ?? model.loadError { Section { Text(failure).foregroundStyle(.red) } }
         }
         .controllerSettingsForm()
+        .controllerLayoutNavigation()
+        #if os(macOS)
+        .onExitCommand { dismiss() }
+        #endif
         .disabled(!model.loaded)
         .navigationTitle("Controller mouse")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .sheet(item: $action) {
+        .controllerSettingsDestination(item: $action) {
             ControllerBindingRecorder(model: model, device: device, target: .mouse($0))
         }
         .confirmationDialog("Reset to \(model.mouse.preset.title)?", isPresented: $resetting, titleVisibility: .visible) {

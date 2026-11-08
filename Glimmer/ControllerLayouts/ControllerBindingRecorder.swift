@@ -39,7 +39,7 @@ struct ControllerBindingRecorder: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ControllerSettingsNavigation {
             Form {
                 Section {
                     ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls,
@@ -60,12 +60,15 @@ struct ControllerBindingRecorder: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving)
+                    .keyboardShortcut(.cancelAction).controllerSettingsFocus { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }.disabled(problem != nil || saving || capture?.finished == false)
+                        .controllerSettingsFocus { save() }
                 }
             }
         }
+        .controllerLayoutNavigation()
         .interactiveDismissDisabled(saving)
         .onAppear {
             ControllerLayoutEditing.begin(editingID)
@@ -109,6 +112,7 @@ struct ControllerBindingRecorder: View {
             ControllerSettingsRow(title: "Clear binding") { capture?.stop(); capture = nil; sources = [] }
             ForEach(device.controls.filter { allowed($0.id) }) { control in
                 Toggle(control.name, isOn: Binding(get: { sources.contains(control.id) }, set: { _ in toggle(control.id) }))
+                    .controllerSettingsFocus { toggle(control.id) }
             }
         }
     }

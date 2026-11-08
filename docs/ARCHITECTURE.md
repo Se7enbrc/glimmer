@@ -334,6 +334,13 @@ through. Physical keys use positional scancodes with `0x8000`. Command stays
 local by default; forwarding applies only fullscreen or captured. Hotkeys
 precede that gate.
 
+Control-Shift-P releases keyboard and mouse independently of pointer mode. The
+adapter invalidates queued text, retains failed release obligations, restores
+Mac system shortcuts and cursor visibility, and suppresses capture across focus,
+presentation and connection changes. Explicit recapture consumes its initiating
+click or chord and waits for neutral modifiers and mouse buttons. Controllers
+keep their existing focus policy; no media or transport state changes.
+
 On iOS, GameController keyboard and mouse callbacks run on a dedicated serial
 queue. Native focus and device changes retire callbacks before releasing held
 input. Both adapters use the engine's physical key map and release ledger; UIKit
@@ -380,6 +387,12 @@ opening controller, releases PC input, and rearms held controls before resuming
 play. Mouse buttons share the release ledger; stick polling runs only while
 moving/scrolling. Touchpad coordinates come from GameController. Nintendo layout
 swaps only outgoing A/B and X/Y after positional mouse/chord handling.
+
+Mac layout editors route physical GameController and raw-HID input through a
+shared navigation owner. Positional face buttons activate or dismiss native
+controls; the directional pad and left stick traverse focus. Recording takes
+exclusive ownership synchronously, and navigation rearms after capture ends.
+Native menu tracking polls live controller values only while the menu is open.
 
 ### Raw HID and gestures
 

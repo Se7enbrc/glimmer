@@ -19,6 +19,9 @@ import os.log
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
         if consumeStopShortcut(event, entry: "keyDown") { return }
+        if consumeInputReleaseShortcut(event) { return }
+        rearmInputIfNeutral(event.modifierFlags)
+        guard !isInputReleased, !inputRearming else { return }
         if deferKeyboardEvent({ $0.streamView(view, handleKeyDown: event) }) { return }
         forwardKeyDown(event, in: view)
     }
@@ -116,6 +119,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
+        rearmInputIfNeutral(event.modifierFlags)
         if deferKeyboardEvent({ $0.streamView(view, handleKeyUp: event) }) { return }
         InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
         defer { InputTimingContext.end() }
@@ -132,6 +136,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
+        rearmInputIfNeutral(event.modifierFlags)
         if deferKeyboardEvent({ $0.streamView(view, handleFlagsChanged: event) }) { return }
         missingModifierVKs.removeAll()
         defer { missingModifierVKs.removeAll() }
@@ -215,6 +220,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
+        rearmInputIfNeutral(event.modifierFlags)
         InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
@@ -340,6 +346,11 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
+        if isInputReleased {
+            if event.type == .leftMouseDown { setInputReleased(false) }
+            return
+        }
+        rearmInputIfNeutral(event.modifierFlags)
         if view.hasMarkedText() { view.cancelComposition() }
         InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
         defer { InputTimingContext.end() }
@@ -362,6 +373,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
+        rearmInputIfNeutral(event.modifierFlags)
         InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
@@ -392,6 +404,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {
+        rearmInputIfNeutral(event.modifierFlags)
         InputTimingContext.begin(source: .mouse, timestamp: event.timestamp, handler: DispatchTime.now().uptimeNanoseconds)
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }

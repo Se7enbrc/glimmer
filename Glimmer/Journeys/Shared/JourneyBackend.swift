@@ -47,7 +47,8 @@ final class JourneyBackend: StreamingBackend {
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
-        0
+        receipts.record(["keyboardEvent": 1])
+        return 0
     }
     func sendMouseMove(dx: Int16, dy: Int16) -> Int32 {
         receipts.record(["pcDX": Double(dx), "pcDY": Double(dy)])

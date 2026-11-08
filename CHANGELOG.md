@@ -2,9 +2,14 @@
 
 ## 2026.11.1 - Unreleased
 
+- Press Control-Shift-P to release keyboard and mouse to this Mac while the
+  stream keeps playing. Use Mac shortcuts, then click the picture or press the
+  shortcut again to return. Change the binding in Settings › Input.
+
 - Hold the controller's Menu button for 2 seconds to open stream controls on
   Mac, just like iPhone and iPad. Use the controller to resume, show stats,
-  switch mouse mode, or disconnect.
+  switch mouse mode, or disconnect. The glass menu and its editors are larger on
+  big screens, and Controller layouts works with the controller.
 
 - AV1 streams from AMD PCs can decode at their padded size while displaying the
   requested picture without the extra rows.

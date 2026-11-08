@@ -31,6 +31,11 @@ func forEachTrackedValue<Value>(_ read: () -> Value, perform body: (Value) -> Vo
 // Liquid Glass on macOS 26. macOS 15 has no glass, so the same shapes get the system
 // material instead: sizes and layout stay identical, only the surface changes.
 extension View {
+    func streamFont(_ style: NSFont.TextStyle, scale: CGFloat = 1) -> some View {
+        let system = NSFont.preferredFont(forTextStyle: style)
+        return font(.system(size: system.pointSize * scale))
+    }
+
     @ViewBuilder
     func glassSurface<S: Shape>(in shape: S, tint: Color? = nil, interactive: Bool = false) -> some View {
         if #available(macOS 26, *) {

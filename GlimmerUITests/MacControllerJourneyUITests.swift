@@ -10,13 +10,14 @@ final class MacControllerJourneyUITests: XCTestCase {
     private var sequence = 0
     private let app = XCUIApplication()
 
-    private func launch() throws {
+    private func launch(captureSystemKeys: Bool = false) throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
         app.launchEnvironment["GLIMMER_JOURNEY_DIRECTORY"] = directory.path
+        app.launchEnvironment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] = captureSystemKeys ? "1" : "0"
         app.launchEnvironment["JOURNEY_APPEARANCE"] = ProcessInfo.processInfo.environment["JOURNEY_APPEARANCE"] ?? "light"
         app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
@@ -176,6 +177,53 @@ final class MacControllerJourneyUITests: XCTestCase {
                                ["element": "dpad", "value": 0, "y": 0]])
     }
 
+    func testControllerOnlyLayoutEditorFromTheStreamMenu() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try controller(connect: true)
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        for _ in 0..<3 { try moveMenuDown() }
+        try press("a")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["Change a button…"].waitForExistence(timeout: 5))
+        record("mac-controller-layout-editor")
+        try press("b")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
+        let index = receipts().count
+        try press("a")
+        XCTAssertTrue(receipts().dropFirst(index).contains { $0["pcButtons"] == 0x1000 })
+    }
+
+    func testKeyboardAndMouseReleaseKeepsTheStreamRunning() throws {
+        try launch(captureSystemKeys: true)
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        app.typeKey("p", modifierFlags: [.control, .shift])
+        let notice = app.otherElements.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        let count = receipts().filter { $0["keyboardEvent"] != nil }.count
+        app.typeKey("w", modifierFlags: [])
+        XCTAssertEqual(receipts().filter { $0["keyboardEvent"] != nil }.count, count)
+        XCTAssertFalse(receipts().contains { $0["stop"] != nil })
+        try assertPicture()
+        record("mac-keyboard-mouse-released")
+        app.typeKey("p", modifierFlags: [.control, .shift])
+        XCTAssertTrue(notice.waitForNonExistence(timeout: 5))
+        let resumed = receipts().filter { $0["keyboardEvent"] != nil }.count
+        app.typeKey("w", modifierFlags: [])
+        XCTAssertGreaterThan(receipts().filter { $0["keyboardEvent"] != nil }.count, resumed)
+        app.typeKey("q", modifierFlags: .control)
+        XCTAssertTrue(waitForReceipt("stop"))
+    }
+
     func testMenuHoldQuitRequiresControllerConfirmation() throws {
         try launch()
         app.buttons["Journey game"].click()
@@ -300,7 +348,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         let mouse = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Controller mouse,")).firstMatch
         reveal(mouse)
         mouse.click()
-        let preset = app.popUpButtons["controller-settings-picker-Preset"]
+        let preset = app.buttons["controller-settings-picker-Preset"]
         XCTAssertTrue(preset.waitForExistence(timeout: 5))
         if leftHanded {
             preset.click()

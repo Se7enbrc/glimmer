@@ -23,6 +23,7 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
     private var samples: [UInt8: LauncherControllerInput] = [:]
     private var sampleTokens: [UInt8: UUID] = [:]
     private var timer: Timer?
+    private var windowObservers: [NSObjectProtocol] = []
     var selection = Action.resume
     var page = Page.actions
     var mouseMode: Bool
@@ -30,6 +31,16 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
     var controllerAvailable = true
     let title: String
     let pcName: String
+
+    var chooseSymbol: String {
+        input?.attachedControllers.values.first { $0.slot == slot }?
+            .controller?.extendedGamepad?.buttonA.sfSymbolsName ?? "a.circle"
+    }
+
+    var backSymbol: String {
+        input?.attachedControllers.values.first { $0.slot == slot }?
+            .controller?.extendedGamepad?.buttonB.sfSymbolsName ?? "b.circle"
+    }
 
     var actions: [Action] {
         switch page {
@@ -69,22 +80,33 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
                 DispatchQueue.main.async { [weak self] in self?.receive(slot: slot, token: token, sample: sample) }
             }
         }
-        let host = NSHostingController(rootView: MacStreamControlsView(model: self))
-        let panel = NSPanel(contentViewController: host)
+        let panel = MacStreamControlsPanel(contentRect: .zero, styleMask: .borderless,
+                                           backing: .buffered, defer: false)
+        panel.contentView = NSHostingView(rootView: MacStreamControlsView(model: self))
         panel.title = "Stream controls"
         panel.identifier = NSUserInterfaceItemIdentifier("stream-controls")
-        panel.styleMask = [.titled, .closable]
+        panel.styleMask = [.borderless]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.fullScreenAuxiliary]
         panel.delegate = self
-        panel.setContentSize(host.view.fittingSize)
         let parent = stream.window
         panel.level = parent.level
-        panel.setFrameOrigin(NSPoint(x: parent.frame.midX - panel.frame.width / 2,
-                                     y: parent.frame.midY - panel.frame.height / 2))
+        panel.setFrame(parent.convertToScreen(parent.contentLayoutRect), display: false)
         parent.addChildWindow(panel, ordered: .above)
         self.panel = panel
+        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+            windowObservers.append(NotificationCenter.default.addObserver(forName: name, object: parent,
+                queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, let parent = self.stream?.window else { return }
+                        self.panel?.setFrame(parent.convertToScreen(parent.contentLayoutRect), display: true)
+                    }
+                })
+        }
         panel.makeKeyAndOrderFront(nil)
     }
 
@@ -162,6 +184,7 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
     func perform(_ action: Action) {
         guard let input else { return }
         guard actions.contains(action) else { return }
+        selection = action
         switch action {
         case .resume: close()
         case .stats:
@@ -175,7 +198,10 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
                 input.inputCore.controllerMouseStates[slot] = ControllerMouseState(isMouse: mouseMode)
             }
             input.publishControllerMouseActive()
-        case .layouts: input.controllerLayouts?.showControls(returnTo: panel)
+        case .layouts:
+            guard let layouts = input.controllerLayouts else { return }
+            layouts.showControls(returnTo: panel)
+            panel?.orderOut(nil)
         case .help: page = .help; selection = .done
         case .quit: page = .quit; selection = .cancel
         case .cancel, .done: page = .actions; selection = .resume
@@ -201,6 +227,8 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
         guard let panel else { return }
         let restore = resume && panel.isKeyWindow && NSApp.isActive
         stopRepeating()
+        windowObservers.forEach(NotificationCenter.default.removeObserver)
+        windowObservers.removeAll()
         panel.delegate = nil
         panel.parent?.removeChildWindow(panel)
         panel.close()
@@ -216,6 +244,11 @@ final class MacStreamControls: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) { close() }
+}
+
+private final class MacStreamControlsPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 }
 
 extension InputForwarder {

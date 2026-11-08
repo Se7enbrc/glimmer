@@ -40,6 +40,7 @@ final class JourneyMacPC {
         model.customFPS = 60
         model.streamDisplayMode = .window
         model.streamHDR = false
+        model.captureSysKeys = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] == "1"
         let app = LibraryApp(id: 1, name: "Journey game", hdr: false, hidden: false)
         let host = Host(id: "journey-pc", name: "Journey PC", customName: nil, localAddress: "127.0.0.1",
                         manualAddress: nil, apps: [app], lastConnected: nil, serverCertPEM: "fixture-only",

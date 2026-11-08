@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 enum ControllerLayoutEditing {
     static let changed = Notification.Name("ControllerLayoutEditingChanged")
+    static let captureChanged = Notification.Name("ControllerLayoutCaptureChanged")
     private(set) static var editors: Set<UUID> = []
     private(set) static var capture: UUID?
     static var active: Bool { !editors.isEmpty }
@@ -27,10 +28,14 @@ enum ControllerLayoutEditing {
     static func acquireCapture(_ id: UUID) -> Bool {
         guard capture == nil else { return false }
         capture = id
+        NotificationCenter.default.post(name: captureChanged, object: nil)
         return true
     }
 
     static func releaseCapture(_ id: UUID) {
-        if capture == id { capture = nil }
+        if capture == id {
+            capture = nil
+            NotificationCenter.default.post(name: captureChanged, object: nil)
+        }
     }
 }

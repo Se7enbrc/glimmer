@@ -71,6 +71,28 @@ extension StreamWindow {
         showPointerHint(captured ? "Pointer captured" : "Pointer follows the picture")
     }
 
+    func setInputReleased(_ released: Bool, shortcut: String) {
+        guard !didClose else { return }
+        isInputReleased = released
+        captureHintGeneration &+= 1
+        if released {
+            setCursorHidden(false)
+            if displayMode == .fullScreen {
+                if coversNotch { window.level = .normal }
+                var options = previousPresentationOptions ?? []
+                if !coversNotch, window.styleMask.contains(.fullScreen) { options.insert(.fullScreen) }
+                NSApp.presentationOptions = options
+            }
+            let returnAction = shortcut.isEmpty ? "Click the picture to return." : "Click the picture or press \(shortcut) to return."
+            captureHintBanner.setText("Keyboard and mouse released. \(returnAction)")
+            captureHintBanner.setVisible(true)
+        } else {
+            captureHintBanner.setVisible(false)
+            reengageForeground()
+            showPointerHint("Keyboard and mouse captured")
+        }
+    }
+
     private func showPointerHint(_ text: String) {
         captureHintBanner.setText(text)
         captureHintBanner.setVisible(true)
@@ -88,6 +110,7 @@ extension StreamWindow {
     /// Drop the hint the moment the pointer comes back - it is advice about
     /// being captured, and it would read as a lie hanging over a free pointer.
     func hideCaptureHint() {
+        guard !isInputReleased else { return }
         captureHintGeneration &+= 1
         captureHintBanner.setVisible(false)
     }

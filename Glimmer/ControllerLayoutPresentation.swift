@@ -23,10 +23,10 @@ struct ControllerLayoutAppMenu: ViewModifier {
     @State private var confirmingSize = false
 
     func body(content: Content) -> some View {
-        @Bindable var model = model
         content.contextMenu { menu }
         .background {
-            LauncherContextMenu(appID: app.id, requestedAppID: $model.launcherMenuAppID) { menu.environment(model) }
+            NativeControllerMenu(presented: Binding(get: { model.launcherMenuAppID == app.id },
+                set: { if !$0 { model.launcherMenuAppID = nil } })) { menu.environment(model) }
         }
         .modifier(RunningGameSizeConfirmation(host: host, app: app, presented: $confirmingSize))
         .sheet(isPresented: $presented) {
