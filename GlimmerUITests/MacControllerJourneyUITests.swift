@@ -10,7 +10,7 @@ final class MacControllerJourneyUITests: XCTestCase {
     private var sequence = 0
     private let app = XCUIApplication()
 
-    private func launch(captureSystemKeys: Bool = false) throws {
+    private func launch(captureSystemKeys: Bool = false, presentation: String = "window") throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
         directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
@@ -20,6 +20,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
         app.launchEnvironment["GLIMMER_JOURNEY_DIRECTORY"] = directory.path
         app.launchEnvironment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] = captureSystemKeys ? "1" : "0"
+        app.launchEnvironment["GLIMMER_JOURNEY_PRESENTATION"] = presentation
         app.launchEnvironment["JOURNEY_APPEARANCE"] = ProcessInfo.processInfo.environment["JOURNEY_APPEARANCE"] ?? "light"
         app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
@@ -255,6 +256,52 @@ final class MacControllerJourneyUITests: XCTestCase {
         let resumed = receipts().filter { $0["keyboardEvent"] != nil }.count
         app.typeKey("w", modifierFlags: [])
         XCTAssertGreaterThan(receipts().filter { $0["keyboardEvent"] != nil }.count, resumed)
+        app.typeKey("q", modifierFlags: .control)
+        XCTAssertTrue(waitForReceipt("stop"))
+    }
+
+    func testReleasedCoverReturnsAfterSwitchingApps() throws {
+        try releasedStreamReturnsAfterSwitchingApps(presentation: "cover")
+    }
+
+    func testReleasedSpaceReturnsAfterSwitchingApps() throws {
+        try releasedStreamReturnsAfterSwitchingApps(presentation: "space")
+    }
+
+    private func releasedStreamReturnsAfterSwitchingApps(presentation: String) throws {
+        try launch(captureSystemKeys: true, presentation: presentation)
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        let window = app.windows["journey-stream-window"]
+        try assertPicture()
+        for _ in 0..<2 {
+            app.typeKey("p", modifierFlags: [.control, .shift])
+            let notice = app.otherElements.matching(NSPredicate(
+                format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
+            XCTAssertTrue(notice.waitForExistence(timeout: 5))
+            let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+            finder.activate()
+            XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
+            if presentation == "cover" { XCTAssertTrue(window.waitForNonExistence(timeout: 5)) }
+            app.activate()
+            if presentation == "cover" {
+                let resume = app.buttons["Journey game, running. Resume stream"]
+                XCTAssertTrue(resume.waitForExistence(timeout: 5))
+                resume.click()
+            }
+            XCTAssertTrue(window.waitForExistence(timeout: 5))
+            let count = receipts().filter { $0["keyboardEvent"] != nil }.count
+            app.typeKey("w", modifierFlags: [])
+            XCTAssertEqual(receipts().filter { $0["keyboardEvent"] != nil }.count, count)
+            try assertPicture()
+            record("mac-released-" + presentation + "-returned")
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            XCTAssertTrue(notice.waitForNonExistence(timeout: 5))
+            let resumed = receipts().filter { $0["keyboardEvent"] != nil }.count
+            app.typeKey("w", modifierFlags: [])
+            XCTAssertGreaterThan(receipts().filter { $0["keyboardEvent"] != nil }.count, resumed)
+            XCTAssertFalse(receipts().contains { $0["stop"] != nil })
+        }
         app.typeKey("q", modifierFlags: .control)
         XCTAssertTrue(waitForReceipt("stop"))
     }

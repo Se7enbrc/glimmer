@@ -44,6 +44,7 @@ extension StreamWindow {
         let wasAway = userBackgrounded
         userBackgrounded = false
         if isInputReleased {
+            if wasAway, isBorderlessCover, !awaitingFirstFrameFadeIn { returnCover() }
             setCursorHidden(false)
             setBackgrounded(false)
             return

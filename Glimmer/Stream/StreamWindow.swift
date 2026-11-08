@@ -300,9 +300,8 @@ public final class StreamWindow {
         window.acceptsMouseMovedEvents = true
         window.hidesOnDeactivate = false
 
-        // Best-effort exclusion for legacy capture clients. Modern
-        // ScreenCaptureKit ignores this flag; it is not a privacy boundary.
-        window.sharingType = .none
+        // Let Mac screenshot and recording tools capture the stream picture.
+        window.sharingType = .readOnly
 
         let view = DisplayContainerView(frame: screen.frame)
 

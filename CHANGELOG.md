@@ -2,6 +2,12 @@
 
 ## 2026.11.1 - Unreleased
 
+- Return to a stream in Cover the screen after releasing input and switching
+  apps. The picture stays clickable, and input stays released until you choose
+  to return it to the PC.
+
+- Mac screenshot and recording tools can capture the stream picture.
+
 - Press Control-Shift-P to release keyboard and mouse to this Mac while the
   stream keeps playing. Use Mac shortcuts, then click the picture or press the
   shortcut again to return. Change the binding in Settings › Input.

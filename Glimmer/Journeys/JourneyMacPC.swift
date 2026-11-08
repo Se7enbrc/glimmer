@@ -53,7 +53,10 @@ final class JourneyMacPC {
         model.customWidth = 1280
         model.customHeight = 720
         model.customFPS = 60
-        model.streamDisplayMode = .window
+        let presentation = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_PRESENTATION"] ?? "window"
+        model.streamDisplayMode = presentation == "window" ? .window : .fullScreen
+        model.streamCoversNotch = presentation == "cover"
+        model.streamUsesFullScreenSpace = presentation == "space"
         model.streamHDR = false
         model.captureSysKeys = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] == "1"
         let app = LibraryApp(id: 1, name: "Journey game", hdr: false, hidden: false)
@@ -86,8 +89,6 @@ final class JourneyMacPC {
 
     private func connected() {
         guard let (window, input, decoder) = prepared else { preconditionFailure("Missing native stream surface") }
-        // Only the synthetic PC window is capturable by the journey's picture assertion.
-        window.window.sharingType = .readOnly
         window.window.setAccessibilityIdentifier("journey-stream-window")
         input.setReady(true)
         let video = JourneyVideo(layer: window.displayLayer)
