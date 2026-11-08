@@ -164,6 +164,36 @@ struct ControllerLayoutOwnershipTests {
         #expect(!hub.focus(.activate, in: window))
     }
 
+    @Test func controllerTraversalDoesNotWaitForSwiftUIFocusFeedback() {
+        let hub = ControllerLayoutNavigationHub(devices: { [] })
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 400),
+                              styleMask: .titled, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        var selected: [Int] = []
+        var controls: [ControllerLayoutFocusView] = []
+        for index in 0..<3 {
+            let view = ControllerLayoutFocusView(frame: NSRect(x: 20, y: CGFloat(320 - index * 50), width: 300, height: 40))
+            window.contentView?.addSubview(view)
+            // SwiftUI reflects requested focus on a later update, not inside this callback.
+            view.focus = { _ in }
+            view.activate = { selected.append(index) }
+            hub.addFocus(view)
+            controls.append(view)
+        }
+        controls[0].focused = true
+        #expect(hub.focus(.down, in: window))
+        #expect(hub.focus(.down, in: window))
+        #expect(hub.focus(.activate, in: window))
+        #expect(selected == [2])
+        // A later native keyboard or mouse focus change still takes precedence.
+        controls.forEach { $0.focused = false }
+        controls[0].focused = true
+        #expect(hub.focus(.activate, in: window))
+        #expect(selected == [2, 0])
+        controls.forEach(hub.removeFocus)
+    }
+
     @Test func physicalLayoutNavigationIncludesSticksAndPositionalFaceButtons() {
         let right = ControllerMappingSample(buttons: 0, analog: SIMD8(0, 0, 30000, 0, 0, 0, 0, 0))
         #expect(ControllerLayoutNavigationHub.input(right).direction == .right)

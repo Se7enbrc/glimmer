@@ -65,6 +65,8 @@ final class ControllerLayoutNavigationHub {
         #endif
         if focusedControl !== target { focusedControl?.focus(false) }
         focusedControl = target
+        // Consecutive controller moves cannot wait for SwiftUI's later focus reflection.
+        for candidate in targets { candidate.focused = candidate === target }
         target.scrollToVisible(target.bounds)
         target.focus(true)
         if command == .activate { target.activate() }
