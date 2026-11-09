@@ -190,7 +190,6 @@ final class MacControllerJourneyUITests: XCTestCase {
         for _ in 0..<3 { try moveMenuDown() }
         try press("a")
         XCTAssertTrue(app.windows["Controller layouts"].waitForExistence(timeout: 5))
-        try moveMenuDown()
         try press("a")
         XCTAssertTrue(app.buttons["Change a button…"].waitForExistence(timeout: 5))
         record("mac-controller-layout-editor")

@@ -59,10 +59,6 @@ final class ControllerLayoutNavigationHub {
         let index = command == .activate ? current ?? 0
             : current.map { ($0 + (backwards ? targets.count - 1 : 1)) % targets.count } ?? 0
         let target = targets[index]
-        #if DEBUG
-        JourneyMacPC.active?.receipts.record(["layoutTarget": Double(index), "layoutCount": Double(targets.count),
-            "layoutActivate": command == .activate ? 1 : 0, "layoutPrior": Double(current ?? -1)])
-        #endif
         if focusedControl !== target { focusedControl?.focus(false) }
         focusedControl = target
         // Consecutive controller moves cannot wait for SwiftUI's later focus reflection.
@@ -196,7 +192,7 @@ final class ControllerLayoutNavigationHub {
             dismiss: buttons & ControllerMappedButton.b.rawValue != 0)
     }
 
-    private func poll() {
+    private func poll(repeating: Bool = false) {
         guard let window = targetWindow else {
             timer?.invalidate(); timer = nil; repeats.removeAll(); priorWindow = nil
             return
@@ -210,7 +206,8 @@ final class ControllerLayoutNavigationHub {
             }
             guard let sample = samples[id] else { continue }
             var state = repeats[id] ?? LauncherControllerRepeat()
-            let commands = state.commands(Self.input(sample), at: ProcessInfo.processInfo.systemUptime)
+            let current = repeating && menuDepth == 0 ? Self.input(entry.source.read()) : nil
+            let commands = state.commands(Self.input(sample), at: ProcessInfo.processInfo.systemUptime, current: current)
             repeats[id] = state
             for command in commands {
                 guard targetWindow === window else { return }
@@ -226,7 +223,7 @@ final class ControllerLayoutNavigationHub {
     private func startTimer() {
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.poll() }
+            MainActor.assumeIsolated { self?.poll(repeating: true) }
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
