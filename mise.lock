@@ -3,21 +3,21 @@
 lockfile_version = 3
 
 [[tools."aqua:apple/pkl"]]
-version = "0.32.2"
+version = "0.33.0"
 backend = "aqua:apple/pkl"
-specifiers = ["0.32.2"]
+specifiers = ["0.33.0"]
 
 [tools."aqua:apple/pkl"."platforms.linux-x64"]
-checksum = "sha256:874c75484c79add77fb2346ea4ab2e8875eea35fb707894bf5457a2df5d03def"
+checksum = "sha256:b9a6ddea6b382b7d4db4cf78e77aa3858e0c8a7e02939d2ba298574b5d1fcc69"
 checksum_source = "mise-versions"
-url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-amd64"
-url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850808"
+url = "https://github.com/apple/pkl/releases/download/0.33.0/pkl-linux-amd64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/714756975"
 
 [tools."aqua:apple/pkl"."platforms.macos-arm64"]
-checksum = "sha256:466952f0b30c93dfa36393a5b3695159917ce4291e3c936a18a0a240cfbe98e9"
+checksum = "sha256:e39c157df0f00a35d34b46270a768784edcaf509aafbf743849b27b4c83ef83b"
 checksum_source = "mise-versions"
-url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-macos-aarch64"
-url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850972"
+url = "https://github.com/apple/pkl/releases/download/0.33.0/pkl-macos-aarch64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/714757040"
 
 [[tools."aqua:astral-sh/uv"]]
 version = "0.13.7"
@@ -181,10 +181,10 @@ backend = "npm:prettier"
 specifiers = ["4.0.0-alpha.13"]
 
 [[tools."pipx:coverage"]]
-version = "7.17.1"
+version = "7.17.2"
 backend = "pipx:coverage"
-specifiers = ["7.17.1"]
-uv = { path = ".mise/locks/pipx-coverage/7.17.1", digest = "sha256:77272b2c501ddefad9329ef10913fcde11314ed1388fc26f23acc0eed769de0d" }
+specifiers = ["7.17.2"]
+uv = { path = ".mise/locks/pipx-coverage/7.17.2", digest = "sha256:d45091da6e7b69b83656ba66879018343eb4e4119ee5fc8310a42f70fdeea016" }
 
 [[tools."pipx:yamllint"]]
 version = "1.38.0"

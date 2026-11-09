@@ -9,7 +9,7 @@ lockfile_platforms = ["macos-arm64", "linux-x64"]
 
 [tools]
 "aqua:jdx/hk" = "2.11.1"
-"aqua:apple/pkl" = "0.32.2"
+"aqua:apple/pkl" = "0.33.0"
 "aqua:realm/SwiftLint" = { version = "0.65.1", os = ["macos"] }
 "aqua:rhysd/actionlint" = "1.7.12"
 "aqua:zizmorcore/zizmor" = "1.32.0"
@@ -22,7 +22,7 @@ python = "3.14.10"
 "npm:prettier" = "4.0.0-alpha.13"
 "npm:markdownlint-cli" = "0.50.0"
 "pipx:yamllint" = "1.38.0"
-"pipx:coverage" = "7.17.1"
+"pipx:coverage" = "7.17.2"
 
 [env]
 HK_MISE = "1"
