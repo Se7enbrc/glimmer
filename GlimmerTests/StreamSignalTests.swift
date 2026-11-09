@@ -60,6 +60,16 @@ struct StreamSignalTests {
         #expect(pill.isVisible && pill.noticeFrame != nil)
     }
 
+    @Test func aNoticeStaysWithTheStreamWhenTheAppDeactivates() throws {
+        let (pill, host, _) = banner()
+        defer { pill.removeWithStream(); host.close() }
+        pill.setText("Keyboard and mouse released")
+        pill.setVisible(true)
+        let window = try #require(pill.noticeWindow)
+        #expect(!window.hidesOnDeactivate)
+        #expect(window.ignoresMouseEvents)
+    }
+
     // A notice raised while the stream window was ordered out joins it when the window returns.
     @Test func aNoticeRaisedWhileHiddenAppearsWhenTheWindowReturns() {
         let (pill, host, _) = banner()

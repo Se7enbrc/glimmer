@@ -280,6 +280,11 @@ final class MacControllerJourneyUITests: XCTestCase {
             finder.activate()
             XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
             try assertPicture()
+            if modifiers.contains(.shift) {
+                let notice = app.otherElements.matching(NSPredicate(
+                    format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
+                XCTAssertTrue(notice.waitForExistence(timeout: 5))
+            }
             XCTAssertEqual(app.state, .runningBackground)
             XCTAssertFalse(receipts().contains { $0["stop"] != nil })
             record("mac-mini-player-background-" + String(modifiers.rawValue))

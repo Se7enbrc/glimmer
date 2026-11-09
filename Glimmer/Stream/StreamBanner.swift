@@ -156,6 +156,8 @@ public final class StreamBanner {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
+        // Notices belong to the visible stream, including an inactive mini-player.
+        panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.alphaValue = 0
         panel.contentView = NSHostingView(rootView: content)
