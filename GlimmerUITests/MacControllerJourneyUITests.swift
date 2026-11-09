@@ -273,7 +273,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         app.typeKey("m", modifierFlags: .control)
         let window = app.windows["journey-stream-window"]
         let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
-        for modifiers: XCUIKeyModifierFlags in [.control, [.control, .shift]] {
+        for modifiers: XCUIElement.KeyModifierFlags in [.control, [.control, .shift]] {
             window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
             app.typeKey("p", modifierFlags: modifiers)
             try assertPicture()
