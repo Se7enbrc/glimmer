@@ -6,6 +6,18 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.11.1 (RC 3)</title>
+      <description><![CDATA[
+<ul><li>Return to a stream in Cover the screen after releasing input and switching apps. The picture stays clickable, and input stays released until you choose to return it to the PC.</li><li>Mac screenshot and recording tools can capture the stream picture.</li><li>Press Control-Shift-P to release keyboard and mouse to this Mac while the stream keeps playing. Use Mac shortcuts, then click the picture or press the shortcut again to return. Change the binding in Settings › Input.</li><li>Hold the controller's Menu button for 2 seconds to open stream controls on Mac, just like iPhone and iPad. Use the controller to resume, show stats, switch mouse mode, or disconnect. The glass menu and its editors are larger on big screens, and Controller layouts works with the controller.</li><li>AV1 streams from AMD PCs can decode at their padded size while displaying the requested picture without the extra rows.</li></ul>
+]]></description>
+      <pubDate>Mon, 09 Nov 2026 01:30:42 GMT</pubDate>
+      <sparkle:version>20261045</sparkle:version>
+      <sparkle:shortVersionString>2026.11.1</sparkle:shortVersionString>
+      <sparkle:channel>rc</sparkle:channel>
+      <sparkle:minimumSystemVersion>15.7</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.11.1-rc.3/Glimmer-2026.11.1.zip" type="application/octet-stream" sparkle:edSignature="zgBvSI1cCoZQBuo5SQnnmuMj59gJ6WWT0M4n20dBNgfbBZed+uTjeOQDnDrNku0yfeQNYrGm778vVilw8ax2DA==" length="8411056" />
+    </item>
+    <item>
       <title>2026.11.1 (RC 2)</title>
       <description><![CDATA[
 <ul><li>Press Control-Shift-P to release keyboard and mouse to this Mac while the stream keeps playing. Use Mac shortcuts, then click the picture or press the shortcut again to return. Change the binding in Settings › Input.</li><li>Hold the controller's Menu button for 2 seconds to open stream controls on Mac, just like iPhone and iPad. Use the controller to resume, show stats, switch mouse mode, or disconnect. The glass menu and its editors are larger on big screens, and Controller layouts works with the controller.</li><li>AV1 streams from AMD PCs can decode at their padded size while displaying the requested picture without the extra rows.</li></ul>
