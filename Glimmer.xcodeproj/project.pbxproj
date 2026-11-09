@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A9914DD5C1734F0B918BEA01 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9914DD5C1734F0B918BEA02 /* AppIntents.framework */; };
 		B2D0C4A1E5F64C7DA1B3C9E2 /* ControllerChordHoldConflictTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D0C4A1E5F64C7DA1B3C9E1 /* ControllerChordHoldConflictTests.swift */; };
 		AF2B2AE90E354E35B8A1450A /* ControllerStopChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */; };
 		78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */; };
@@ -870,6 +871,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A9914DD5C1734F0B918BEA02 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		B2D0C4A1E5F64C7DA1B3C9E1 /* ControllerChordHoldConflictTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerChordHoldConflictTests.swift"; sourceTree = SOURCE_ROOT; };
 		5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerStopChordTests.swift"; sourceTree = SOURCE_ROOT; };
 		03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
@@ -1683,6 +1685,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A9914DD5C1734F0B918BEA01 /* AppIntents.framework in Frameworks */,
 				E26101210000000000000013 /* GlimmerEngine.framework in Frameworks */,
 				A1009012 /* Sparkle in Frameworks */,
 			);
@@ -1726,6 +1729,7 @@
 		771ECFBC67E97E41D2D9F0E8 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
+				A9914DD5C1734F0B918BEA02 /* AppIntents.framework */,
 				505E37FB63C22AC476506587 /* Foundation.framework */,
 			);
 			name = "OS X";

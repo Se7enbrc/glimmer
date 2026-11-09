@@ -17,6 +17,16 @@ import Testing
 struct GlimmerIntentsTests {
     private let settings = IsolatedDefaults()
 
+    @Test func builtAppIncludesTheShortcutsMetadata() throws {
+        let directory = try #require(Bundle.main.url(forResource: "Metadata", withExtension: "appintents"))
+        let data = try Data(contentsOf: directory.appendingPathComponent("extract.actionsdata"))
+        let metadata = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let actions = try #require(metadata["actions"] as? [String: Any])
+        for name in ["StreamIntent", "WakePCIntent", "StopStreamingIntent", "QuitAppOnPCIntent"] {
+            #expect(actions[name] != nil, "The built app must expose \(name) to Shortcuts")
+        }
+    }
+
     private func pc(id: String = "pc-1", customName: String? = nil, apps: [String]) -> Glimmer.Host {
         Glimmer.Host(id: id, name: "DESKTOP-7Q2", customName: customName, localAddress: nil, manualAddress: nil,
                      apps: apps.enumerated().map { LibraryApp(id: $0.offset + 1, name: $0.element, hdr: false, hidden: false) },
