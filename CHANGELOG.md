@@ -2,6 +2,9 @@
 
 ## 2026.11.1 - Unreleased
 
+- Hide the Mac pointer again when returning keyboard and mouse control to a
+  stream in a window or mini-player.
+
 - Return to a stream in Cover the screen after releasing input and switching
   apps. The picture stays clickable, and input stays released until you choose
   to return it to the PC.

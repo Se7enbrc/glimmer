@@ -163,6 +163,8 @@ extension InputForwarder {
         raiseAllHeldInputs(reason: released ? "keyboard and mouse released" : "keyboard and mouse recaptured")
         cancelEscapeHold()
         inputCore.resetPointerMotion()
+        // Cursor ownership must see the new release state before capture changes.
+        onInputReleaseChanged?(released)
         if released {
             exitCapturedMode()
         } else {
@@ -170,7 +172,6 @@ extension InputForwarder {
             if isWindowMode || fullscreenRelativePointer { capturePointer(reason: "explicit recapture") }
         }
         updateSystemKeyCapture()
-        onInputReleaseChanged?(released)
     }
 
     /// The recapture chord or click must be released before it can reach the PC.

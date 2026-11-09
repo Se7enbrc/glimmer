@@ -266,6 +266,28 @@ final class MacControllerJourneyUITests: XCTestCase {
         try releasedStreamReturnsAfterSwitchingApps(presentation: "cover")
     }
 
+    func testReleasedMiniPlayerKeepsItsPictureWhileAnotherAppIsActive() throws {
+        try launch(captureSystemKeys: true, presentation: "cover")
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        app.typeKey("m", modifierFlags: .control)
+        let window = app.windows["journey-stream-window"]
+        let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+        for modifiers: XCUIKeyModifierFlags in [.control, [.control, .shift]] {
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            app.typeKey("p", modifierFlags: modifiers)
+            try assertPicture()
+            finder.activate()
+            XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
+            try assertPicture()
+            XCTAssertEqual(app.state, .runningBackground)
+            XCTAssertFalse(receipts().contains { $0["stop"] != nil })
+            record("mac-mini-player-background-" + String(modifiers.rawValue))
+            app.activate()
+            try assertPicture()
+        }
+    }
+
     func testReleasedSpaceReturnsAfterSwitchingApps() throws {
         try releasedStreamReturnsAfterSwitchingApps(presentation: "space")
     }

@@ -340,6 +340,27 @@ struct StreamViewCaptureTests {
         #expect(!forwarder.isInputReleased && !forwarder.inputRearming)
     }
 
+    @Test(arguments: [false, true])
+    func recaptureHidesTheCursorInWindowsAndMiniPlayers(miniPlayer: Bool) {
+        let (forwarder, _, _) = windowed()
+        let stream = StreamWindow(displayMode: .window)
+        defer { forwarder.detach(); stream.close() }
+        forwarder.setMiniPlayer(miniPlayer)
+        stream.isMiniPlayer = miniPlayer
+        forwarder.onInputReleaseChanged = { stream.setInputReleased($0, shortcut: "⌃⇧P") }
+        forwarder.onPointerCaptureChanged = { stream.setPointerCaptured($0) }
+        forwarder.capturePointer(reason: "test")
+        #expect(forwarder.isMouseCaptured && stream.didHideCursor)
+
+        for _ in 0..<2 {
+            forwarder.setInputReleased(true)
+            #expect(stream.isInputReleased && !stream.didHideCursor)
+            forwarder.setInputReleased(false)
+            #expect(!stream.isInputReleased && forwarder.isMouseCaptured)
+            #expect(stream.didHideCursor)
+        }
+    }
+
     @Test func releasedFullscreenNeverRehidesTheCursorOrRaisesTheCoverOnRefocus() {
         let prior = NSApp.presentationOptions
         let stream = StreamWindow(displayMode: .fullScreen)
