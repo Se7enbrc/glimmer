@@ -368,8 +368,10 @@ public final class StreamWindow {
         configureMouseModeBadge()
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
         delegate.onFullScreenSettled = { [weak self] in
-            guard let self, self.pendingFirstFrameReveal else { return }
-            self.fadeInOnFirstFrame()
+            guard let self else { return }
+            self.updateWindowControls()
+            (self.window.contentView as? StreamInputView)?.updateTrackingAreas()
+            if self.pendingFirstFrameReveal { self.fadeInOnFirstFrame() }
         }
     }
 

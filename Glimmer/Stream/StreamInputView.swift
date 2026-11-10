@@ -155,7 +155,6 @@ final class StreamInputView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let area = trackingArea { removeTrackingArea(area) }
-        if let area = windowTrackingArea { removeTrackingArea(area) }
         // Tracking outlives focus and live resizing. The forwarder gates input
         // on key ownership, and cursorUpdate follows explicit cursor ownership.
         let area = NSTrackingArea(
@@ -166,10 +165,13 @@ final class StreamInputView: NSView {
         )
         addTrackingArea(area)
         trackingArea = area
-        let windowArea = NSTrackingArea(rect: bounds, options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
-                                       owner: self, userInfo: nil)
-        addTrackingArea(windowArea)
-        windowTrackingArea = windowArea
+        // Keep the whole-window identity stable while capture replaces the picture's tracking area.
+        if windowTrackingArea == nil {
+            let windowArea = NSTrackingArea(rect: bounds, options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+                                           owner: self, userInfo: nil)
+            addTrackingArea(windowArea)
+            windowTrackingArea = windowArea
+        }
     }
 
     /// Tracking can continue through a close fade or after key focus changes.
