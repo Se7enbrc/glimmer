@@ -6,6 +6,18 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.11.1 (RC 5)</title>
+      <description><![CDATA[
+<ul><li>Windowed streams show the picture edge-to-edge, with native window buttons on hover. Drag the top edge of a window or mini-player while the pointer is released to move it without returning input to the PC.</li><li>Hide the Mac pointer again when returning keyboard and mouse control to a stream in a window or mini-player.</li><li>Keep stream notices with the mini-player when switching to another Mac app.</li><li>Return to a stream in Cover the screen after releasing input and switching apps. The picture stays clickable, and input stays released until you choose to return it to the PC.</li><li>Mac screenshot and recording tools can capture the stream picture.</li><li>Press Control-Shift-P to release keyboard and mouse to this Mac while the stream keeps playing. Use Mac shortcuts, then click the picture or press the shortcut again to return. Change the binding in Settings › Input.</li><li>Hold the controller's Menu button for 2 seconds to open stream controls on Mac, just like iPhone and iPad. Use the controller to resume, show stats, switch mouse mode, or disconnect. The glass menu and its editors are larger on big screens, and Controller layouts works with the controller.</li><li>AV1 streams from AMD PCs can decode at their padded size while displaying the requested picture without the extra rows.</li></ul>
+]]></description>
+      <pubDate>Tue, 10 Nov 2026 17:20:17 GMT</pubDate>
+      <sparkle:version>20261047</sparkle:version>
+      <sparkle:shortVersionString>2026.11.1</sparkle:shortVersionString>
+      <sparkle:channel>rc</sparkle:channel>
+      <sparkle:minimumSystemVersion>15.7</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.11.1-rc.5/Glimmer-2026.11.1.zip" type="application/octet-stream" sparkle:edSignature="Uy63agcEOf8joC0uFcDrMos6LBbiJyKOJz81W33mek3AutwtkRY9z18gBDJ0IduLIC3ttrCgRFB+i+swH+CgBg==" length="8414126" />
+    </item>
+    <item>
       <title>2026.11.1 (RC 4)</title>
       <description><![CDATA[
 <ul><li>Hide the Mac pointer again when returning keyboard and mouse control to a stream in a window or mini-player.</li><li>Keep stream notices with the mini-player when switching to another Mac app.</li><li>Return to a stream in Cover the screen after releasing input and switching apps. The picture stays clickable, and input stays released until you choose to return it to the PC.</li><li>Mac screenshot and recording tools can capture the stream picture.</li><li>Press Control-Shift-P to release keyboard and mouse to this Mac while the stream keeps playing. Use Mac shortcuts, then click the picture or press the shortcut again to return. Change the binding in Settings › Input.</li><li>Hold the controller's Menu button for 2 seconds to open stream controls on Mac, just like iPhone and iPad. Use the controller to resume, show stats, switch mouse mode, or disconnect. The glass menu and its editors are larger on big screens, and Controller layouts works with the controller.</li><li>AV1 streams from AMD PCs can decode at their padded size while displaying the requested picture without the extra rows.</li></ul>
