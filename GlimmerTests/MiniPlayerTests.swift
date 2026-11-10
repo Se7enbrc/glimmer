@@ -112,6 +112,22 @@ struct MiniPlayerTests {
     }
 
     @MainActor
+    @Test func aBackgroundWindowAcceptsTheFirstDragWithoutSendingAnActivatingPictureClick() throws {
+        let view = StreamInputView(frame: CGRect(x: 0, y: 0, width: 640, height: 360))
+        let display = DisplayContainerView(frame: view.bounds)
+        view.addSubview(display)
+        view.windowDragEnabled = true
+        let top = try mouse(.leftMouseDown, at: CGPoint(x: 320, y: 344))
+        let picture = try mouse(.leftMouseDown, at: CGPoint(x: 320, y: 180))
+        #expect(view.hitTest(top.locationInWindow) === view)
+        #expect(view.hitTest(picture.locationInWindow) === display)
+        #expect(view.acceptsFirstMouse(for: top))
+        #expect(view.acceptsFirstMouse(for: picture) == false)
+        view.windowDragEnabled = false
+        #expect(view.acceptsFirstMouse(for: top) == false)
+    }
+
+    @MainActor
     @Test(arguments: [false, true])
     func bothWindowPresentationsHaveTransparentChromeAndNativeButtons(miniPlayer: Bool) throws {
         let stream = StreamWindow(displayMode: .window)

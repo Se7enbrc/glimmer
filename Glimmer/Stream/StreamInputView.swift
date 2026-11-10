@@ -96,7 +96,9 @@ final class StreamInputView: NSView {
 
     /// Mini player: the click that activates the app also lands in the game.
     var acceptsActivatingClick = false
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { acceptsActivatingClick }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        acceptsActivatingClick || event.map { isWindowDragPoint(convert($0.locationInWindow, from: nil)) } == true
+    }
 
     /// A free window reserves its transparent top edge for native movement, outside hover capture.
     var windowDragEnabled = false {
@@ -115,6 +117,12 @@ final class StreamInputView: NSView {
 
     func isWindowDragPoint(_ point: NSPoint) -> Bool {
         windowDragHeight > 0 && bounds.contains(point) && point.y >= bounds.maxY - windowDragHeight
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        // The picture's child view must not swallow the first click on an inactive drag area.
+        return hit != nil && isWindowDragPoint(convert(point, from: superview)) ? self : hit
     }
 
     private var motionBoundary: TimeInterval?

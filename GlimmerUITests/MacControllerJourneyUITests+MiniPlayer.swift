@@ -24,6 +24,15 @@ extension MacControllerJourneyUITests {
         let notice = app.otherElements.matching(NSPredicate(
             format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
         XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        if !miniPlayer {
+            let width = window.frame.width
+            let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
+                .withOffset(CGVector(dx: -2, dy: -2))
+            corner.press(forDuration: 0.1, thenDragTo: corner.withOffset(CGVector(dx: -240, dy: -135)))
+            XCTAssertLessThan(window.frame.width, width - 150)
+            XCTAssertTrue(notice.exists)
+        }
+        let displacement: CGFloat = miniPlayer ? -60 : 60
         for background in [false, true] {
             if background {
                 let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
@@ -35,9 +44,11 @@ extension MacControllerJourneyUITests {
             let start = window.coordinate(withNormalizedOffset: .zero)
                 .withOffset(CGVector(dx: before.width / 2, dy: 16))
             record("mac-window-before-drag-\(miniPlayer)-\(background)")
-            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: -60, dy: 0)))
-            XCTAssertEqual(window.frame.minX, before.minX - 60, accuracy: 5)
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: displacement, dy: 0)))
+            XCTAssertEqual(window.frame.minX, before.minX + displacement, accuracy: 5)
             XCTAssertEqual(window.frame.minY, before.minY, accuracy: 5)
+            XCTAssertEqual(window.frame.width, before.width, accuracy: 1)
+            XCTAssertEqual(window.frame.height, before.height, accuracy: 1)
             XCTAssertEqual(receipts().filter { $0["pcMouseButton"] != nil }.count, buttons)
             XCTAssertTrue(notice.exists)
             try assertPicture()
