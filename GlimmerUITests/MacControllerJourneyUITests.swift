@@ -8,9 +8,9 @@ import XCTest
 final class MacControllerJourneyUITests: XCTestCase {
     private var directory = FileManager.default.temporaryDirectory
     private var sequence = 0
-    private let app = XCUIApplication()
+    let app = XCUIApplication()
 
-    private func launch(captureSystemKeys: Bool = false, presentation: String = "window") throws {
+    func launch(captureSystemKeys: Bool = false, presentation: String = "window") throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
         directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
@@ -41,13 +41,13 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
     }
 
-    private func receipts() -> [[String: Double]] {
+    func receipts() -> [[String: Double]] {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent("receipts.json")),
               let result = try? JSONSerialization.jsonObject(with: data) as? [[String: Double]] else { return [] }
         return result
     }
 
-    private func waitForReceipt(_ key: String, value: Double = 1) -> Bool {
+    func waitForReceipt(_ key: String, value: Double = 1) -> Bool {
         let predicate = NSPredicate { [self] _, _ in receipts().contains { $0[key] == value } }
         return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 10) == .completed
     }
@@ -72,7 +72,7 @@ final class MacControllerJourneyUITests: XCTestCase {
                                ["element": element, "value": 0]])
     }
 
-    private func record(_ name: String) {
+    func record(_ name: String) {
         for attachment in [XCTAttachment(screenshot: app.screenshot()), XCTAttachment(string: app.debugDescription)] {
             attachment.name = name
             attachment.lifetime = .keepAlways
@@ -573,7 +573,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(element.isHittable)
     }
 
-    private func assertPicture() throws {
+    func assertPicture() throws {
         let window = app.windows["journey-stream-window"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         let image = try XCTUnwrap(window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil))

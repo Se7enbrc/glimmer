@@ -230,13 +230,13 @@ struct StreamViewPointerTests {
         defer { forwarder.detach() }
         let view = try #require(forwarder.inputView)
         forwarder.setWindowMode(true)
-        view.mouseMoved(with: try click(.mouseMoved))
-        view.mouseDown(with: try click(.leftMouseDown))
+        view.mouseMoved(with: try click(.mouseMoved, at: CGPoint(x: 16, y: 16)))
+        view.mouseDown(with: try click(.leftMouseDown, at: CGPoint(x: 16, y: 16)))
         view.mouseUp(with: try click(.leftMouseUp, at: CGPoint(x: 48, y: 16)))
         #expect(backend.mouseMoves.isEmpty)
         #expect(backend.pointer == [
-            .position(x: 160, y: 160, refW: 640, refH: 640),
-            .position(x: 160, y: 160, refW: 640, refH: 640),
+            .position(x: 160, y: 480, refW: 640, refH: 640),
+            .position(x: 160, y: 480, refW: 640, refH: 640),
             .button(action: press, button: StreamProtocol.BUTTON_LEFT),
             .position(x: 480, y: 480, refW: 640, refH: 640),
             .button(action: release, button: StreamProtocol.BUTTON_LEFT)
@@ -250,8 +250,8 @@ struct StreamViewPointerTests {
         let view = try #require(forwarder.inputView)
         forwarder.setWindowMode(true)
         forwarder.streamPixelSize = .zero
-        view.mouseMoved(with: try click(.mouseMoved))
-        view.mouseDown(with: try click(.leftMouseDown))
+        view.mouseMoved(with: try click(.mouseMoved, at: CGPoint(x: 16, y: 16)))
+        view.mouseDown(with: try click(.leftMouseDown, at: CGPoint(x: 16, y: 16)))
         #expect(backend.pointer == [.button(action: press, button: StreamProtocol.BUTTON_LEFT)])
     }
 

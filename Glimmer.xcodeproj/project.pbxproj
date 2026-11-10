@@ -811,6 +811,7 @@
 		C1EA20261027000000000010 /* CleanRoomDifferentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */; };
 		C1EA20261027000000000012 /* CleanRoomMacDifferentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */; };
 		C1EA20261027000000000014 /* CleanRoomVectors in Resources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000013 /* CleanRoomVectors */; };
+		D8A2DDC045E64A1091700001 /* MacControllerJourneyUITests+MiniPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A2DDC045E64A1091700002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1678,6 +1679,7 @@
 		C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomDifferentialTests.swift"; sourceTree = SOURCE_ROOT; };
 		C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomMacDifferentialTests.swift"; sourceTree = SOURCE_ROOT; };
 		C1EA20261027000000000013 /* CleanRoomVectors */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "GlimmerTests/Fixtures/CleanRoomVectors"; sourceTree = SOURCE_ROOT; };
+		D8A2DDC045E64A1091700002 /* MacControllerJourneyUITests+MiniPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerUITests/MacControllerJourneyUITests+MiniPlayer.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2607,7 +2609,8 @@
 		};
 		51ADF827FFF047528CB65054 /* GlimmerUITests */ = {isa = PBXGroup; children = (
 				FF2D9A300F874751B8C5A9B7 /* JourneyInputAssertions.swift */,
-				D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */,); name = GlimmerUITests; sourceTree = "<group>"; };
+				D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */,
+				D8A2DDC045E64A1091700002 /* MacControllerJourneyUITests+MiniPlayer.swift */,); name = GlimmerUITests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -3576,7 +3579,8 @@
 		};
 		4B857E3FD98F432CB502D12A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
 				C4A77CFAD9D2485EB397FB43 /* JourneyInputAssertions.swift in Sources */,
-				480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+				480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */,
+				D8A2DDC045E64A1091700001 /* MacControllerJourneyUITests+MiniPlayer.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */

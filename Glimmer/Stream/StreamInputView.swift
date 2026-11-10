@@ -42,6 +42,8 @@ final class StreamInputView: NSView {
     weak var delegate: (any StreamInputViewDelegate)?
 
     private var trackingArea: NSTrackingArea?
+    private var windowTrackingArea: NSTrackingArea?
+    var onWindowHoverChanged: ((Bool) -> Void)?
     var textInput = StreamTextInput()
     var discardMarkedText: (StreamInputView) -> Void = { $0.inputContext?.discardMarkedText() }
     var interpretTextEvent: (StreamInputView, NSEvent) -> Void = { $0.interpretKeyEvents([$1]) }
@@ -96,6 +98,25 @@ final class StreamInputView: NSView {
     var acceptsActivatingClick = false
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { acceptsActivatingClick }
 
+    /// A free window reserves its transparent top edge for native movement, outside hover capture.
+    var windowDragEnabled = false {
+        didSet { if oldValue != windowDragEnabled { updateTrackingAreas() } }
+    }
+    private var windowDragGesture = false
+
+    private var windowDragHeight: CGFloat {
+        windowDragEnabled && window?.styleMask.contains(.fullScreen) != true ? 32 : 0
+    }
+
+    var pictureTrackingRect: NSRect {
+        CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width,
+               height: max(0, bounds.height - windowDragHeight))
+    }
+
+    func isWindowDragPoint(_ point: NSPoint) -> Bool {
+        windowDragHeight > 0 && bounds.contains(point) && point.y >= bounds.maxY - windowDragHeight
+    }
+
     private var motionBoundary: TimeInterval?
     private var needsMotionBaseline = false
 
@@ -134,16 +155,21 @@ final class StreamInputView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let area = trackingArea { removeTrackingArea(area) }
+        if let area = windowTrackingArea { removeTrackingArea(area) }
         // Tracking outlives focus and live resizing. The forwarder gates input
         // on key ownership, and cursorUpdate follows explicit cursor ownership.
         let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseMoved, .activeAlways, .inVisibleRect, .mouseEnteredAndExited, .cursorUpdate],
+            rect: pictureTrackingRect,
+            options: [.mouseMoved, .activeAlways, .mouseEnteredAndExited, .cursorUpdate],
             owner: self,
             userInfo: nil
         )
         addTrackingArea(area)
         trackingArea = area
+        let windowArea = NSTrackingArea(rect: bounds, options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+                                       owner: self, userInfo: nil)
+        addTrackingArea(windowArea)
+        windowTrackingArea = windowArea
     }
 
     /// Tracking can continue through a close fade or after key focus changes.
@@ -199,7 +225,9 @@ final class StreamInputView: NSView {
     // MARK: NSResponder - mouse
 
     override func mouseMoved(with event: NSEvent) { forwardMotion(event) }
-    override func mouseDragged(with event: NSEvent) { forwardMotion(event) }
+    override func mouseDragged(with event: NSEvent) {
+        if !windowDragGesture { forwardMotion(event) }
+    }
     override func rightMouseDragged(with event: NSEvent) { forwardMotion(event) }
     override func otherMouseDragged(with event: NSEvent) { forwardMotion(event) }
 
@@ -208,11 +236,22 @@ final class StreamInputView: NSView {
         delegate?.streamView(self, handleMouseMoved: event)
     }
 
-    override func mouseDown(with event: NSEvent) { delegate?.streamView(self, handleMouseDown: event) }
+    override func mouseDown(with event: NSEvent) {
+        // Native dragging may consume mouse-up; each new press starts a fresh ownership decision.
+        windowDragGesture = isWindowDragPoint(convert(event.locationInWindow, from: nil))
+        if windowDragGesture {
+            window?.performDrag(with: event)
+        } else {
+            delegate?.streamView(self, handleMouseDown: event)
+        }
+    }
     override func rightMouseDown(with event: NSEvent) { delegate?.streamView(self, handleMouseDown: event) }
     override func otherMouseDown(with event: NSEvent) { delegate?.streamView(self, handleMouseDown: event) }
 
-    override func mouseUp(with event: NSEvent) { delegate?.streamView(self, handleMouseUp: event) }
+    override func mouseUp(with event: NSEvent) {
+        guard !windowDragGesture else { windowDragGesture = false; return }
+        delegate?.streamView(self, handleMouseUp: event)
+    }
     override func rightMouseUp(with event: NSEvent) { delegate?.streamView(self, handleMouseUp: event) }
     override func otherMouseUp(with event: NSEvent) { delegate?.streamView(self, handleMouseUp: event) }
 
@@ -222,8 +261,21 @@ final class StreamInputView: NSView {
     // crossing and the forwarder's pure rule decides, so full screen (which
     // ignores both) pays one delegate hop and nothing else. No event is
     // consumed: AppKit does not route enter/exit anywhere else.
-    override func mouseEntered(with event: NSEvent) { delegate?.streamViewPointerDidEnter(self) }
-    override func mouseExited(with event: NSEvent) { delegate?.streamViewPointerDidExit(self) }
+    override func mouseEntered(with event: NSEvent) {
+        if let windowTrackingArea, event.trackingArea === windowTrackingArea {
+            onWindowHoverChanged?(true)
+        } else {
+            delegate?.streamViewPointerDidEnter(self)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if let windowTrackingArea, event.trackingArea === windowTrackingArea {
+            onWindowHoverChanged?(false)
+        } else {
+            delegate?.streamViewPointerDidExit(self)
+        }
+    }
 }
 
 // MARK: - Shared cursor-centering helper

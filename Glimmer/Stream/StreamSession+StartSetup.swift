@@ -257,8 +257,8 @@ extension StreamSession {
             inp?.setMiniPlayer(mini)
             onMiniPlayerChanged?(mini)
         }
-        inp.onMiniPlayerHoverChanged = { [weak win] hovering in
-            win?.setMiniPlayerHovering(hovering)
+        inp.onWindowHoverChanged = { [weak win] hovering in
+            win?.setWindowHovering(hovering)
         }
     }
 }

@@ -135,8 +135,8 @@ public final class StreamWindow {
     var miniPlayerReturnUsesSpace = false
     /// Path B: the Space exit in flight was asked for by the mini player.
     var miniPlayerPending = false
-    /// Pointer resting on the mini player; drives its hover-shown close button.
-    var miniPlayerHovering = false
+    /// Pointer resting on the window; drives its native controls on hover.
+    var windowHovering = false
     /// Fired on every mini player edge (true = on). The session tells the
     /// forwarder and the launcher.
     public var onMiniPlayerChanged: (@MainActor (Bool) -> Void)?

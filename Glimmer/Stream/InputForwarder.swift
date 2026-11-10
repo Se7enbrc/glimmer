@@ -176,9 +176,8 @@ public final class InputForwarder {
     var streamControls: MacStreamControls?
     var onControllerMenu: (@MainActor (UInt8) -> Void)?
     let controllerBackgroundEventsID = UUID()
-    /// The pointer entered or left the mini player; the window shows its
-    /// close button off this edge.
-    var onMiniPlayerHoverChanged: (@MainActor (Bool) -> Void)?
+    /// The pointer entered or left the window, including its transparent controls.
+    var onWindowHoverChanged: (@MainActor (Bool) -> Void)?
 
     /// Window mode grabs on hover; fullscreen follows the app's initial policy
     /// and the user's live capture toggle across focus changes.

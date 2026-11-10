@@ -31,6 +31,7 @@ extension InputForwarder {
     func setWindowMode(_ enabled: Bool) {
         guard isWindowMode != enabled else { return }
         isWindowMode = enabled
+        inputView?.windowDragEnabled = enabled && !isMouseCaptured
         defer { updateSystemKeyCapture() }
         if enabled {
             exitCapturedMode()

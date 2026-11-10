@@ -117,6 +117,7 @@ extension InputForwarder {
             }
         }
         isMouseCaptured = true
+        inputView.windowDragEnabled = false
         updateSystemKeyCapture()
         if inputView.hasMarkedText() { inputView.cancelComposition() }
         log.info("""
@@ -131,6 +132,7 @@ extension InputForwarder {
     func exitCapturedMode() {
         guard isMouseCaptured else { return }
         isMouseCaptured = false
+        inputView?.windowDragEnabled = isWindowMode
         if isWindowMode { updateSystemKeyCapture() }
         inputView?.resumeMotion()
         // Re-associate: hand cursor control back to the OS so the pointer tracks

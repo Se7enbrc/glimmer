@@ -48,6 +48,8 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        view.windowDragEnabled = isWindowMode && !isMouseCaptured
+        view.onWindowHoverChanged = { [weak self] in self?.onWindowHoverChanged?($0) }
         view.onResignFirstResponder = { [weak self] in
             self?.inputOwnershipLost(reason: "first responder lost", includingControllers: false)
         }

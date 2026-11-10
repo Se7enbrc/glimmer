@@ -2,6 +2,10 @@
 
 ## 2026.11.1 - Unreleased
 
+- Windowed streams show the picture edge-to-edge, with native window buttons on
+  hover. Drag the top edge of a window or mini-player while the pointer is
+  released to move it without returning input to the PC.
+
 - Hide the Mac pointer again when returning keyboard and mouse control to a
   stream in a window or mini-player.
 

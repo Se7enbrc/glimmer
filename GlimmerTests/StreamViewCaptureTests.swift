@@ -40,7 +40,7 @@ struct StreamViewCaptureTests {
     }
 
     private func mouse(_ type: NSEvent.EventType) throws -> NSEvent {
-        try #require(NSEvent.mouseEvent(with: type, location: CGPoint(x: 16, y: 48), modifierFlags: [],
+        try #require(NSEvent.mouseEvent(with: type, location: CGPoint(x: 16, y: 16), modifierFlags: [],
                                         timestamp: 1, windowNumber: 0, context: nil, eventNumber: 0,
                                         clickCount: 1, pressure: 1))
     }
@@ -158,13 +158,10 @@ struct StreamViewCaptureTests {
         let (forwarder, backend, _) = windowed()
         defer { forwarder.detach() }
         let view = try #require(forwarder.inputView)
-        let hovering = Edges()
-        forwarder.onMiniPlayerHoverChanged = { hovering.seen.append($0) }
         forwarder.setMiniPlayer(true)
         view.mouseEntered(with: try crossing(.mouseEntered))
         #expect(!forwarder.isMouseCaptured)
         view.mouseExited(with: try crossing(.mouseExited))
-        #expect(hovering.seen == [true, false])
         view.mouseDown(with: try mouse(.leftMouseDown))
         #expect(forwarder.isMouseCaptured)
         #expect(buttons(backend) == [.button(action: press, button: StreamProtocol.BUTTON_LEFT)])
@@ -190,7 +187,7 @@ struct StreamViewCaptureTests {
         view.mouseEntered(with: try crossing(.mouseEntered))
         #expect(!forwarder.isMouseCaptured)
         view.mouseDown(with: try mouse(.leftMouseDown))
-        #expect(backend.pointer.first == .position(x: 160, y: 160, refW: 640, refH: 640))
+        #expect(backend.pointer.first == .position(x: 160, y: 480, refW: 640, refH: 640))
         view.keyDown(with: try pointerChord())
         #expect(forwarder.isMouseCaptured)
         #expect(forwarder.fullscreenRelativePointer)
