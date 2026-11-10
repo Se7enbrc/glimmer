@@ -411,14 +411,22 @@ struct StreamViewKeyboardTests {
         #expect(backend.keyboard.last?.modifiers == Int8(StreamProtocol.MODIFIER_META))
     }
 
-    /// Without a live tracking area AppKit never delivers mouseMoved; a resize replaces it.
-    @Test func trackingAreaIsReplacedNotStacked() {
-        let view = StreamInputView(frame: NSRect(x: 0, y: 0, width: 64, height: 32))
+    /// Picture tracking follows capture geometry; the whole-window controls retain their identity.
+    @Test func trackingAreasStayBoundedAcrossCaptureAndResize() throws {
+        let view = StreamInputView(frame: NSRect(x: 0, y: 0, width: 64, height: 96))
         view.updateTrackingAreas()
-        view.updateTrackingAreas()
-        #expect(view.trackingAreas.count == 1)
-        let options = view.trackingAreas.first?.options ?? []
-        #expect(options.isSuperset(of: [.mouseMoved, .activeAlways, .mouseEnteredAndExited]))
+        let controls = try #require(view.trackingAreas.first { $0.options.contains(.inVisibleRect) })
+        for enabled in [true, false, true] {
+            view.windowDragEnabled = enabled
+            view.setFrameSize(CGSize(width: 96, height: view.bounds.height + 32))
+            view.updateTrackingAreas()
+            #expect(view.trackingAreas.count == 2)
+            #expect(view.trackingAreas.first { $0.options.contains(.inVisibleRect) } === controls)
+            let picture = try #require(view.trackingAreas.first { $0.options.contains(.mouseMoved) })
+            #expect(picture.rect == view.pictureTrackingRect)
+            #expect(picture.options.isSuperset(of: [.mouseMoved, .activeAlways, .mouseEnteredAndExited, .cursorUpdate]))
+            #expect(controls.options.isSuperset(of: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect]))
+        }
     }
 
     @Test func viewAcceptsTheActivatingClickOnlyForTheMiniPlayer() {
