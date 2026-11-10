@@ -29,10 +29,10 @@ extension MacControllerJourneyUITests {
             let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
                 .withOffset(CGVector(dx: -2, dy: -2))
             corner.press(forDuration: 0.1, thenDragTo: corner.withOffset(CGVector(dx: -240, dy: -135)))
-            XCTAssertLessThan(window.frame.width, width - 150)
+            XCTAssertEqual(window.frame.width, max(640, width - 240), accuracy: 5)
             XCTAssertTrue(notice.exists)
         }
-        let displacement: CGFloat = miniPlayer ? -60 : 60
+        let screenMidX = try XCTUnwrap(NSScreen.main).visibleFrame.midX
         for background in [false, true] {
             if background {
                 let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
@@ -40,6 +40,7 @@ extension MacControllerJourneyUITests {
                 XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
             }
             let before = window.frame
+            let displacement: CGFloat = before.midX < screenMidX ? 60 : -60
             let buttons = receipts().filter { $0["pcMouseButton"] != nil }.count
             let start = window.coordinate(withNormalizedOffset: .zero)
                 .withOffset(CGVector(dx: before.width / 2, dy: 16))
