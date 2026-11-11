@@ -9,6 +9,7 @@ struct ControllerLayoutsView: View {
     var initialScope: ControllerLayoutScope = .allGames
     @State private var editingID = UUID()
     @ScaledMetric(relativeTo: .caption) private var statusTextSize = 12.0
+    @Environment(\.streamControlsScale) private var streamScale
 
     var body: some View {
         Form {
@@ -21,7 +22,7 @@ struct ControllerLayoutsView: View {
             }
             Section {
                 ForEach(model.devices) { device in
-                    NavigationLink {
+                    ControllerSettingsNavigationLink {
                         ControllerLayoutEditor(model: model, device: device, scope: initialScope)
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
@@ -29,7 +30,7 @@ struct ControllerLayoutsView: View {
                                 Image(systemName: "gamecontroller").foregroundStyle(Color.accentColor)
                             }
                             Text(device.connected ? "Connected" : "Not connected")
-                                .font(.system(size: statusTextSize)).foregroundStyle(.secondary)
+                                .font(.system(size: statusTextSize * (streamScale ?? 1))).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -62,6 +63,7 @@ struct ControllerLayoutEditor: View {
     @State private var standardReset = false
     @State private var failure: String?
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.dismiss) private var dismiss
 
     private var record: ControllerLayoutRecord? { model.resolved(device, scope: scope) }
     private var layout: ControllerLayout { model.baseline(device, scope: scope) }
@@ -115,16 +117,19 @@ struct ControllerLayoutEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .controllerLayoutNavigation()
+        #if os(macOS)
+        .onExitCommand { dismiss() }
+        #endif
         .onAppear { ControllerLayoutEditing.begin(editingID); model.beginObserving() }
         .onDisappear { model.endObserving(); ControllerLayoutEditing.end(editingID) }
-        .sheet(item: $selected) { control in
+        .controllerSettingsDestination(item: $selected) { control in
             ControllerLayoutAssignment(model: model, device: device, scope: scope, control: control, layout: layout)
         }
-        .sheet(isPresented: $capturing) {
+        .controllerSettingsDestination(isPresented: $capturing) {
             captureSheet
         }
         // A lazy Form section cannot own a sheet that must survive its disappearance.
-        .sheet(item: $shortcut) { action in
+        .controllerSettingsDestination(item: $shortcut) { action in
             ControllerBindingRecorder(model: model, device: device, target: .shortcut(action))
         }
         .confirmationDialog(scope == .allGames ? "Use system layout?" : "Use All games?",

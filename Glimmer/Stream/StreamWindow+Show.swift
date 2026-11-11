@@ -275,6 +275,7 @@ extension StreamWindow {
                   !self.window.isKeyWindow else { return }
             // A Space may lose key to our launcher without deactivating the app.
             guard !NSApp.isActive || !self.coversNotch else { return }
+            if self.window.childWindows?.contains(where: { $0.isKeyWindow }) == true { return }
             self.handleFocusLoss(NSWorkspace.shared.frontmostApplication?.activationPolicy)
         }
     }

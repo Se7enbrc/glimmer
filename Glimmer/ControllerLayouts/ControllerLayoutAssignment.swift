@@ -20,12 +20,16 @@ struct ControllerLayoutAssignment: View {
     @State private var saving = false
     @State private var failure: String?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.streamControlsScale) private var streamScale
 
     var body: some View {
-        NavigationStack {
+        ControllerSettingsNavigation {
             Form {
                 Section {
                     Label(control.name, systemImage: control.symbol).font(.title2)
+                        #if os(macOS)
+                        .streamFont(.title2, scale: streamScale ?? 1)
+                        #endif
                     ControllerSettingsPicker(title: "Send to PC", value: destination.layoutName, selection: $destination) {
                         ForEach(ControllerLayoutDestination.choices(for: control.id), id: \.self) { choice in
                             Text(choice.layoutName).tag(choice)
@@ -51,10 +55,11 @@ struct ControllerLayoutAssignment: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving)
+                    .keyboardShortcut(.cancelAction).controllerSettingsFocus { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }.disabled(saving)
-                        .keyboardShortcut(.defaultAction)
+                        .keyboardShortcut(.defaultAction).controllerSettingsFocus { save() }
                 }
             }
         }
@@ -109,16 +114,20 @@ struct ControllerLayoutCaptureSheet: View {
     @State private var failure: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.streamControlsScale) private var streamScale
 
     var body: some View {
         Group {
             if let source = capture.source, let control = device.controls.first(where: { $0.id == source }) {
                 ControllerLayoutAssignment(model: model, device: device, scope: scope, control: control, layout: layout)
             } else {
-                NavigationStack {
+                ControllerSettingsNavigation {
                     Form {
                         Section {
                             Label(capture.message, systemImage: "gamecontroller").font(.title3)
+                                #if os(macOS)
+                                .streamFont(.title3, scale: streamScale ?? 1)
+                                #endif
                                 .accessibilityAddTraits(.updatesFrequently)
                             Text("Only \(device.name) is being recorded.")
                                 .foregroundStyle(.secondary)
@@ -131,7 +140,7 @@ struct ControllerLayoutCaptureSheet: View {
                     .navigationBarTitleDisplayMode(.inline)
                     #endif
                     .toolbar {
-                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                     }
                 }
             }

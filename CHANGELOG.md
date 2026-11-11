@@ -1,6 +1,35 @@
 # Changelog
 
-## 2026.11.0 - Unreleased
+## 2026.11.1 - Unreleased
+
+- Windowed streams show the picture edge-to-edge, with native window buttons on
+  hover. Drag the top edge of a window or mini-player while the pointer is
+  released to move it without returning input to the PC.
+
+- Hide the Mac pointer again when returning keyboard and mouse control to a
+  stream in a window or mini-player.
+
+- Keep stream notices with the mini-player when switching to another Mac app.
+
+- Return to a stream in Cover the screen after releasing input and switching
+  apps. The picture stays clickable, and input stays released until you choose
+  to return it to the PC.
+
+- Mac screenshot and recording tools can capture the stream picture.
+
+- Press Control-Shift-P to release keyboard and mouse to this Mac while the
+  stream keeps playing. Use Mac shortcuts, then click the picture or press the
+  shortcut again to return. Change the binding in Settings › Input.
+
+- Hold the controller's Menu button for 2 seconds to open stream controls on
+  Mac, just like iPhone and iPad. Use the controller to resume, show stats,
+  switch mouse mode, or disconnect. The glass menu and its editors are larger on
+  big screens, and Controller layouts works with the controller.
+
+- AV1 streams from AMD PCs can decode at their padded size while displaying the
+  requested picture without the extra rows.
+
+## 2026.11.0
 
 - Settings › Quality is simpler on Mac, iPhone and iPad. Display comes first,
   with presets named for what they send (Native and Retina scaled on Mac, each

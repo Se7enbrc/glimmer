@@ -262,6 +262,16 @@ jitter headroom and recovers afterward. Due frames at rest can release on
 submit. `DisplayImmediately` is required because the pacer already chose the
 release time; RTP timestamps stay intact for order and telemetry.
 
+AV1 sequence maxima only replace negotiated geometry within bounded padding: up
+to 16 pixels per axis, or the exact next 64-pixel width and 16-pixel height
+boundaries.
+[AMF's documented alignment modes](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/wiki/AV1-Encoder#av1-specific-api)
+include general 64x16 alignment and a special 1920x1080 to 1920x1082 case.
+Larger or undersized maxima retain negotiated geometry. Only decoded buffers
+matching accepted padding receive a top-left clean aperture; their IOSurface and
+colour attachments are retained. This does not assume NVENC uses AMF's alignment
+policy.
+
 ### Colour and HDR
 
 Resolve declared colour tags before using negotiated fallbacks.
@@ -324,6 +334,13 @@ through. Physical keys use positional scancodes with `0x8000`. Command stays
 local by default; forwarding applies only fullscreen or captured. Hotkeys
 precede that gate.
 
+Control-Shift-P releases keyboard and mouse independently of pointer mode. The
+adapter invalidates queued text, retains failed release obligations, restores
+Mac system shortcuts and cursor visibility, and suppresses capture across focus,
+presentation and connection changes. Explicit recapture consumes its initiating
+click or chord and waits for neutral modifiers and mouse buttons. Controllers
+keep their existing focus policy; no media or transport state changes.
+
 On iOS, GameController keyboard and mouse callbacks run on a dedicated serial
 queue. Native focus and device changes retire callbacks before releasing held
 input. Both adapters use the engine's physical key map and release ledger; UIKit
@@ -364,11 +381,21 @@ Mini Player retains background controller input, while keyboard/mouse follow
 focus. Background monitoring has shared ownership with diagnostics and shortcut
 recording and restores its original value after the last owner leaves.
 
-The configured mouse toggle held over 750 ms then released toggles per-slot
-controller mouse. Stop chords cancel toggles. Mouse buttons share the release
-ledger; stick polling runs only while moving/scrolling. Touchpad coordinates
-come from GameController. Nintendo layout swaps only outgoing A/B and X/Y after
-positional mouse/chord handling.
+Holding Menu for two seconds and releasing opens native stream controls on all
+platforms. Stop chords take priority. The menu changes mouse mode for its
+opening controller, releases PC input, and rearms held controls before resuming
+play. Mouse buttons share the release ledger; stick polling runs only while
+moving/scrolling. Touchpad coordinates come from GameController. Nintendo layout
+swaps only outgoing A/B and X/Y after positional mouse/chord handling.
+
+Mac layout editors route physical GameController and raw-HID input through a
+shared navigation owner. Positional face buttons activate or dismiss native
+controls; the directional pad and left stick traverse focus. Recording takes
+exclusive ownership synchronously, and navigation rearms after capture ends.
+Native menu tracking polls live controller values only while the menu is open;
+older queued samples cannot replay a dismissal into the editor. Registered
+native focus anchors traverse visible, enabled controls in visual order, then
+toolbar actions, without requiring Full Keyboard Access.
 
 ### Raw HID and gestures
 
@@ -406,8 +433,11 @@ owns its switch; no private API or signed-plist edits.
 
 Borderless deactivation waits 200 ms before hiding to ignore transient focus
 changes. Actual visibility separately drives presentation/decode suppression.
-“Back to stream” restores the window; app activation alone must not pull it
-forward. The legacy `.none` sharing hint does not block ScreenCaptureKit.
+“Back to stream” and keyboard app switching restore the window; clicking the
+launcher or Settings must not pull it forward. Returning while input is released
+restores the picture and click target without recapturing input. The window uses
+`.readOnly` sharing so Mac screenshot and recording tools can capture the
+stream; journey tests use the same policy.
 
 ## Crossing isolation: receive threads ↔ Swift actors
 

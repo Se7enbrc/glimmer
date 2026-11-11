@@ -6,6 +6,7 @@ import AppKit
 
 extension InputForwarder {
     var ownsKeyboard: Bool {
+        guard !isInputReleased, !inputRearming else { return false }
         guard let window else { return true }
         return window.isKeyWindow && window.firstResponder === inputView
     }

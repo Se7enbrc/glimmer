@@ -149,7 +149,7 @@ struct PCTile: View {
 
 struct ShortcutsPane: View {
     static let pointerDetail =
-        "Captures or releases the pointer in a window or full screen."
+        "Switches pointer mode. The keyboard still controls the PC."
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
@@ -175,9 +175,11 @@ struct ShortcutsPane: View {
         // can't copy another shortcut or a fixed one.
         let stop = "Stop Streaming", stats = "Show or Hide Stream Stats"
         let pointer = "Capture or Release the Pointer", mini = "Mini Player", paste = "Paste as Text"
+        let releaseInput = "Release or Capture Keyboard and Mouse"
         let taken: [(name: String, chord: HotkeyChord)] = [
             (stop, model.quitHotkey), (stats, model.statsHotkey),
             (pointer, model.releasePointerHotkey), (mini, model.miniPlayerHotkey),
+            (releaseInput, model.releaseInputHotkey),
             ("Bookmark a Rough Moment", .defaultBookmark), (paste, PasteText.chord)
         ]
         Form {
@@ -191,6 +193,9 @@ struct ShortcutsPane: View {
                 HotkeyRow(label: pointer,
                           detail: Self.pointerDetail,
                           hotkey: $model.releasePointerHotkey, taken: taken)
+                HotkeyRow(label: releaseInput,
+                          detail: "Keeps the stream running while you use this Mac. Press again or click the picture to return.",
+                          hotkey: $model.releaseInputHotkey, taken: taken)
                 HotkeyRow(label: mini,
                           detail: "Shrinks the stream to a small window over your other apps, and brings it back.",
                           hotkey: $model.miniPlayerHotkey, taken: taken)

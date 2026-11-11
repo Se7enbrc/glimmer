@@ -30,7 +30,7 @@ enum LauncherCommand: Equatable {
     }
 }
 
-struct LauncherControllerInput {
+struct LauncherControllerInput: Equatable {
     var direction: LauncherCommand?
     var activate = false
     var dismiss = false
@@ -44,7 +44,10 @@ struct LauncherControllerRepeat {
     private var nextRepeat = TimeInterval.infinity
     private var armed = false
 
-    mutating func commands(_ input: LauncherControllerInput, at time: TimeInterval) -> [LauncherCommand] {
+    mutating func commands(_ input: LauncherControllerInput, at time: TimeInterval,
+                           current: LauncherControllerInput? = nil) -> [LauncherCommand] {
+        // A timer may run before queued release callbacks; do not repeat their stale held sample.
+        if let current, current != input { return [] }
         // Require release after a window/stream handoff so a held game button cannot launch another app.
         guard armed else {
             armed = input.isNeutral

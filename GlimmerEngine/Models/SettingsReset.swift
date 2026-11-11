@@ -10,7 +10,7 @@ public enum SettingsReset {
         "leaveGamesRunning", "defaultLaunchApp", "muteMacWhileStreaming",
         "captureSysKeys", "disableMouseAccelWhileStreaming", "nintendoButtonLayout",
         "rawHIDControllerEnabled", "hidGamepadClaimAll", "pacerTickOffMain", "pacerTickRealtime",
-        "quitHotkey", "statsHotkey", "releasePointerHotkey", "miniPlayerHotkey",
+        "quitHotkey", "statsHotkey", "releasePointerHotkey", "releaseInputHotkey", "miniPlayerHotkey",
         "controllerQuitChord", "customControllerChord", "controllerMouseStick", "controllerMouseBindings", "touchMouseEnabled",
         "cruiseTraversalEnabled", "cruiseVKnee", "cruiseVFull", "cruiseDragDeltaScale",
         "streamCoversNotch", "streamUsesFullScreenSpace", "launcherStyle", "launchAtLogin", "launchMinimized",

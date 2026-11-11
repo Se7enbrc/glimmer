@@ -71,7 +71,7 @@ extension StreamWindow {
     /// full-screen cover: a late fade-in completion or a backgrounded window
     /// must not hide the menu bar under the launcher. Window mode keeps both.
     func applyPresentationOptions(coversNotch cover: Bool) {
-        guard displayMode == .fullScreen, !didClose, !userBackgrounded, !presentationRevealInProgress,
+        guard !isInputReleased, displayMode == .fullScreen, !didClose, !userBackgrounded, !presentationRevealInProgress,
               NSApp.isActive, window.isKeyWindow, window.isVisible else { return }
         // AppKit negotiates Space options on entry; never replace them mid-transition.
         guard cover || window.styleMask.contains(.fullScreen) else { return }

@@ -26,6 +26,7 @@ extension AppModel {
         quitHotkey = fresh.quitHotkey
         statsHotkey = fresh.statsHotkey
         releasePointerHotkey = fresh.releasePointerHotkey
+        releaseInputHotkey = fresh.releaseInputHotkey
         miniPlayerHotkey = fresh.miniPlayerHotkey
         showStreamStats = fresh.showStreamStats
         streamStatsCorner = fresh.streamStatsCorner

@@ -248,6 +248,10 @@ public final class VideoDecoder {
     // Only the serial decode queue reads or publishes the active AV1 configuration.
     nonisolated(unsafe) var av1SequenceHeader: AV1SeqHeader?
 
+    // Rebuilds publish geometry only after retiring VT callbacks; the lock also
+    // protects reads from output callbacks and teardown.
+    nonisolated let av1PaddingBox = OSAllocatedUnfairLock<(width: Int, height: Int)?>(initialState: nil)
+
     // The decode queue runs everything VideoToolbox-related serially. The
     // submit callback fires on the native backend's receive thread; we hop here
     // ASYNCHRONOUSLY (decodeQueue.async) so the receive thread hands the frame

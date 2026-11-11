@@ -308,6 +308,13 @@ final class AppModel {
             }
         }
     }
+    var releaseInputHotkey: HotkeyChord = .defaultReleaseInput {
+        didSet {
+            if let data = try? JSONEncoder().encode(releaseInputHotkey) {
+                settingsDefaults.set(data, forKey: "releaseInputHotkey")
+            }
+        }
+    }
     /// Mini player chord (default ⌃M): the stream as a small floating panel
     /// over other apps, and back. Read live via a provider like the others.
     var miniPlayerHotkey: HotkeyChord = .defaultMiniPlayer {
@@ -500,6 +507,7 @@ final class AppModel {
         _bitrateMode = BitrateMode.persisted(rawValue: settingsDefaults.string(forKey: BitrateMode.defaultsKey))
         _releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self,
             defaults: defaults) ?? releasePointerHotkey
+        _releaseInputHotkey = HotkeyChord.persistedReleaseInput(defaults: defaults)
         _miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self,
             defaults: defaults) ?? miniPlayerHotkey
         _showStreamStats = Self.persistedBool("showStreamStats", defaults: defaults) ?? showStreamStats

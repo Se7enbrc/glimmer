@@ -100,8 +100,8 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
         self.keyChar = keyChar
     }
 
-    // Every default is ⌃ plus one letter: two keys, one family. No ⌘, so they fire
-    // whether or not ⌘ is forwarded to the PC. Players can remap game conflicts.
+    // Defaults use ⌃ so they work whether or not ⌘ goes to the PC.
+    // ⇧ extends the pointer toggle to release both keyboard and mouse.
 
     /// ⌃Q. ⌃⌘Q is macOS's Lock Screen and never reaches an app.
     public static let defaultQuit = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "q")
@@ -112,10 +112,13 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     /// ⌃B, client-only and telemetry-gated: it only means anything in a diagnostic session.
     public static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
 
-    /// ⌃P for the pointer toggle, not ⌃R: ⌃R is crouch plus reload. Window mode only;
-    /// in full screen capture follows key status, so the chord reaches the PC.
+    /// ⌃P changes pointer capture in every presentation.
     public static let defaultReleasePointer = HotkeyChord(
         ctrl: true, alt: false, shift: false, cmd: false, keyChar: "p")
+
+    /// ⌃⇧P temporarily hands keyboard and mouse back to this Mac.
+    public static let defaultReleaseInput = HotkeyChord(
+        ctrl: true, alt: false, shift: true, cmd: false, keyChar: "p")
 
     /// ⌃M toggles the mini player and the full presentation.
     public static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")

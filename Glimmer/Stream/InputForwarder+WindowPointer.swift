@@ -12,13 +12,14 @@ extension InputForwarder {
     /// Native fullscreen tracking can outlive focus through a Space transition.
     /// Relative aim requires capture; a key window also permits a free pointer.
     var forwardsMouseEvents: Bool {
+        guard !isInputReleased, !inputRearming else { return false }
         guard let window, window.isKeyWindow, !window.ignoresMouseEvents else { return false }
         return sendsAbsolutePointer || isMouseCaptured
     }
 
     /// A free pointer mirrors the picture whenever the current policy permits it.
     var sendsAbsolutePointer: Bool {
-        Self.usesAbsolutePointer(windowed: isWindowMode, captured: isMouseCaptured,
+        !isInputReleased && !inputRearming && Self.usesAbsolutePointer(windowed: isWindowMode, captured: isMouseCaptured,
                                           fullscreenRelative: fullscreenRelativePointer)
     }
 
@@ -30,6 +31,7 @@ extension InputForwarder {
     func setWindowMode(_ enabled: Bool) {
         guard isWindowMode != enabled else { return }
         isWindowMode = enabled
+        inputView?.windowDragEnabled = enabled && !isMouseCaptured
         defer { updateSystemKeyCapture() }
         if enabled {
             exitCapturedMode()
@@ -62,14 +64,14 @@ extension InputForwarder {
             cancelQuitChordDwell(reason: "mini player ended in the background")
             neutralizeControllers()
         }
-        inputView?.acceptsActivatingClick = enabled
+        inputView?.acceptsActivatingClick = enabled || isInputReleased
         if enabled, isMouseCaptured { releasePointer(reason: "mini player") }
         log.info("Pointer policy: \(enabled ? "click to capture (mini player)" : "capture while over the window", privacy: .public)")
     }
 
     /// Fullscreen remembers the toggle across focus loss; window mode keeps its hover latch.
     func togglePointerCapture(reason: String) {
-        guard let window, window.isKeyWindow, !window.ignoresMouseEvents else { return }
+        guard !isInputReleased, let window, window.isKeyWindow, !window.ignoresMouseEvents else { return }
         if !isWindowMode { fullscreenRelativePointer = !isMouseCaptured }
         if isMouseCaptured {
             releasePointer(reason: reason)
@@ -81,7 +83,7 @@ extension InputForwarder {
 
     /// Background windows must never take the pointer from the active Mac app.
     func capturePointer(reason: String) {
-        guard !isMouseCaptured, let window, window.isKeyWindow else { return }
+        guard !isInputReleased, !isMouseCaptured, let window, window.isKeyWindow else { return }
         log.info("Pointer capture requested (\(reason, privacy: .public))")
         // Clear the latch as the grab lands: it exists to keep a release from
         // being undone, and the pointer is captured again, so the question it
@@ -140,5 +142,45 @@ extension InputForwarder {
         guard isReady, sendsAbsolutePointer else { return }
         inputCore.sendAbsolutePointer(viewPoint: view.convert(event.locationInWindow, from: nil),
                                       viewSize: view.bounds.size, streamPixelSize: streamPixelSize, captureSync: false)
+    }
+
+    func consumeInputReleaseShortcut(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown, window?.isKeyWindow == true,
+              releaseInputHotkeyProvider().matches(event: event,
+                modifiers: event.modifierFlags.intersection(.deviceIndependentFlagsMask)) else { return false }
+        if !event.isARepeat { setInputReleased(!isInputReleased) }
+        return true
+    }
+
+    func setInputReleased(_ released: Bool) {
+        guard released != isInputReleased, let window, window.isKeyWindow else { return }
+        isInputReleased = released
+        inputView?.acceptsActivatingClick = released || isMiniPlayer
+        inputRearming = !released
+        inputGeneration &+= 1
+        pendingKeyboardEvents.removeAll()
+        pendingTextTask?.cancel()
+        if inputView?.hasMarkedText() == true { inputView?.cancelComposition() }
+        raiseAllHeldInputs(reason: released ? "keyboard and mouse released" : "keyboard and mouse recaptured")
+        cancelEscapeHold()
+        inputCore.resetPointerMotion()
+        // Cursor ownership must see the new release state before capture changes.
+        onInputReleaseChanged?(released)
+        if released {
+            exitCapturedMode()
+        } else {
+            inputView?.resetMotion()
+            if isWindowMode || fullscreenRelativePointer { capturePointer(reason: "explicit recapture") }
+        }
+        updateSystemKeyCapture()
+    }
+
+    /// The recapture chord or click must be released before it can reach the PC.
+    func rearmInputIfNeutral(_ flags: NSEvent.ModifierFlags) {
+        guard inputRearming, flags.isDisjoint(with: [.control, .option, .shift, .command]),
+              currentMouseButtons() == 0 else { return }
+        inputRearming = false
+        inputView?.resetMotion()
+        updateSystemKeyCapture()
     }
 }

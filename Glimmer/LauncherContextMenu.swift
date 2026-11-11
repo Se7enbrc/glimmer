@@ -4,21 +4,22 @@
 import AppKit
 import SwiftUI
 
-struct LauncherContextMenu<MenuContent: View>: NSViewRepresentable {
-    let appID: Int
-    @Binding var requestedAppID: Int?
+struct NativeControllerMenu<MenuContent: View>: NSViewRepresentable {
+    @Binding var presented: Bool
     @ViewBuilder let menu: () -> MenuContent
+    @Environment(\.streamControlsScale) private var scale
 
     func makeNSView(context: Context) -> NSView { NSView() }
 
     func updateNSView(_ view: NSView, context: Context) {
-        guard requestedAppID == appID else { return }
+        guard presented else { return }
         // Wait for SwiftUI's update to finish before native menu tracking takes over.
         DispatchQueue.main.async {
-            guard requestedAppID == appID, view.window != nil else { return }
-            requestedAppID = nil
-            NSHostingMenu(rootView: menu()).popUp(positioning: nil,
-                                                 at: NSPoint(x: 12, y: view.bounds.maxY - 12), in: view)
+            guard presented, view.window != nil else { return }
+            presented = false
+            let nativeMenu = NSHostingMenu(rootView: menu())
+            if let scale { nativeMenu.font = .systemFont(ofSize: NSFont.preferredFont(forTextStyle: .title3).pointSize * scale) }
+            nativeMenu.popUp(positioning: nil, at: NSPoint(x: 12, y: view.bounds.maxY - 12), in: view)
         }
     }
 }

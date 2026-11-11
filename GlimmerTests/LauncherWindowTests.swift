@@ -158,9 +158,9 @@ struct PairAgainSheetTests {
 
 @MainActor
 struct PointerShortcutHelpTests {
-    @Test func pointerHelpCoversWindowAndFullScreenCapture() {
+    @Test func pointerHelpDistinguishesPointerModeFromKeyboardRelease() {
         #expect(ShortcutsPane.pointerDetail ==
-            "Captures or releases the pointer in a window or full screen.")
+            "Switches pointer mode. The keyboard still controls the PC.")
     }
 }
 
@@ -245,6 +245,7 @@ struct ShortcutContrastWindowTests {
         host.view.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         // This API exposes only this test host's windows and requires no screen-recording permission.
+        try await Task.sleep(for: .milliseconds(200))
         let content = try await SCShareableContent.currentProcess
         let target = try #require(content.windows.first { $0.windowID == CGWindowID(window.windowNumber) })
         let configuration = SCStreamConfiguration()

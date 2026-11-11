@@ -175,6 +175,7 @@ extension AppModel {
                     releasePointerHotkeyProvider: { [weak self] in
                         self?.releasePointerHotkey ?? .defaultReleasePointer
                     },
+                    releaseInputHotkeyProvider: { [weak self] in self?.releaseInputHotkey ?? .defaultReleaseInput },
                     miniPlayerHotkeyProvider: { [weak self] in
                         self?.miniPlayerHotkey ?? .defaultMiniPlayer
                     },

@@ -13,6 +13,7 @@ struct ControllerLayoutDiagram: View {
     var annotations: [ControllerDiagramAnnotation] = []
     var focused: Set<ControllerLayoutSource> = []
     var select: (ControllerLayoutControl) -> Void
+    @Environment(\.streamControlsScale) private var streamScale
 
     private var positioned: [(ControllerLayoutControl, ControllerDiagramPlacement)] {
         controls.compactMap { control in
@@ -60,7 +61,7 @@ struct ControllerLayoutDiagram: View {
                 }
             }
             .aspectRatio(480.0 / 330, contentMode: .fit)
-            .frame(maxWidth: 560)
+            .frame(maxWidth: streamScale.map { 320 * $0 } ?? 560)
             .environment(\.layoutDirection, .leftToRight)
             annotationRail(above: false)
             if controls.contains(where: { control in

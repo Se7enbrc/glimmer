@@ -17,8 +17,9 @@ extension StreamWindow {
     /// Release disables the transparent image before balancing all display hides;
     /// otherwise a late tracking callback can leave an invisible image selected.
     func setCursorHidden(_ hidden: Bool) {
-        (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(hidden)
-        if hidden {
+        let hide = hidden && !isInputReleased
+        (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(hide)
+        if hide {
             CGDisplayHideCursor(CGMainDisplayID())
             cursorHideCount += 1
         } else {
@@ -42,6 +43,12 @@ extension StreamWindow {
         guard !didClose else { return }
         let wasAway = userBackgrounded
         userBackgrounded = false
+        if isInputReleased {
+            if wasAway, isBorderlessCover, !awaitingFirstFrameFadeIn { returnCover() }
+            setCursorHidden(false)
+            setBackgrounded(false)
+            return
+        }
         // Window mode: the cursor follows pointer capture, and the level and
         // presentation options are AppKit's. Only the backgrounded signal applies.
         if displayMode == .window {
@@ -66,7 +73,7 @@ extension StreamWindow {
 
     /// A late first frame cannot take focus back from the launcher or another app.
     func takePointerOnFirstFrame() {
-        if displayMode == .fullScreen {
+        if displayMode == .fullScreen, !isInputReleased {
             guard NSApp.isActive, window.isKeyWindow else { return }
             if let screen = window.screen { warpCursorToCentre(of: screen) }
             setCursorHidden(true)
@@ -76,7 +83,7 @@ extension StreamWindow {
 
     /// Park the cursor mid-screen and retire motion spanning the warp.
     func warpCursorToCentre(of screen: NSScreen) {
-        guard displayMode == .window || fullscreenRelativePointer else { return }
+        guard !isInputReleased, displayMode == .window || fullscreenRelativePointer else { return }
         StreamCursor.warpToCentre(of: screen)
         (window.contentView as? StreamInputView)?.resetMotion()
     }

@@ -551,6 +551,21 @@ struct LauncherNavigationTests {
         #expect(!controller.isPolling)
     }
 
+    @Test func repeatTimerWaitsForQueuedReleaseWithoutDiscardingInputEdges() {
+        var state = LauncherControllerRepeat()
+        let held = LauncherControllerInput(direction: .down)
+        let released = LauncherControllerInput()
+        #expect(state.commands(released, at: 0).isEmpty)
+        #expect(state.commands(held, at: 0.1) == [.down])
+        #expect(state.commands(held, at: 0.6, current: released).isEmpty)
+        #expect(state.commands(released, at: 0.7).isEmpty)
+        // A quick queued tap still produces its edge even if the physical control is already neutral.
+        #expect(state.commands(held, at: 0.8) == [.down])
+        #expect(state.commands(released, at: 0.9).isEmpty)
+        #expect(state.commands(held, at: 1) == [.down])
+        #expect(state.commands(held, at: 1.5, current: held) == [.down])
+    }
+
     @Test func repeatDelaysAndButtonsOnlyFireOnPress() {
         var state = LauncherControllerRepeat()
         #expect(state.commands(.init(activate: true), at: 0).isEmpty)

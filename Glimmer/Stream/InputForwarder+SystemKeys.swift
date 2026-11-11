@@ -8,7 +8,8 @@ import AppKit
 extension InputForwarder {
 
     var forwardsCommand: Bool {
-        captureSysKeys && window?.isKeyWindow == true && (!isWindowMode || isMouseCaptured)
+        !isInputReleased && !inputRearming && captureSysKeys && window?.isKeyWindow == true
+            && (!isWindowMode || isMouseCaptured)
     }
 
     func updateSystemKeyCapture(setDisabled: @MainActor (Bool) -> Void = GlobalHotKeys.setDisabled) {
@@ -20,6 +21,7 @@ extension InputForwarder {
     /// forwarded to the PC only while ⌘ is.
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool {
         if consumeStopShortcut(event, entry: "performKeyEquivalent") { return true }
+        if consumeInputReleaseShortcut(event) { return true }
         if view.hasMarkedText(), !event.modifierFlags.isDisjoint(with: [.command, .control]) {
             view.cancelComposition()
         }

@@ -103,6 +103,8 @@ final class JourneyControllerDriver {
         let snapshot = snapshots[command.slot ?? 0]
         receipts.record(["injected": Double(command.id)])
         delivering = true
+        // Callback congestion must not add another hold interval to a short controller tap.
+        let nextStepAt = ProcessInfo.processInfo.systemUptime + Double(step.milliseconds ?? 0) / 1000
         snapshot.send(element: step.element, value: Float(step.value), y: step.y.map(Float.init),
                       buttonOnly: step.route == "button") { [weak self] success in
             RunLoop.main.perform(inModes: [.common, .eventTracking]) {
@@ -110,7 +112,7 @@ final class JourneyControllerDriver {
                     guard let self else { return }
                     if !success { self.receipts.record(["controllerError": 1]) }
                     self.stepIndex += 1
-                    self.nextStepAt = ProcessInfo.processInfo.systemUptime + Double(step.milliseconds ?? 0) / 1000
+                    self.nextStepAt = nextStepAt
                     self.delivering = false
                 }
             }

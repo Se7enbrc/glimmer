@@ -19,15 +19,30 @@ final class JourneyMacPC {
         guard let path = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_DIRECTORY"] else {
             preconditionFailure("A journey needs isolated receipt storage")
         }
-        let directory = PersistentStorage.checked(URL(fileURLWithPath: path))
+        guard let directory = Self.receiptDirectory(path) else {
+            preconditionFailure("Journey receipts need a unique directory under /tmp")
+        }
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
         } catch { preconditionFailure("Could not create isolated journey storage") }
         receipts = JourneyReceipts(directory: directory)
         network = JourneyMacNetwork(receipts: receipts)
         driver = JourneyControllerDriver(directory: directory, receipts: receipts)
         driver.start()
         receipts.record(["fixture": 1])
+    }
+
+    // Xcode assigns different temporary roots to the runner and app; only IPC uses this shared directory.
+    static func receiptDirectory(_ path: String) -> URL? {
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        let name = directory.lastPathComponent
+        let prefix = "Glimmer-journey-"
+        guard name.hasPrefix(prefix), UUID(uuidString: String(name.dropFirst(prefix.count))) != nil else { return nil }
+        let root = URL(fileURLWithPath: "/tmp", isDirectory: true).resolvingSymlinksInPath()
+        let resolved = directory.resolvingSymlinksInPath()
+        guard resolved == root.appendingPathComponent(name, isDirectory: true) else { return nil }
+        return resolved
     }
 
     func launcher() -> AppModel {
@@ -38,8 +53,12 @@ final class JourneyMacPC {
         model.customWidth = 1280
         model.customHeight = 720
         model.customFPS = 60
-        model.streamDisplayMode = .window
+        let presentation = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_PRESENTATION"] ?? "window"
+        model.streamDisplayMode = presentation == "window" ? .window : .fullScreen
+        model.streamCoversNotch = presentation == "cover"
+        model.streamUsesFullScreenSpace = presentation == "space"
         model.streamHDR = false
+        model.captureSysKeys = ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] == "1"
         let app = LibraryApp(id: 1, name: "Journey game", hdr: false, hidden: false)
         let host = Host(id: "journey-pc", name: "Journey PC", customName: nil, localAddress: "127.0.0.1",
                         manualAddress: nil, apps: [app], lastConnected: nil, serverCertPEM: "fixture-only",
@@ -70,8 +89,6 @@ final class JourneyMacPC {
 
     private func connected() {
         guard let (window, input, decoder) = prepared else { preconditionFailure("Missing native stream surface") }
-        // Only the synthetic PC window is capturable by the journey's picture assertion.
-        window.window.sharingType = .readOnly
         window.window.setAccessibilityIdentifier("journey-stream-window")
         input.setReady(true)
         let video = JourneyVideo(layer: window.displayLayer)

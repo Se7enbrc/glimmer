@@ -40,7 +40,7 @@ struct StreamViewCaptureTests {
     }
 
     private func mouse(_ type: NSEvent.EventType) throws -> NSEvent {
-        try #require(NSEvent.mouseEvent(with: type, location: CGPoint(x: 16, y: 48), modifierFlags: [],
+        try #require(NSEvent.mouseEvent(with: type, location: CGPoint(x: 16, y: 16), modifierFlags: [],
                                         timestamp: 1, windowNumber: 0, context: nil, eventNumber: 0,
                                         clickCount: 1, pressure: 1))
     }
@@ -158,13 +158,10 @@ struct StreamViewCaptureTests {
         let (forwarder, backend, _) = windowed()
         defer { forwarder.detach() }
         let view = try #require(forwarder.inputView)
-        let hovering = Edges()
-        forwarder.onMiniPlayerHoverChanged = { hovering.seen.append($0) }
         forwarder.setMiniPlayer(true)
         view.mouseEntered(with: try crossing(.mouseEntered))
         #expect(!forwarder.isMouseCaptured)
         view.mouseExited(with: try crossing(.mouseExited))
-        #expect(hovering.seen == [true, false])
         view.mouseDown(with: try mouse(.leftMouseDown))
         #expect(forwarder.isMouseCaptured)
         #expect(buttons(backend) == [.button(action: press, button: StreamProtocol.BUTTON_LEFT)])
@@ -190,7 +187,7 @@ struct StreamViewCaptureTests {
         view.mouseEntered(with: try crossing(.mouseEntered))
         #expect(!forwarder.isMouseCaptured)
         view.mouseDown(with: try mouse(.leftMouseDown))
-        #expect(backend.pointer.first == .position(x: 160, y: 160, refW: 640, refH: 640))
+        #expect(backend.pointer.first == .position(x: 160, y: 480, refW: 640, refH: 640))
         view.keyDown(with: try pointerChord())
         #expect(forwarder.isMouseCaptured)
         #expect(forwarder.fullscreenRelativePointer)
@@ -221,6 +218,164 @@ struct StreamViewCaptureTests {
         forwarder.setWindowMode(false)
         #expect(forwarder.isMouseCaptured)
         #expect(!forwarder.sendsAbsolutePointer)
+    }
+
+    private func inputKey(_ code: Int, flags: NSEvent.ModifierFlags = [], type: NSEvent.EventType = .keyDown,
+                          repeatKey: Bool = false) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0, context: nil,
+            characters: code == kVK_ANSI_P ? "p" : "w", charactersIgnoringModifiers: code == kVK_ANSI_P ? "p" : "w",
+            isARepeat: repeatKey, keyCode: UInt16(code)))
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func releaseHandsKeyboardMouseAndSystemShortcutsBackToMac(windowed: Bool, relative: Bool) throws {
+        let window = Self.keyWindow()
+        let (forwarder, backend, _) = self.windowed(in: window)
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        window.makeFirstResponder(view)
+        forwarder.fullscreenRelativePointer = relative
+        forwarder.setWindowMode(windowed)
+        forwarder.captureSysKeys = true
+        forwarder.currentMouseButtons = { 0 }
+        view.keyDown(with: try inputKey(kVK_ANSI_W))
+        view.mouseDown(with: try mouse(.leftMouseDown))
+        view.flagsChanged(with: try inputKey(kVK_Control, flags: .control, type: .flagsChanged))
+        view.keyDown(with: try inputKey(kVK_ANSI_P, flags: [.control, .shift]))
+        #expect(forwarder.isInputReleased)
+        #expect(!forwarder.isMouseCaptured && !forwarder.ownsKeyboard && !forwarder.forwardsMouseEvents)
+        #expect(!forwarder.sendsAbsolutePointer && !forwarder.forwardsCommand)
+        #expect(forwarder.heldKeys.isEmpty && forwarder.heldModifierVKs.isEmpty && forwarder.heldMouseButtons.isEmpty)
+        #expect(backend.keyboard.contains { $0.keyCode == VKScanCode(vk: 0x57).wireCode
+            && $0.action == Int8(StreamProtocol.KEY_ACTION_UP) })
+        let keyCount = backend.keyboard.count
+        let pointerCount = backend.pointer.count
+        view.keyDown(with: try inputKey(kVK_ANSI_W))
+        view.mouseDown(with: try mouse(.rightMouseDown))
+        view.mouseMoved(with: try mouse(.mouseMoved))
+        view.insertText("not sent", replacementRange: NSRange(location: NSNotFound, length: 0))
+        var clipboardRead = false
+        #expect(forwarder.pasteClipboardAsText(read: { clipboardRead = true; return "not sent" }) == nil)
+        #expect(!clipboardRead)
+        #expect(!view.performKeyEquivalent(with: try inputKey(kVK_ANSI_4, flags: [.command, .shift])))
+        #expect(backend.keyboard.count == keyCount && backend.pointer.count == pointerCount && backend.texts.isEmpty)
+        forwarder.updateSystemKeyCapture { #expect(!$0) }
+        forwarder.windowResignedKey()
+        forwarder.enterCapturedMode()
+        view.mouseEntered(with: try crossing(.mouseEntered))
+        forwarder.setWindowMode(!windowed)
+        #expect(forwarder.isInputReleased && !forwarder.isMouseCaptured)
+    }
+
+    @Test func recaptureConsumesItsClickAndShortcutUntilTheModifiersAreReleased() throws {
+        let window = Self.keyWindow()
+        let (forwarder, backend, _) = windowed(in: window)
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        window.makeFirstResponder(view)
+        forwarder.currentMouseButtons = { 0 }
+        forwarder.setInputReleased(true)
+        view.mouseDown(with: try mouse(.leftMouseDown))
+        #expect(!forwarder.isInputReleased && forwarder.inputRearming)
+        view.mouseUp(with: try mouse(.leftMouseUp))
+        #expect(!forwarder.inputRearming && buttons(backend).isEmpty)
+        view.mouseDown(with: try mouse(.leftMouseDown))
+        view.mouseUp(with: try mouse(.leftMouseUp))
+        #expect(buttons(backend).count == 2)
+        forwarder.setInputReleased(true)
+        let chord = try inputKey(kVK_ANSI_P, flags: [.control, .shift])
+        #expect(view.performKeyEquivalent(with: chord))
+        #expect(!forwarder.isInputReleased && forwarder.inputRearming)
+        view.keyDown(with: try inputKey(kVK_ANSI_P, flags: [.control, .shift], repeatKey: true))
+        #expect(!forwarder.isInputReleased)
+        view.flagsChanged(with: try inputKey(kVK_Shift, flags: .control, type: .flagsChanged))
+        #expect(forwarder.inputRearming && backend.keyboard.isEmpty)
+        view.flagsChanged(with: try inputKey(kVK_Control, type: .flagsChanged))
+        #expect(!forwarder.inputRearming && backend.keyboard.isEmpty)
+        view.keyDown(with: try inputKey(kVK_ANSI_W))
+        #expect(backend.keyboard.last?.keyCode == VKScanCode(vk: 0x57).wireCode)
+    }
+
+    @Test func releasePreemptsPendingPasteAndRetainsFailedReleaseObligations() async throws {
+        let window = Self.keyWindow()
+        let (forwarder, backend, _) = windowed(in: window)
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        window.makeFirstResponder(view)
+        view.keyDown(with: try inputKey(kVK_ANSI_W))
+        backend.inputResult = -2
+        let task = try #require(forwarder.queuePasteText("must not arrive"))
+        view.keyDown(with: try inputKey(kVK_ANSI_W))
+        #expect(!forwarder.pendingKeyboardEvents.isEmpty)
+        view.keyDown(with: try inputKey(kVK_ANSI_P, flags: [.control, .shift]))
+        #expect(forwarder.isInputReleased && !forwarder.releases.pending.isEmpty)
+        await task.value
+        #expect(backend.texts.isEmpty && forwarder.pendingKeyboardEvents.isEmpty)
+        backend.inputResult = 0
+        #expect(forwarder.flushPendingReleases())
+        #expect(forwarder.releases.pending.isEmpty)
+    }
+
+    @Test func releaseSurvivesReconnectAndMiniPlayerButEndsWithTheSession() throws {
+        let window = Self.keyWindow()
+        let (forwarder, _, _) = windowed(in: window)
+        let view = try #require(forwarder.inputView)
+        defer { forwarder.detach() }
+        forwarder.setInputReleased(true)
+        forwarder.setReady(false)
+        forwarder.setMiniPlayer(true)
+        forwarder.setReady(true)
+        forwarder.setMiniPlayer(false)
+        forwarder.captureIfPointerIsOverTheStreamView(reason: "test")
+        #expect(forwarder.isInputReleased && !forwarder.isMouseCaptured && !forwarder.forwardsCommand)
+        #expect(view.acceptsFirstMouse(for: nil))
+        window.focused = false
+        forwarder.setInputReleased(false)
+        #expect(forwarder.isInputReleased)
+        forwarder.detach()
+        #expect(!forwarder.isInputReleased && !forwarder.inputRearming)
+    }
+
+    @Test(arguments: [false, true])
+    func recaptureHidesTheCursorInWindowsAndMiniPlayers(miniPlayer: Bool) {
+        let (forwarder, _, _) = windowed()
+        let stream = StreamWindow(displayMode: .window)
+        defer { forwarder.detach(); stream.close() }
+        forwarder.setMiniPlayer(miniPlayer)
+        stream.isMiniPlayer = miniPlayer
+        forwarder.onInputReleaseChanged = { stream.setInputReleased($0, shortcut: "⌃⇧P") }
+        forwarder.onPointerCaptureChanged = { stream.setPointerCaptured($0) }
+        forwarder.capturePointer(reason: "test")
+        #expect(forwarder.isMouseCaptured && stream.didHideCursor)
+
+        for _ in 0..<2 {
+            forwarder.setInputReleased(true)
+            #expect(stream.isInputReleased && !stream.didHideCursor)
+            forwarder.setInputReleased(false)
+            #expect(!stream.isInputReleased && forwarder.isMouseCaptured)
+            #expect(stream.didHideCursor)
+        }
+    }
+
+    @Test func releasedFullscreenNeverRehidesTheCursorOrRaisesTheCoverOnRefocus() {
+        let prior = NSApp.presentationOptions
+        let stream = StreamWindow(displayMode: .fullScreen)
+        defer { stream.close(); NSApp.presentationOptions = prior }
+        stream.previousPresentationOptions = prior
+        stream.awaitingFirstFrameFadeIn = false
+        stream.streamingWindowLevel = NSWindow.Level(rawValue: 25)
+        stream.window.level = NSWindow.Level(rawValue: 25)
+        stream.setInputReleased(true, shortcut: "⌃⇧P")
+        stream.setCursorHidden(true)
+        stream.setPointerCaptured(true, isKeyWindow: true)
+        stream.reengageForeground()
+        stream.takePointerOnFirstFrame()
+        #expect(!stream.didHideCursor)
+        #expect(stream.window.level == .normal)
+        #expect(NSApp.presentationOptions == prior)
+        stream.setInputReleased(false, shortcut: "⌃⇧P")
+        #expect(stream.window.level == NSWindow.Level(rawValue: 25))
     }
 
     // MARK: Diagnostic sampler

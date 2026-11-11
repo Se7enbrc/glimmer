@@ -103,7 +103,7 @@ extension InputForwarder {
     func notePointerEnteredStreamView() {
         guard isWindowMode else { return }
         noteHoverCaptureEvent(.pointerEntered)
-        if isMiniPlayer { onMiniPlayerHoverChanged?(true); return }
+        if isMiniPlayer { return }
         guard HoverCapture.shouldCaptureOnEnter(
             isKeyWindow: window?.isKeyWindow ?? false,
             isSuppressed: isHoverCaptureSuppressed,
@@ -124,7 +124,6 @@ extension InputForwarder {
     func notePointerExitedStreamView() {
         guard isWindowMode, !isMouseCaptured else { return }
         noteHoverCaptureEvent(.pointerExited)
-        if isMiniPlayer { onMiniPlayerHoverChanged?(false) }
     }
 
     /// Grab now if the pointer is already resting on the picture. Called from
@@ -156,7 +155,7 @@ extension InputForwarder {
     /// there is no event to ask. It reports window coordinates even when the
     /// pointer is outside the window, which is exactly the "is it inside"
     /// question `bounds.contains` then answers.
-    private static func pointerIsInside(_ view: NSView, of window: NSWindow) -> Bool {
-        view.bounds.contains(view.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    private static func pointerIsInside(_ view: StreamInputView, of window: NSWindow) -> Bool {
+        view.pictureTrackingRect.contains(view.convert(window.mouseLocationOutsideOfEventStream, from: nil))
     }
 }

@@ -47,6 +47,7 @@ extension StreamSession {
         let statsHotkeyProvider: @MainActor () -> HotkeyChord
         let bookmarkHotkeyProvider: @MainActor () -> HotkeyChord
         let releasePointerHotkeyProvider: @MainActor () -> HotkeyChord
+        var releaseInputHotkeyProvider: @MainActor () -> HotkeyChord = { .defaultReleaseInput }
         let miniPlayerHotkeyProvider: @MainActor () -> HotkeyChord
         let controllerQuitChordProvider: @MainActor () -> ControllerQuitChord
         let customControllerChordProvider: @MainActor () -> Set<ControllerButton>
@@ -126,6 +127,7 @@ extension StreamSession {
         inp.statsHotkeyProvider = options.statsHotkeyProvider
         inp.bookmarkHotkeyProvider = options.bookmarkHotkeyProvider
         inp.releasePointerHotkeyProvider = options.releasePointerHotkeyProvider
+        inp.releaseInputHotkeyProvider = options.releaseInputHotkeyProvider
         inp.miniPlayerHotkeyProvider = options.miniPlayerHotkeyProvider
         inp.controllerQuitChordProvider = options.controllerQuitChordProvider
         inp.customControllerChordProvider = options.customControllerChordProvider
@@ -242,6 +244,9 @@ extension StreamSession {
             win?.fullscreenRelativePointer = inp?.fullscreenRelativePointer ?? true
             win?.setPointerCaptured(captured)
         }
+        inp.onInputReleaseChanged = { [weak win, weak inp] released in
+            win?.setInputReleased(released, shortcut: inp?.releaseInputHotkeyProvider().displayString ?? "")
+        }
         inp.onPointerModeToggled = { [weak win] captured in
             win?.showPointerModeHint(captured: captured)
         }
@@ -252,8 +257,8 @@ extension StreamSession {
             inp?.setMiniPlayer(mini)
             onMiniPlayerChanged?(mini)
         }
-        inp.onMiniPlayerHoverChanged = { [weak win] hovering in
-            win?.setMiniPlayerHovering(hovering)
+        inp.onWindowHoverChanged = { [weak win] hovering in
+            win?.setWindowHovering(hovering)
         }
     }
 }

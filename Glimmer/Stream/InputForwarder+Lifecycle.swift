@@ -48,6 +48,8 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        view.windowDragEnabled = isWindowMode && !isMouseCaptured
+        view.onWindowHoverChanged = { [weak self] in self?.onWindowHoverChanged?($0) }
         view.onResignFirstResponder = { [weak self] in
             self?.inputOwnershipLost(reason: "first responder lost", includingControllers: false)
         }
@@ -123,6 +125,7 @@ extension InputForwarder {
     }
 
     public func detach() {
+        streamControls?.close(resume: false)
         ControllerBackgroundEvents.setEnabled(false, for: controllerBackgroundEventsID)
         ControllerHaptics.shared.setBackgroundPlayEnabled(false, for: controllerBackgroundEventsID)
         releaseControllerTouches()
@@ -163,6 +166,8 @@ extension InputForwarder {
         inputView?.delegate = nil
         inputView = nil
         window = nil
+        isInputReleased = false
+        inputRearming = false
         isReady = false
         initialConnectPending = false
 

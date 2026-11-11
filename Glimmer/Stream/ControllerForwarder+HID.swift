@@ -70,6 +70,7 @@ extension InputForwarder {
 
     func detachHID(_ pad: HIDGamepadDevice, sendFinal: Bool = true) {
         guard let attached = attachedHIDControllers.removeValue(forKey: pad.id) else { return }
+        streamControls?.controllerRemoved(slot: attached.slot)
         inputCore.withLock {
             inputCore.hidRegistrations[attached.slot] = nil
             inputCore.removeLayout(slot: attached.slot)

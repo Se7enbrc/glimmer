@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A9914DD5C1734F0B918BEA01 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9914DD5C1734F0B918BEA02 /* AppIntents.framework */; };
 		B2D0C4A1E5F64C7DA1B3C9E2 /* ControllerChordHoldConflictTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D0C4A1E5F64C7DA1B3C9E1 /* ControllerChordHoldConflictTests.swift */; };
 		AF2B2AE90E354E35B8A1450A /* ControllerStopChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */; };
 		78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */; };
@@ -36,6 +37,7 @@
 		D81200000000000000000001 /* SocketTimestamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000000 /* SocketTimestamp.swift */; };
 		CE2026100810000000000002 /* AudioHALDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000002 /* AudioHALDeviceTests.swift */; };
 		CE2026100810000000000001 /* InputMonitoringFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000001 /* InputMonitoringFlowTests.swift */; };
+		07700AD1068D4F038DD97414 /* MacStreamControlsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52428C47AA3D4E6B80121E30 /* MacStreamControlsTests.swift */; };
 		CE2026100810000000000000 /* LauncherControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000000 /* LauncherControllerTests.swift */; };
 		A71A20261011000000000001 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71A20261011000000000002 /* Motion.swift */; };
 		CA202610110000000000000D /* ControllerTouchpadMouseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */; };
@@ -501,6 +503,7 @@
 		DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */; };
 		DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000002 /* HostsPersistenceTests.swift */; };
 		DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000004 /* StoragePersistenceTests.swift */; };
+		9D9D9ACBD54A48C294FE807F /* JourneyFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1735F22F0FBF4E4E8603A020 /* JourneyFixtureTests.swift */; };
 		5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */; };
 		DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */; };
 		DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609233300000002 /* ControllerArrivalTests.swift */; };
@@ -733,6 +736,8 @@
 		BE8EEFCE778685C2B741DD72 /* ControllerLayoutsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6338017AAC95583C236599E8 /* ControllerLayoutsModel.swift */; };
 		43E4813B6A23B5303024A2D3 /* ControllerLayoutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE5C877B47228E5820D4BEFA /* ControllerLayoutsView.swift */; };
 		3D9D82AF1D8B74FF7695E486 /* ControllerLayoutPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CFA45FAA958701CA57AC2C5 /* ControllerLayoutPresentation.swift */; };
+		FDAE238193D44845BFBBAB11 /* MacStreamControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A097800647747EBA0E699A2 /* MacStreamControls.swift */; };
+		486F4578B2A6435194C53D3D /* MacStreamControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6764ACDA14A4FE8A1425607 /* MacStreamControlsView.swift */; };
 		564DC345EE1DC392E19BA02D /* MacControllerLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6479EC1148735D6B42B6203B /* MacControllerLayouts.swift */; };
 		40D16091D3CC534FEEC8DAC5 /* HIDControllerLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */; };
 		C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */; };
@@ -806,6 +811,7 @@
 		C1EA20261027000000000010 /* CleanRoomDifferentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */; };
 		C1EA20261027000000000012 /* CleanRoomMacDifferentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */; };
 		C1EA20261027000000000014 /* CleanRoomVectors in Resources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000013 /* CleanRoomVectors */; };
+		D8A2DDC045E64A1091700001 /* MacControllerJourneyUITests+MiniPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A2DDC045E64A1091700002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -866,6 +872,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A9914DD5C1734F0B918BEA02 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		B2D0C4A1E5F64C7DA1B3C9E1 /* ControllerChordHoldConflictTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerChordHoldConflictTests.swift"; sourceTree = SOURCE_ROOT; };
 		5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerStopChordTests.swift"; sourceTree = SOURCE_ROOT; };
 		03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
@@ -895,6 +902,7 @@
 		D81200000000000000000000 /* SocketTimestamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/SocketTimestamp.swift; sourceTree = "<group>"; };
 		CE2026100800000000000002 /* AudioHALDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHALDeviceTests.swift; sourceTree = "<group>"; };
 		CE2026100800000000000001 /* InputMonitoringFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputMonitoringFlowTests.swift; sourceTree = "<group>"; };
+		52428C47AA3D4E6B80121E30 /* MacStreamControlsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacStreamControlsTests.swift; sourceTree = "<group>"; };
 		CE2026100800000000000000 /* LauncherControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherControllerTests.swift; sourceTree = "<group>"; };
 		A71A20261011000000000002 /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerTouchpadMouseTests.swift"; sourceTree = "<group>"; };
@@ -1383,6 +1391,7 @@
 		DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioCushionMemoryTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610101000000002 /* HostsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostsPersistenceTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610101000000004 /* StoragePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StoragePersistenceTests.swift"; sourceTree = "<group>"; };
+		1735F22F0FBF4E4E8603A020 /* JourneyFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JourneyFixtureTests.swift"; sourceTree = "<group>"; };
 		5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityKeychainCleanupTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerBatteryMappingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609233300000002 /* ControllerArrivalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerArrivalTests.swift"; sourceTree = "<group>"; };
@@ -1594,6 +1603,8 @@
 		6338017AAC95583C236599E8 /* ControllerLayoutsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutsModel.swift"; sourceTree = SOURCE_ROOT; };
 		FE5C877B47228E5820D4BEFA /* ControllerLayoutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutsView.swift"; sourceTree = SOURCE_ROOT; };
 		1CFA45FAA958701CA57AC2C5 /* ControllerLayoutPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayoutPresentation.swift"; sourceTree = SOURCE_ROOT; };
+		9A097800647747EBA0E699A2 /* MacStreamControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Stream/MacStreamControls.swift"; sourceTree = SOURCE_ROOT; };
+		B6764ACDA14A4FE8A1425607 /* MacStreamControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Stream/MacStreamControlsView.swift"; sourceTree = SOURCE_ROOT; };
 		6479EC1148735D6B42B6203B /* MacControllerLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Stream/MacControllerLayouts.swift"; sourceTree = SOURCE_ROOT; };
 		92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Stream/HIDControllerLayouts.swift"; sourceTree = SOURCE_ROOT; };
 		C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutRoutingTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -1668,6 +1679,7 @@
 		C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomDifferentialTests.swift"; sourceTree = SOURCE_ROOT; };
 		C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomMacDifferentialTests.swift"; sourceTree = SOURCE_ROOT; };
 		C1EA20261027000000000013 /* CleanRoomVectors */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "GlimmerTests/Fixtures/CleanRoomVectors"; sourceTree = SOURCE_ROOT; };
+		D8A2DDC045E64A1091700002 /* MacControllerJourneyUITests+MiniPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerUITests/MacControllerJourneyUITests+MiniPlayer.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1675,6 +1687,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A9914DD5C1734F0B918BEA01 /* AppIntents.framework in Frameworks */,
 				E26101210000000000000013 /* GlimmerEngine.framework in Frameworks */,
 				A1009012 /* Sparkle in Frameworks */,
 			);
@@ -1718,6 +1731,7 @@
 		771ECFBC67E97E41D2D9F0E8 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
+				A9914DD5C1734F0B918BEA02 /* AppIntents.framework */,
 				505E37FB63C22AC476506587 /* Foundation.framework */,
 			);
 			name = "OS X";
@@ -1794,6 +1808,8 @@
 				13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */,
 				AE6E5A7E720948E0BB17A3D4 /* ControllerMenuDismissal.swift */,
 				92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */,
+				9A097800647747EBA0E699A2 /* MacStreamControls.swift */,
+				B6764ACDA14A4FE8A1425607 /* MacStreamControlsView.swift */,
 				6479EC1148735D6B42B6203B /* MacControllerLayouts.swift */,
 				1CFA45FAA958701CA57AC2C5 /* ControllerLayoutPresentation.swift */,
 				FE5C877B47228E5820D4BEFA /* ControllerLayoutsView.swift */,
@@ -2238,6 +2254,7 @@
 				AC2026101100000000000005B /* LauncherExperienceTests.swift */,
 				CE2026100800000000000002 /* AudioHALDeviceTests.swift */,
 				CE2026100800000000000001 /* InputMonitoringFlowTests.swift */,
+				52428C47AA3D4E6B80121E30 /* MacStreamControlsTests.swift */,
 				CE2026100800000000000000 /* LauncherControllerTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */,
@@ -2252,6 +2269,7 @@
 				DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */,
 				DEC0DE202610101000000002 /* HostsPersistenceTests.swift */,
 				DEC0DE202610101000000004 /* StoragePersistenceTests.swift */,
+				1735F22F0FBF4E4E8603A020 /* JourneyFixtureTests.swift */,
 				5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */,
 				DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */,
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
@@ -2591,7 +2609,8 @@
 		};
 		51ADF827FFF047528CB65054 /* GlimmerUITests */ = {isa = PBXGroup; children = (
 				FF2D9A300F874751B8C5A9B7 /* JourneyInputAssertions.swift */,
-				D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */,); name = GlimmerUITests; sourceTree = "<group>"; };
+				D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */,
+				D8A2DDC045E64A1091700002 /* MacControllerJourneyUITests+MiniPlayer.swift */,); name = GlimmerUITests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -2785,6 +2804,8 @@
 				BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */,
 				9BC4E36783814FD18C0C8A2D /* ControllerMenuDismissal.swift in Sources */,
 				40D16091D3CC534FEEC8DAC5 /* HIDControllerLayouts.swift in Sources */,
+				FDAE238193D44845BFBBAB11 /* MacStreamControls.swift in Sources */,
+				486F4578B2A6435194C53D3D /* MacStreamControlsView.swift in Sources */,
 				564DC345EE1DC392E19BA02D /* MacControllerLayouts.swift in Sources */,
 				3D9D82AF1D8B74FF7695E486 /* ControllerLayoutPresentation.swift in Sources */,
 				43E4813B6A23B5303024A2D3 /* ControllerLayoutsView.swift in Sources */,
@@ -3213,6 +3234,7 @@
 				AC2026101100000000000005A /* LauncherExperienceTests.swift in Sources */,
 				CE2026100810000000000002 /* AudioHALDeviceTests.swift in Sources */,
 				CE2026100810000000000001 /* InputMonitoringFlowTests.swift in Sources */,
+				07700AD1068D4F038DD97414 /* MacStreamControlsTests.swift in Sources */,
 				CE2026100810000000000000 /* LauncherControllerTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */,
@@ -3227,6 +3249,7 @@
 				DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */,
 				DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */,
 				DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */,
+				9D9D9ACBD54A48C294FE807F /* JourneyFixtureTests.swift in Sources */,
 				5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */,
 				DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */,
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
@@ -3556,7 +3579,8 @@
 		};
 		4B857E3FD98F432CB502D12A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
 				C4A77CFAD9D2485EB397FB43 /* JourneyInputAssertions.swift in Sources */,
-				480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+				480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */,
+				D8A2DDC045E64A1091700001 /* MacControllerJourneyUITests+MiniPlayer.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */

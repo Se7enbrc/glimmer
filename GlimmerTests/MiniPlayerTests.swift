@@ -10,6 +10,7 @@
 
 import GlimmerEngine
 import CoreGraphics
+import AppKit
 import Testing
 @testable import Glimmer
 
@@ -52,4 +53,105 @@ struct MiniPlayerTests {
         let others = [HotkeyChord.defaultQuit, .defaultStats, .defaultBookmark, .defaultReleasePointer]
         #expect(!others.contains(chord))
     }
+
+    @MainActor
+    @Test(arguments: [false, true], [false, true])
+    func topEdgeDragsStayLocalAndTheNextPictureClickStillWorks(released: Bool, receivesMouseUp: Bool) throws {
+        let window = MiniPlayerDragTestWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 360),
+                                             styleMask: .borderless, backing: .buffered, defer: true)
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        forwarder.setBackend(backend)
+        forwarder.attach(to: window)
+        defer { forwarder.detach() }
+        forwarder.isReady = true
+        forwarder.setWindowMode(true)
+        forwarder.setMiniPlayer(true)
+        forwarder.setInputReleased(released)
+        let view = try #require(forwarder.inputView)
+        let top = CGPoint(x: 320, y: 344)
+        view.mouseDown(with: try mouse(.leftMouseDown, at: top))
+        view.mouseDragged(with: try mouse(.leftMouseDragged, at: CGPoint(x: 230, y: 284)))
+        if receivesMouseUp { view.mouseUp(with: try mouse(.leftMouseUp, at: top)) }
+        #expect(window.drags.count == 1)
+        #expect(forwarder.isMouseCaptured == false)
+        #expect(forwarder.isInputReleased == released)
+        #expect(backend.pointer.isEmpty && backend.mouseMoves.isEmpty)
+
+        let picture = CGPoint(x: 320, y: 180)
+        view.mouseDown(with: try mouse(.leftMouseDown, at: picture))
+        view.mouseUp(with: try mouse(.leftMouseUp, at: picture))
+        #expect(forwarder.isMouseCaptured)
+        #expect(forwarder.isInputReleased == false)
+        #expect(view.windowDragEnabled == false)
+        #expect(window.drags.count == 1)
+        forwarder.setInputReleased(true)
+        #expect(view.windowDragEnabled)
+        forwarder.setMiniPlayer(false)
+        #expect(view.windowDragEnabled)
+        forwarder.setWindowMode(false)
+        #expect(view.windowDragEnabled == false)
+    }
+
+    @MainActor
+    @Test(arguments: [CGSize(width: 320, height: 180), CGSize(width: 1280, height: 720)])
+    func dragAreaTracksOnlyTheTopThirtyTwoPoints(size: CGSize) {
+        let view = StreamInputView(frame: CGRect(origin: .zero, size: size))
+        let top = CGPoint(x: size.width / 2, y: size.height - 1)
+        #expect(view.isWindowDragPoint(top) == false)
+        view.windowDragEnabled = true
+        #expect(view.pictureTrackingRect.maxY == size.height - 32)
+        #expect(view.isWindowDragPoint(top))
+        #expect(view.isWindowDragPoint(CGPoint(x: size.width / 2, y: size.height - 32)))
+        #expect(view.isWindowDragPoint(CGPoint(x: size.width / 2, y: size.height - 33)) == false)
+        #expect(view.isWindowDragPoint(CGPoint(x: -1, y: top.y)) == false)
+        #expect(view.isWindowDragPoint(CGPoint(x: size.width + 1, y: top.y)) == false)
+        view.setFrameSize(CGSize(width: size.width, height: size.height + 64))
+        #expect(view.isWindowDragPoint(top) == false)
+        #expect(view.isWindowDragPoint(CGPoint(x: top.x, y: top.y + 64)))
+    }
+
+    @MainActor
+    @Test func aBackgroundWindowAcceptsTheFirstDragWithoutSendingAnActivatingPictureClick() throws {
+        let view = StreamInputView(frame: CGRect(x: 0, y: 0, width: 640, height: 360))
+        let display = DisplayContainerView(frame: view.bounds)
+        view.addSubview(display)
+        view.windowDragEnabled = true
+        let top = try mouse(.leftMouseDown, at: CGPoint(x: 320, y: 344))
+        let picture = try mouse(.leftMouseDown, at: CGPoint(x: 320, y: 180))
+        #expect(view.hitTest(top.locationInWindow) === view)
+        #expect(view.hitTest(picture.locationInWindow) === display)
+        #expect(view.acceptsFirstMouse(for: top))
+        #expect(view.acceptsFirstMouse(for: picture) == false)
+        view.windowDragEnabled = false
+        #expect(view.acceptsFirstMouse(for: top) == false)
+    }
+
+    @MainActor
+    @Test(arguments: [false, true])
+    func bothWindowPresentationsHaveTransparentChromeAndNativeButtons(miniPlayer: Bool) throws {
+        let stream = StreamWindow(displayMode: .window)
+        defer { stream.close() }
+        stream.isMiniPlayer = miniPlayer
+        stream.configureTransparentWindowChrome()
+        #expect(stream.window.styleMask.contains(.fullSizeContentView))
+        #expect(stream.window.titlebarAppearsTransparent)
+        #expect(stream.window.titleVisibility == .hidden)
+        #expect(try #require(stream.window.standardWindowButton(.closeButton)).isHidden == false)
+        #expect(try #require(stream.window.standardWindowButton(.miniaturizeButton)).isHidden == miniPlayer)
+        #expect(try #require(stream.window.standardWindowButton(.zoomButton)).isHidden == miniPlayer)
+    }
+
+    @MainActor
+    private func mouse(_ type: NSEvent.EventType, at point: CGPoint) throws -> NSEvent {
+        try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 1,
+                                        windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    }
+}
+
+@MainActor
+private final class MiniPlayerDragTestWindow: NSWindow {
+    var drags: [NSEvent] = []
+    override var isKeyWindow: Bool { true }
+    override func performDrag(with event: NSEvent) { drags.append(event) }
 }

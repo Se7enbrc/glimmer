@@ -82,7 +82,7 @@ extension StreamWindow {
     /// THIS stream's aspect (a saved 16:10 frame would letterbox a 16:9
     /// stream) and the whole frame constrained onto the screen.
     func configureWindowedChrome() {
-        window.title = windowTitle
+        configureTransparentWindowChrome()
         let aspect = streamPixelSize.width > 0 && streamPixelSize.height > 0
             ? streamPixelSize : CGSize(width: 16, height: 9)
         window.contentAspectRatio = aspect
@@ -111,6 +111,7 @@ extension StreamWindow {
         window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: false)
         // A window opens with a free pointer; hover capture is installed afterward.
         setCursorHidden(false)
+        updateWindowControls()
     }
 
     /// The visible screen area a window's CONTENT can occupy: the visible
@@ -152,7 +153,7 @@ extension StreamWindow {
             return
         }
         setCursorHidden(captured)
-        updateMiniPlayerControls()
+        updateWindowControls()
         if captured {
             showCaptureHintIfBudgetAllows()
         } else {

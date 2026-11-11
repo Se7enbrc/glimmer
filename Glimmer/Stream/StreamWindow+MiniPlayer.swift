@@ -63,7 +63,7 @@ extension StreamWindow {
         window.setFrameAutosaveName("")
         isMiniPlayer = false
         streamDelegate.isMiniPlayer = false
-        miniPlayerHovering = false
+        windowHovering = false
         // The forwarder hears first so the hover grab is back before the
         // window is key again under the pointer.
         onMiniPlayerChanged?(false)
@@ -99,20 +99,13 @@ extension StreamWindow {
         }
     }
 
-    /// Dress the window as the floating panel: transparent title strip (the
-    /// drag handle), a close button that shows on hover, floating level on
-    /// every Space, a quarter-screen opening size in the bottom-right corner
-    /// or the corner the user last parked it in.
+    /// Float the picture across Spaces with a hover close button and saved placement.
+    /// StreamInputView reserves the transparent top edge for dragging while input is free.
     func applyMiniPlayerChrome() {
         isMiniPlayer = true
         streamDelegate.isMiniPlayer = true
         window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
-        window.title = windowTitle
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.titlebarSeparatorStyle = .none
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        window.standardWindowButton(.zoomButton)?.isHidden = true
+        configureTransparentWindowChrome()
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         let aspect = streamPixelSize.width > 0 && streamPixelSize.height > 0
@@ -133,7 +126,7 @@ extension StreamWindow {
         // A free pointer shows the arrow over the picture; a backgrounded
         // full-screen window comes back on screen here.
         setCursorHidden(false)
-        updateMiniPlayerControls()
+        updateWindowControls()
         window.orderFront(nil)
         let size = window.contentRect(forFrameRect: window.frame).size
         log.info("Mini player on - content \(size.width, privacy: .public)×\(size.height, privacy: .public) pt")
@@ -152,22 +145,35 @@ extension StreamWindow {
         }
     }
 
-    /// The forwarder's hover edge over the mini player.
-    func setMiniPlayerHovering(_ hovering: Bool) {
-        guard isMiniPlayer, miniPlayerHovering != hovering else { return }
-        miniPlayerHovering = hovering
-        updateMiniPlayerControls()
+    /// Both window presentations keep the picture edge-to-edge with native controls on hover.
+    func configureTransparentWindowChrome() {
+        window.styleMask.insert(.fullSizeContentView)
+        window.title = windowTitle
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.titlebarSeparatorStyle = .none
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = isMiniPlayer
+        window.standardWindowButton(.zoomButton)?.isHidden = isMiniPlayer
+        updateWindowControls()
     }
 
-    /// The close button shows while the pointer rests on the panel and is
-    /// free; a captured pointer has nothing to click it with.
-    func updateMiniPlayerControls() {
-        guard isMiniPlayer, let close = window.standardWindowButton(.closeButton) else { return }
-        let visible = miniPlayerHovering && !didHideCursor
+    /// The pointer can reach window controls without entering the picture's capture area.
+    func setWindowHovering(_ hovering: Bool) {
+        guard displayMode == .window, windowHovering != hovering else { return }
+        windowHovering = hovering
+        updateWindowControls()
+    }
+
+    /// Native Spaces own their controls; ordinary windows reveal theirs with a free pointer.
+    func updateWindowControls() {
+        guard displayMode == .window else { return }
+        let visible = window.styleMask.contains(.fullScreen) || (windowHovering && !didHideCursor)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Motion.short
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            close.animator().alphaValue = visible ? 1 : 0
+            for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(kind)?.animator().alphaValue = visible ? 1 : 0
+            }
         }
     }
 }

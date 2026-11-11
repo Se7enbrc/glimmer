@@ -18,12 +18,13 @@ Stats”.
 
 ## While streaming
 
-| Action in the focused stream | Default        | Result                                                                                    |
-| ---------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
-| Stop                         | ⌃Q (Control-Q) | Ends the stream; quits the PC app unless “Leave games running when you disconnect” is on. |
-| Mini Player                  | Control-M      | Toggles presentation.                                                                     |
-| Stats                        | Control-Z      | Toggles for this stream; next uses Settings › Quality.                                    |
-| Pointer                      | Control-P      | Toggles captured/free; keeps choice across focus changes.                                 |
+| Action in the focused stream | Default         | Result                                                                                            |
+| ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------- |
+| Stop                         | ⌃Q (Control-Q)  | Ends the stream; quits the PC app unless “Leave games running when you disconnect” is on.         |
+| Mini Player                  | Control-M       | Toggles presentation.                                                                             |
+| Stats                        | Control-Z       | Toggles for this stream; next uses Settings › Quality.                                            |
+| Pointer                      | Control-P       | Toggles captured/free; keeps choice across focus changes.                                         |
+| Keyboard and mouse           | Control-Shift-P | Releases both to this Mac while the stream continues; press again or click the picture to return. |
 
 | Text and diagnostics | Default   | Result                                        |
 | -------------------- | --------- | --------------------------------------------- |

@@ -4,6 +4,25 @@
 import Foundation
 
 extension InputCore {
+    package func controllerToken(slot: UInt8) -> UUID? {
+        withLock { controllers.values.first { $0.slot == slot }?.token ?? hidRegistrations[slot] }
+    }
+
+    // Called under the receive lock; ordinary gameplay does not construct a local-navigation sample.
+    package func routeLocalController(slot: UInt8, sample: @autoclosure () -> ControllerMappingSample) -> Bool {
+        guard localControllerInput != nil || !localControllerRearm.isEmpty else { return false }
+        let sample = sample()
+        if let localControllerInput, snapshot.ready, snapshot.mask & (1 << slot) != 0 {
+            localControllerRearm[slot] = ControllerLayoutRearm(held: sample)
+            localControllerInput(slot, sample)
+            return true
+        }
+        guard var rearm = localControllerRearm[slot] else { return false }
+        _ = rearm.filter(sample)
+        localControllerRearm[slot] = rearm.isNeutral ? nil : rearm
+        return !rearm.isNeutral
+    }
+
     package func retainMouseTiming(slot: UInt8) {
         guard snapshot.ready, snapshot.focused, snapshot.controllersAnnounced,
               let state = controllerMouseStates[slot], state.isMouse else { return }
@@ -51,7 +70,8 @@ extension InputCore {
                                    capturedAt: TimeInterval) {
         withLock {
             guard let sample = controllers[id], sample.token == token,
-                  snapshot.ready, snapshot.focused, capturedAt >= snapshot.acceptEventsAfter,
+                  snapshot.ready, snapshot.focused || localControllerInput != nil,
+                  capturedAt >= snapshot.acceptEventsAfter,
                   capturedAt >= sample.registeredAt else { return }
             #if os(macOS)
             InputDeliverStamp.shared.stamp(slot: Int(sample.slot), nanos: DispatchTime.now().uptimeNanoseconds)
@@ -74,15 +94,17 @@ extension InputCore {
                                       capturedAt: TimeInterval?) {
         withLock {
             if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return }
-            guard snapshot.ready, snapshot.focused, let sample = controllers[id], sample.token == token else { return }
+            guard snapshot.ready, snapshot.focused || localControllerInput != nil,
+                  let sample = controllers[id], sample.token == token else { return }
             if let capturedAt, capturedAt < sample.registeredAt { return }
             let centerMask = StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG
                 | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
             let merged = (sample.buttons & ~centerMask) | (buttons & centerMask)
             let chord = merged | (shoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
-            receive(slot: sample.slot, buttons: merged, analog: sample.analog,
+            let result = receive(slot: sample.slot, buttons: merged, analog: sample.analog,
                     chordButtons: chord, capturedAt: capturedAt, extras: sample.extras,
                     rawSupplement: (buttons, shoulders))
+            guard result != .gated else { return }
             retainMouseTiming(slot: sample.slot)
             if !chordSlots.contains(sample.slot), controllerMouseStates[sample.slot]?.isMouse != true,
                buttons & (StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG) != 0 {

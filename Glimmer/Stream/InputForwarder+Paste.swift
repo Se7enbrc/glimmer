@@ -33,13 +33,13 @@ extension InputForwarder {
     @discardableResult
     func pasteClipboardAsText(read: () -> String? = { NSPasteboard.general.string(forType: .string) })
         -> Task<Void, Never>? {
-        guard isReady, let clipboard = read() else { return nil }
+        guard !isInputReleased, !inputRearming, isReady, let clipboard = read() else { return nil }
         return queuePasteText(clipboard)
     }
 
     @discardableResult
     func queuePasteText(_ clipboard: String) -> Task<Void, Never>? {
-        guard isReady, backend != nil else { return nil }
+        guard !isInputReleased, !inputRearming, isReady, backend != nil else { return nil }
         let text = PasteText.prepared(clipboard)
         guard !text.isEmpty else { return nil }
         if deferKeyboardEvent({ $0.queuePasteText(clipboard) }) { return pendingTextTask }
@@ -52,7 +52,7 @@ extension InputForwarder {
     func queueText(_ text: String, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags,
                    waitForRelease: Bool = false) -> Task<Void, Never>? {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
-        guard isReady, backend != nil, !text.isEmpty else { return nil }
+        guard !isInputReleased, !inputRearming, isReady, backend != nil, !text.isEmpty else { return nil }
         if deferKeyboardEvent({ $0.queueText(text, modifiers: modifiers, waitForRelease: waitForRelease) }) {
             return pendingTextTask
         }

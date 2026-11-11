@@ -431,6 +431,12 @@ PC occupancy.
 - **Stream menu:** the primary stream action, Mini Player and Stop Streaming,
   then the PCs with a checkmark on the selected one and ⌘1 to ⌘9. Choosing
   another PC leaves the current stream running, just like the header's switcher.
+- **In-game controls:** a centered glass pane over the picture, with matching
+  Help and quit confirmation pages. System title styles and 56pt action rows
+  scale with the stream window, up to twice their base size. Compact windows
+  scroll to the selected action. In-stream layout editing stays in the same
+  glass navigation pane, with larger form controls and native focus. Reduce
+  Transparency uses an opaque system surface; macOS 15 uses system material.
 - **Controller navigation:** the d-pad or left stick moves focus, the bottom
   face button selects, and the right face button dismisses. Navigation uses
   GameController pads while the launcher or its sheet has focus and no stream or

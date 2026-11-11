@@ -19,6 +19,7 @@ extension InputForwarder {
         guard commandKeyUpMonitor == nil else { return }
         commandKeyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self] event in
             guard let self, let window = self.window, let view = self.inputView,
+                  !self.isInputReleased, !self.inputRearming,
                   event.window === window, event.modifierFlags.contains(.command) else { return event }
             view.keyUp(with: event)
             return nil

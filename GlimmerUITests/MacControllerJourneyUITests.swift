@@ -8,15 +8,19 @@ import XCTest
 final class MacControllerJourneyUITests: XCTestCase {
     private var directory = FileManager.default.temporaryDirectory
     private var sequence = 0
-    private let app = XCUIApplication()
+    let app = XCUIApplication()
 
-    private func launch() throws {
+    func launch(captureSystemKeys: Bool = false, presentation: String = "window") throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
-        directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("Glimmer-journey-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
         app.launchEnvironment["GLIMMER_JOURNEY_DIRECTORY"] = directory.path
+        app.launchEnvironment["GLIMMER_JOURNEY_CAPTURE_SYSTEM_KEYS"] = captureSystemKeys ? "1" : "0"
+        app.launchEnvironment["GLIMMER_JOURNEY_PRESENTATION"] = presentation
         app.launchEnvironment["JOURNEY_APPEARANCE"] = ProcessInfo.processInfo.environment["JOURNEY_APPEARANCE"] ?? "light"
         app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
@@ -37,13 +41,13 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
     }
 
-    private func receipts() -> [[String: Double]] {
+    func receipts() -> [[String: Double]] {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent("receipts.json")),
               let result = try? JSONSerialization.jsonObject(with: data) as? [[String: Double]] else { return [] }
         return result
     }
 
-    private func waitForReceipt(_ key: String, value: Double = 1) -> Bool {
+    func waitForReceipt(_ key: String, value: Double = 1) -> Bool {
         let predicate = NSPredicate { [self] _, _ in receipts().contains { $0[key] == value } }
         return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 10) == .completed
     }
@@ -68,7 +72,7 @@ final class MacControllerJourneyUITests: XCTestCase {
                                ["element": element, "value": 0]])
     }
 
-    private func record(_ name: String) {
+    func record(_ name: String) {
         for attachment in [XCTAttachment(screenshot: app.screenshot()), XCTAttachment(string: app.debugDescription)] {
             attachment.name = name
             attachment.lifetime = .keepAlways
@@ -115,6 +119,233 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(waitForReceipt("stop"))
         XCTAssertTrue(waitForReceipt("quit"))
         XCTAssertTrue(app.buttons["Journey game"].isHittable)
+    }
+
+    func testMenuHoldOpensControllerControlsAndReturnsInputSafely() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try controller(connect: true)
+        record("mac-stream-before-menu")
+        try press("menu", duration: 1200)
+        XCTAssertFalse(app.buttons["stream-resume"].exists)
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        record("mac-stream-controller-menu")
+        let index = receipts().count
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["Hide stream stats"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["Use gamepad mode"].waitForExistence(timeout: 5))
+        try press("a")
+        XCTAssertTrue(app.buttons["Use mouse mode"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForNonExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-done"].waitForExistence(timeout: 5))
+        record("mac-stream-controller-help")
+        try press("b")
+        for _ in 0..<5 { try moveMenuDown() }
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-cancel"].waitForExistence(timeout: 5))
+        record("mac-stream-controller-quit-confirmation")
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(receipts().dropFirst(index).contains { Int($0["pcButtons"] ?? 0) & 0x3000 != 0 })
+        try press("a")
+        XCTAssertTrue(receipts().dropFirst(index).contains { $0["pcButtons"] == 0x1000 })
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        for _ in 0..<6 { try moveMenuDown() }
+        record("mac-stream-controller-disconnect")
+        try press("a")
+        XCTAssertTrue(waitForReceipt("stop"))
+        XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
+    }
+
+    private func moveMenuDown() throws {
+        try controller(steps: [["element": "dpad", "value": 0, "y": -1, "milliseconds": 100],
+                               ["element": "dpad", "value": 0, "y": 0]])
+    }
+
+    func testControllerOnlyLayoutEditorFromTheStreamMenu() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try controller(connect: true)
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        for _ in 0..<3 { try moveMenuDown() }
+        try press("a")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForExistence(timeout: 5))
+        try press("a")
+        XCTAssertTrue(app.buttons["Change a button…"].waitForExistence(timeout: 5))
+        record("mac-controller-layout-editor")
+        try moveMenuDown()
+        try press("a")
+        // Native initial focus depends on keyboard navigation; close the scope picker if it was first.
+        if app.menuItems["All games"].exists {
+            try press("b")
+            XCTAssertTrue(app.menuItems["All games"].waitForNonExistence(timeout: 5))
+            try moveMenuDown()
+            try press("a")
+        }
+        XCTAssertTrue(app.staticTexts["Press a control"].waitForExistence(timeout: 5))
+        try press("x")
+        let picker = app.buttons["controller-settings-picker-Send to PC"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        // Activate selects the first control when native initial focus is unset.
+        try press("a")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(picker.exists)
+        try press("a")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForExistence(timeout: 5))
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(app.menuItems["X · Left"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(picker.exists)
+        record("mac-assignment-selected")
+        try moveMenuDown()
+        record("mac-assignment-first-step")
+        try moveMenuDown()
+        record("mac-assignment-second-step")
+        try press("a")
+        XCTAssertTrue(picker.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Custom layout"].waitForExistence(timeout: 5))
+        record("mac-controller-layout-saved")
+        try press("b")
+        XCTAssertTrue(app.buttons["Change a button…"].waitForNonExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.windows["Controller layouts"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        try press("b")
+        XCTAssertTrue(app.buttons["stream-resume"].waitForNonExistence(timeout: 5))
+        let index = receipts().count
+        try press("a")
+        XCTAssertTrue(receipts().dropFirst(index).contains { $0["pcButtons"] == 0x1000 })
+    }
+
+    func testKeyboardAndMouseReleaseKeepsTheStreamRunning() throws {
+        try launch(captureSystemKeys: true)
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        app.typeKey("p", modifierFlags: [.control, .shift])
+        let notice = app.otherElements.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        let count = receipts().filter { $0["keyboardEvent"] != nil }.count
+        app.typeKey("w", modifierFlags: [])
+        XCTAssertEqual(receipts().filter { $0["keyboardEvent"] != nil }.count, count)
+        XCTAssertFalse(receipts().contains { $0["stop"] != nil })
+        try assertPicture()
+        record("mac-keyboard-mouse-released")
+        app.typeKey("p", modifierFlags: [.control, .shift])
+        XCTAssertTrue(notice.waitForNonExistence(timeout: 5))
+        let resumed = receipts().filter { $0["keyboardEvent"] != nil }.count
+        app.typeKey("w", modifierFlags: [])
+        XCTAssertGreaterThan(receipts().filter { $0["keyboardEvent"] != nil }.count, resumed)
+        app.typeKey("q", modifierFlags: .control)
+        XCTAssertTrue(waitForReceipt("stop"))
+    }
+
+    func testReleasedCoverReturnsAfterSwitchingApps() throws {
+        try releasedStreamReturnsAfterSwitchingApps(presentation: "cover")
+    }
+
+    func testReleasedMiniPlayerKeepsItsPictureWhileAnotherAppIsActive() throws {
+        try launch(captureSystemKeys: true, presentation: "cover")
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        app.typeKey("m", modifierFlags: .control)
+        let window = app.windows["journey-stream-window"]
+        let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+        for modifiers: XCUIElement.KeyModifierFlags in [.control, [.control, .shift]] {
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            app.typeKey("p", modifierFlags: modifiers)
+            try assertPicture()
+            finder.activate()
+            XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
+            try assertPicture()
+            if modifiers.contains(.shift) {
+                let notice = app.otherElements.matching(NSPredicate(
+                    format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
+                XCTAssertTrue(notice.waitForExistence(timeout: 5))
+            }
+            XCTAssertEqual(app.state, .runningBackground)
+            XCTAssertFalse(receipts().contains { $0["stop"] != nil })
+            record("mac-mini-player-background-" + String(modifiers.rawValue))
+            app.activate()
+            try assertPicture()
+        }
+    }
+
+    func testReleasedSpaceReturnsAfterSwitchingApps() throws {
+        try releasedStreamReturnsAfterSwitchingApps(presentation: "space")
+    }
+
+    private func releasedStreamReturnsAfterSwitchingApps(presentation: String) throws {
+        try launch(captureSystemKeys: true, presentation: presentation)
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        let window = app.windows["journey-stream-window"]
+        try assertPicture()
+        for _ in 0..<2 {
+            app.typeKey("p", modifierFlags: [.control, .shift])
+            let notice = app.otherElements.matching(NSPredicate(
+                format: "label BEGINSWITH %@", "Keyboard and mouse released.")).firstMatch
+            XCTAssertTrue(notice.waitForExistence(timeout: 5))
+            let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+            finder.activate()
+            XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
+            XCTAssertTrue(window.waitForNonExistence(timeout: 10))
+            app.activate()
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            let count = receipts().filter { $0["keyboardEvent"] != nil }.count
+            app.typeKey("w", modifierFlags: [])
+            XCTAssertEqual(receipts().filter { $0["keyboardEvent"] != nil }.count, count)
+            try assertPicture()
+            record("mac-released-" + presentation + "-returned")
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            XCTAssertTrue(notice.waitForNonExistence(timeout: 5))
+            let resumed = receipts().filter { $0["keyboardEvent"] != nil }.count
+            app.typeKey("w", modifierFlags: [])
+            XCTAssertGreaterThan(receipts().filter { $0["keyboardEvent"] != nil }.count, resumed)
+            XCTAssertFalse(receipts().contains { $0["stop"] != nil })
+        }
+        app.typeKey("q", modifierFlags: .control)
+        XCTAssertTrue(waitForReceipt("stop"))
+    }
+
+    func testMenuHoldQuitRequiresControllerConfirmation() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try controller(connect: true)
+        try press("menu", duration: 2200)
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
+        for _ in 0..<5 { try moveMenuDown() }
+        try press("a")
+        XCTAssertTrue(app.buttons["stream-cancel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(receipts().contains { $0["quit"] != nil })
+        try moveMenuDown()
+        try press("a")
+        XCTAssertTrue(waitForReceipt("quit"))
+        XCTAssertTrue(waitForReceipt("stop"))
+        XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
     }
 
     func testPlayStationAllInputsAndPartialChords() throws {
@@ -223,7 +454,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         let mouse = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Controller mouse,")).firstMatch
         reveal(mouse)
         mouse.click()
-        let preset = app.popUpButtons["controller-settings-picker-Preset"]
+        let preset = app.buttons["controller-settings-picker-Preset"]
         XCTAssertTrue(preset.waitForExistence(timeout: 5))
         if leftHanded {
             preset.click()
@@ -342,7 +573,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(element.isHittable)
     }
 
-    private func assertPicture() throws {
+    func assertPicture() throws {
         let window = app.windows["journey-stream-window"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         let image = try XCTUnwrap(window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil))

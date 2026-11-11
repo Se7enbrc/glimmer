@@ -13,6 +13,46 @@ import SwiftUI
 
 @MainActor
 struct StreamWindowSlideTests {
+    @Test(arguments: [false, true], [false, true])
+    func releasedCoverReturnsAfterSwitchingApps(reduceMotion: Bool, completedRetreat: Bool) {
+        let prior = NSApp.presentationOptions
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        stream.scheduleCoverSettlement = { _, _ in }
+        defer { stream.resetCoverSlide(); stream.close(); NSApp.presentationOptions = prior }
+        stream.previousPresentationOptions = prior
+        stream.streamingWindowLevel = NSWindow.Level(rawValue: 25)
+        stream.window.level = NSWindow.Level(rawValue: 25)
+        stream.setInputReleased(true, shortcut: "⌃⇧P")
+
+        for _ in 0..<2 {
+            stream.retreatCover(reduceMotion: reduceMotion)
+            stream.setBackgrounded(true)
+            #expect(stream.window.ignoresMouseEvents)
+            if completedRetreat { animations.finish() }
+            let staleRetreats = animations.completions
+            animations.completions.removeAll()
+
+            stream.reengageForeground()
+            #expect(stream.presentationRevealInProgress)
+            #expect(!stream.window.ignoresMouseEvents)
+            animations.finish()
+            // A delayed outgoing completion must not hide or disable the returned picture.
+            for completion in staleRetreats { completion() }
+            stream.reengageForeground()
+
+            #expect(stream.isInputReleased && !stream.userBackgrounded)
+            #expect(!stream.didHideCursor && stream.window.level == .normal)
+            #expect(NSApp.presentationOptions == prior)
+            #expect(!stream.presentationRevealInProgress)
+            #expect(!stream.window.ignoresMouseEvents && stream.window.isOpaque)
+            #expect(stream.window.alphaValue == 1)
+            #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+            #expect(CATransform3DIsIdentity(stream.displayLayer.transform))
+        }
+    }
+
     @Test(arguments: [false, true])
     func lostClosingCompletionSettlesTeardownExactlyOnce(retreating: Bool) async {
         let stream = StreamWindow()

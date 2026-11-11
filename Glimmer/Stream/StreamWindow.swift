@@ -124,6 +124,7 @@ public final class StreamWindow {
     /// Window-mode title ("Tower - Desktop"). Ignored by the borderless cover.
     public var windowTitle: String = ""
     var fullscreenRelativePointer = true
+    var isInputReleased = false
 
     /// The window as a small floating panel (StreamWindow+MiniPlayer.swift).
     /// A window-mode variant: `displayMode` reads `.window` while it is on.
@@ -134,8 +135,8 @@ public final class StreamWindow {
     var miniPlayerReturnUsesSpace = false
     /// Path B: the Space exit in flight was asked for by the mini player.
     var miniPlayerPending = false
-    /// Pointer resting on the mini player; drives its hover-shown close button.
-    var miniPlayerHovering = false
+    /// Pointer resting on the window; drives its native controls on hover.
+    var windowHovering = false
     /// Fired on every mini player edge (true = on). The session tells the
     /// forwarder and the launcher.
     public var onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
@@ -299,9 +300,8 @@ public final class StreamWindow {
         window.acceptsMouseMovedEvents = true
         window.hidesOnDeactivate = false
 
-        // Best-effort exclusion for legacy capture clients. Modern
-        // ScreenCaptureKit ignores this flag; it is not a privacy boundary.
-        window.sharingType = .none
+        // Let Mac screenshot and recording tools capture the stream picture.
+        window.sharingType = .readOnly
 
         let view = DisplayContainerView(frame: screen.frame)
 
@@ -368,8 +368,10 @@ public final class StreamWindow {
         configureMouseModeBadge()
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
         delegate.onFullScreenSettled = { [weak self] in
-            guard let self, self.pendingFirstFrameReveal else { return }
-            self.fadeInOnFirstFrame()
+            guard let self else { return }
+            self.updateWindowControls()
+            (self.window.contentView as? StreamInputView)?.updateTrackingAreas()
+            if self.pendingFirstFrameReveal { self.fadeInOnFirstFrame() }
         }
     }
 

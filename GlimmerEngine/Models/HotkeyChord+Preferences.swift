@@ -4,6 +4,21 @@
 import Foundation
 
 extension HotkeyChord {
+    /// An existing custom shortcut keeps its chord when a new default is introduced.
+    public static func persistedReleaseInput(defaults: UserDefaults = PersistentStorage.defaults) -> Self {
+        func saved(_ key: String) -> Self? {
+            defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+        }
+        if let stored = saved("releaseInputHotkey") { return stored }
+        let occupied = [saved("quitHotkey"), saved("statsHotkey"), saved("releasePointerHotkey"), saved("miniPlayerHotkey")]
+        guard occupied.compactMap({ $0 }).contains(where: { $0.serialized == defaultReleaseInput.serialized }) else {
+            return .defaultReleaseInput
+        }
+        let disabled = Self(ctrl: false, alt: false, shift: false, cmd: false, keyChar: "")
+        if let data = try? JSONEncoder().encode(disabled) { defaults.set(data, forKey: "releaseInputHotkey") }
+        return disabled
+    }
+
     /// Move only the old default once; a later explicit choice of Control-I belongs to the player.
     public static func persistedStats(defaults: UserDefaults = PersistentStorage.defaults) -> Self {
         let saved = defaults.data(forKey: "statsHotkey").flatMap {
@@ -17,6 +32,7 @@ extension HotkeyChord {
         }
         let owners: [(String, Self)] = [("quitHotkey", .defaultQuit),
                                       ("releasePointerHotkey", .defaultReleasePointer),
+                                      ("releaseInputHotkey", .defaultReleaseInput),
                                       ("miniPlayerHotkey", .defaultMiniPlayer)]
         let occupied = owners.map { key, fallback in
             defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? fallback
