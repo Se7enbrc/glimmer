@@ -21,7 +21,7 @@ class AppleVerificationTests(FixtureTestCase):
         match = re.search(r"        run: \|\n((?:          .*\n|\n)+)", source)
         self.assertIsNotNone(match)
         env = dict(os.environ, DECIDED="success", RESULT="success", BUILD="true",
-                   IOS_CORE="success", SEQUOIA="success", FUZZ="success",
+                   MAC_CORE="success", APPLE_BUILDS="success", IOS_CORE="success", SEQUOIA="success", FUZZ="success",
                    APPLE="true", CHECKS="success")
         env.update(overrides)
         return subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", textwrap.dedent(match[1])],
@@ -31,23 +31,24 @@ class AppleVerificationTests(FixtureTestCase):
         source = (ROOT / ".github/workflows/verify.yml").read_text()
         jobs = set(re.findall(r"^  ([a-z-]+):$", source.split("jobs:\n", 1)[1], re.MULTILINE)) - {"gate", "extended", "tier2"}
         gate = source.split("  gate:\n", 1)[1]
-        needs = re.search(r"    needs: \[(.*?)\]", gate)[1]
+        needs = re.search(r"    needs:\s+\[(.*?)\]", gate)[1]
         self.assertEqual(set(needs.split(", ")), jobs)
-        for job, variable in (("fuzz", "FUZZ"), ("ios-core", "IOS_CORE"), ("sequoia", "SEQUOIA")):
+        for job, variable in (("mac-core", "MAC_CORE"), ("apple-builds", "APPLE_BUILDS"),
+                              ("fuzz", "FUZZ"), ("ios-core", "IOS_CORE"), ("sequoia", "SEQUOIA")):
             self.assertIn(f"{variable}: ${{{{ needs.{job}.result }}}}", gate)
 
     def test_both_apps_must_pass_for_code_changes(self):
         self.assertEqual(self.gate(), 0)
-        for name in ("DECIDED", "RESULT", "CHECKS", "IOS_CORE", "SEQUOIA", "FUZZ"):
+        for name in ("DECIDED", "RESULT", "CHECKS", "MAC_CORE", "APPLE_BUILDS", "IOS_CORE", "SEQUOIA", "FUZZ"):
             for result in ("failure", "cancelled", "skipped"):
                 with self.subTest(job=name, result=result):
                     self.assertNotEqual(self.gate(**{name: result}), 0)
 
     def test_docs_skip_requires_successful_checks_and_explicit_skipped_builds(self):
-        skipped = dict(BUILD="false", IOS_CORE="skipped", SEQUOIA="skipped",
+        skipped = dict(BUILD="false", MAC_CORE="skipped", APPLE_BUILDS="skipped", IOS_CORE="skipped", SEQUOIA="skipped",
                        FUZZ="skipped")
         self.assertEqual(self.gate(**skipped), 0)
-        for job in ("IOS_CORE", "SEQUOIA", "FUZZ"):
+        for job in ("MAC_CORE", "APPLE_BUILDS", "IOS_CORE", "SEQUOIA", "FUZZ"):
             self.assertNotEqual(self.gate(**{**skipped, job: "failure"}), 0)
         self.assertNotEqual(self.gate(**skipped, RESULT="failure"), 0)
         self.assertNotEqual(self.gate(**skipped, DECIDED="failure"), 0)
@@ -55,9 +56,10 @@ class AppleVerificationTests(FixtureTestCase):
             self.assertNotEqual(self.gate(**{**skipped, "BUILD": decision}), 0)
 
     def test_mac_only_layout_requires_explicit_skips_and_fuzz(self):
-        absent = dict(APPLE="false", IOS_CORE="skipped", SEQUOIA="skipped")
+        absent = dict(APPLE="false", APPLE_BUILDS="skipped", IOS_CORE="skipped", SEQUOIA="skipped")
         self.assertEqual(self.gate(**absent), 0)
         self.assertNotEqual(self.gate(**absent, FUZZ="skipped"), 0)
+        self.assertNotEqual(self.gate(**absent, MAC_CORE="skipped"), 0)
         self.assertNotEqual(self.gate(**{**absent, "APPLE": "unknown"}), 0)
 
 

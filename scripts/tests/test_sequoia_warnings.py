@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class SequoiaWarningTests(FixtureTestCase):
     def test_build_for_testing_receives_warning_policy_and_preserves_failure(self):
         source = (ROOT / ".github/workflows/verify.yml").read_text()
-        job = source.split("  verify:\n", 1)[1].split("  ios-core:\n", 1)[0]
+        job = source.split("  verify:\n", 1)[1].split("  mac-core:\n", 1)[0]
         prepare = job.split("      - name: Prepare verification\n", 1)[1]
         prepare = prepare.split("        run: |\n", 1)[1].split("      - name:", 1)[0]
         config = prepare[prepare.index('          XCODE_XCCONFIG_FILE='):]
@@ -54,4 +54,4 @@ exit 65
             self.assertIn("SWIFT_SUPPRESS_WARNINGS = NO", config)
             self.assertIn("fixture compiler failed", (root / "build/logs/test-build.log").read_text())
             self.assertIn("fixture compiler failed", result.stdout)
-            self.assertFalse((root / "sequoia-tests.tgz").exists())
+            self.assertFalse((root / "mac-test-products.tgz").exists())

@@ -60,7 +60,7 @@ struct ControllerLayoutOwnershipTests {
         try await waitUntil { ControllerLayoutEditing.active }
         #expect(forwarder.controllerOwnershipSuspended)
         #expect(!forwarder.inputCore.snapshot.focused)
-        let editor = try #require(NSApplication.shared.windows.first { $0.title == "Controller layouts" })
+        let editor = try #require(NSApplication.shared.windows.first { $0.delegate === layouts })
         editor.close()
         try await waitUntil { !ControllerLayoutEditing.active && !forwarder.controllerOwnershipSuspended }
         #expect(editor.contentViewController == nil)
@@ -82,7 +82,7 @@ struct ControllerLayoutOwnershipTests {
         defer { layouts.stop(); forwarder.detach(); stream.removeChildWindow(menu); menu.close(); stream.close() }
         layouts.showControls(returnTo: menu)
         try await waitUntil { ControllerLayoutEditing.active }
-        let editor = try #require(NSApplication.shared.windows.first { $0.title == "Controller layouts" })
+        let editor = try #require(NSApplication.shared.windows.first { $0.delegate === layouts })
         #expect(editor.parent === (nested ? stream : menu))
         #expect(editor.level == menu.level)
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],

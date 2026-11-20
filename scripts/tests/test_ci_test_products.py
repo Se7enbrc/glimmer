@@ -4,6 +4,7 @@
 """Keep the shared Mac test build instrumented and both operating systems gated."""
 
 from pathlib import Path
+import re
 import subprocess
 import unittest
 
@@ -38,8 +39,11 @@ class CITestProductsTests(FixtureTestCase):
         self.assertNotIn("  sequoia-build:\n", workflow)
         self.assertEqual(workflow.count("python3 scripts/ci-local.py mac --build-only"), 1)
         self.assertIn("python3 scripts/ci-local.py mac --run-only", workflow)
-        self.assertIn("needs: [changes, verify]", workflow)
-        self.assertIn("name: sequoia-tests", workflow)
+        for job in ("mac-core", "sequoia"):
+            consumer = re.split(r"\n  [a-z][a-z-]*:\n", workflow.split(f"  {job}:\n", 1)[1])[0]
+            self.assertIn("needs: [changes, verify]", consumer)
+            self.assertIn("name: mac-test-products", consumer)
+            self.assertIn('tar -C build/Build -xzf "$RUNNER_TEMP/mac-test-products.tgz"', consumer)
         self.assertIn("runs-on: macos-15", workflow)
 
     def test_consolidated_checks_keep_all_apple_builds(self):

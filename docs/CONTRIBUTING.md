@@ -106,10 +106,10 @@ build.
 
 ### Hosted verification and local reproduction
 
-Pull requests use three Apple workers in Verify: independent Mac and iOS
-build/core workers, then one that runs the same Mac products on macOS 15. CodeQL
-uses one additional Apple worker. There is no Apple job matrix competing for all
-five available runners. Portable checks and libFuzzer run on Linux.
+Verify compiles one instrumented Mac test bundle. macOS 26 and macOS 15 run it
+in parallel. The iOS Simulator tests can start alongside the package and
+production device builds. At peak, Verify can use four Apple workers and Swift
+CodeQL can use the fifth. Portable checks and libFuzzer run on Linux.
 
 Pushes, PRs and the default manual dispatch run the core gate. Candidates need
 `macOS` and CodeQL on their exact commit; the Release workflow still runs its
