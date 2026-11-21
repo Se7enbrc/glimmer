@@ -1,6 +1,9 @@
 # Changelog
 
-## 2026.11.1 - Unreleased
+## 2026.11.2 - Unreleased
+
+- Touch the stream directly on a MacBook Pro with a PROLED XDR display when
+  Sunshine on your PC supports touch input.
 
 - Windowed streams show the picture edge-to-edge, with native window buttons on
   hover. Drag the top edge of a window or mini-player while the pointer is

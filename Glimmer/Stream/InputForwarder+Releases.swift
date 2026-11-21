@@ -15,7 +15,7 @@ extension InputForwarder {
     @discardableResult
     func flushPendingReleases() -> Bool {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
-        if releases.pending.isEmpty, inputCore.pendingTouchReleases.isEmpty,
+        if releases.pending.isEmpty, !inputCore.pendingScreenTouchCancel, inputCore.pendingTouchReleases.isEmpty,
            inputCore.pendingArrivals.isEmpty, !controllersNeedAnnouncement, releases.flushCount == 0 { return true }
         guard inputCore.flushReleases(), inputCore.flushControllerArrivals() else { updateReconciliationTimer(); return false }
         if releases.flushCount > 0 { reportReleaseRecovery() }
@@ -59,6 +59,7 @@ extension InputForwarder {
     /// Physical ownership ends now; offline release obligations survive until channel acceptance.
     func raiseAllHeldInputs(reason: String) {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        inputView?.screenTouchRecognizer?.cancelContacts()
         releases.releaseKeyboardAndMouse(preservingMouse: controllerMouseButtons)
         heldKeys.removeAll()
         physicalKeys.removeAll()

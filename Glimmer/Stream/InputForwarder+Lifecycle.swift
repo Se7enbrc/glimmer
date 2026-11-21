@@ -48,6 +48,13 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        if #available(macOS 27, *) {
+            let recognizer = StreamScreenTouchRecognizer(target: nil, action: nil)
+            recognizer.forwarder = self
+            recognizer.allowedTouchTypes = [.direct]
+            view.addGestureRecognizer(recognizer)
+            view.screenTouchRecognizer = recognizer
+        }
         view.windowDragEnabled = isWindowMode && !isMouseCaptured
         view.onWindowHoverChanged = { [weak self] in self?.onWindowHoverChanged?($0) }
         view.onResignFirstResponder = { [weak self] in

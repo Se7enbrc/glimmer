@@ -18,7 +18,7 @@ extension InputForwarder {
     func reconcilePhysicalInputs() {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard !physicalKeys.isEmpty || !heldModifierVKs.isEmpty || !heldMouseButtons.isEmpty
-            || !releases.pending.isEmpty || !inputCore.pendingTouchReleases.isEmpty
+            || !releases.pending.isEmpty || inputCore.pendingScreenTouchCancel || !inputCore.pendingTouchReleases.isEmpty
             || !inputCore.pendingArrivals.isEmpty else { return }
         let before = physicalKeys.count + heldModifierVKs.count + heldMouseButtons.count
         reconcileKeyboard()

@@ -1,16 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamInputView.swift
-//
-//  First-responder NSView that captures keyboard/mouse events for the stream
-//  session. Forwards them through a delegate so the AppKit responder chain
-//  and the C-bridge (InputForwarder) stay decoupled - InputForwarder's
-//  `StreamInputViewDelegate` conformance lives in InputForwarder.swift.
-//
-
 import AppKit
+import GlimmerEngine
 
 // MARK: - StreamInputViewDelegate
 
@@ -40,6 +32,8 @@ protocol StreamInputViewDelegate: AnyObject {
 /// (InputForwarder) decoupled from the AppKit responder chain.
 final class StreamInputView: NSView {
     weak var delegate: (any StreamInputViewDelegate)?
+
+    var screenTouchRecognizer: StreamScreenTouchRecognizer?
 
     private var trackingArea: NSTrackingArea?
     private var windowTrackingArea: NSTrackingArea?
@@ -325,5 +319,78 @@ enum StreamCursor {
     /// `contains` would call the top row off screen and the bottom edge on.
     static func isOnScreen(_ point: CGPoint, frame: CGRect) -> Bool {
         point.x >= frame.minX && point.x < frame.maxX && point.y > frame.minY && point.y <= frame.maxY
+    }
+}
+
+final class StreamScreenTouchRecognizer: NSGestureRecognizer {
+    weak var forwarder: InputForwarder?
+    private var contacts: [(identity: any NSObjectProtocol, id: UInt32)] = []
+    private var nextID: UInt32 = 0
+
+    override func touchesBegan(with event: NSEvent) {
+        forward(event, matching: .began, phase: .down)
+        if contacts.isEmpty {
+            state = state == .possible ? .failed : .cancelled
+        } else {
+            state = state == .possible ? .began : .changed
+        }
+    }
+
+    override func touchesMoved(with event: NSEvent) {
+        forward(event, matching: .moved, phase: .move)
+        if !contacts.isEmpty { state = .changed }
+    }
+
+    override func touchesEnded(with event: NSEvent) {
+        forward(event, matching: .ended, phase: .up)
+        state = contacts.isEmpty ? .ended : .changed
+    }
+
+    override func touchesCancelled(with event: NSEvent) {
+        cancelContacts()
+        state = .cancelled
+    }
+
+    override func reset() {
+        super.reset()
+        cancelContacts()
+    }
+
+    func cancelContacts() {
+        guard !contacts.isEmpty else { return }
+        contacts.removeAll()
+        forwarder?.inputCore.cancelScreenTouches()
+        forwarder?.updateReconciliationTimer()
+    }
+
+    private func forward(_ event: NSEvent, matching touchPhase: NSTouch.Phase, phase: ScreenTouchPhase) {
+        guard let view = view as? StreamInputView, let forwarder, forwarder.isReady,
+              view.window?.isKeyWindow == true, view.window?.ignoresMouseEvents == false,
+              !forwarder.isInputReleased, !forwarder.inputRearming, forwarder.streamControls == nil else {
+            cancelContacts()
+            return
+        }
+        for touch in event.touches(matching: touchPhase, in: view) where touch.type == .direct {
+            let location = touch.location(in: view)
+            guard let point = PointerMapping.touchPoint(
+                viewPoint: location, viewSize: view.bounds.size, streamPixelSize: forwarder.streamPixelSize,
+                begins: phase == .down) else {
+                if phase == .up { cancelContacts() }
+                continue
+            }
+            if phase == .down {
+                guard !view.isWindowDragPoint(location) else { continue }
+                let id = nextID
+                nextID &+= 1
+                if forwarder.inputCore.sendScreenTouch(.down, id: id, point: point) {
+                    contacts.append((touch.identity, id))
+                }
+            } else if let index = contacts.firstIndex(where: { $0.identity.isEqual(touch.identity) }) {
+                let sent = forwarder.inputCore.sendScreenTouch(phase, id: contacts[index].id, point: point)
+                if phase == .up {
+                    if sent { contacts.remove(at: index) } else { cancelContacts() }
+                }
+            }
+        }
     }
 }
