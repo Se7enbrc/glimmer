@@ -111,6 +111,10 @@ jobs:
           DECIDED: ${{ needs.changes.result }}
         run: test "$DECIDED" = success
 
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
