@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Touchscreen test DMG
+
+on:
+  push:
+    branches: [codex/mac-touchscreen]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    if:
+      github.repository == 'AlekKwek18/glimmer' && github.ref ==
+      'refs/heads/codex/mac-touchscreen'
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build unsigned app
+        run: make app DERIVED="$RUNNER_TEMP/glimmer-build"
+
+      - name: Package test disk image
+        run: |
+          staging="$RUNNER_TEMP/glimmer-dmg"
+          mkdir -p "$staging"
+          ditto "$RUNNER_TEMP/glimmer-build/Build/Products/Debug/Glimmer.app" "$staging/Glimmer.app"
+          plist="$staging/Glimmer.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Delete :SUFeedURL' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :SUEnableAutomaticChecks false' "$plist"
+          dmg="$RUNNER_TEMP/Glimmer-touchscreen-unsigned.dmg"
+          hdiutil create -srcfolder "$staging" -volname "Glimmer Touchscreen Test" -format UDZO "$dmg"
+          hdiutil verify "$dmg"
+
+      - name: Upload test DMG
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Glimmer-touchscreen-unsigned
+          path: ${{ runner.temp }}/Glimmer-touchscreen-unsigned.dmg
+          if-no-files-found: error
+          retention-days: 1
