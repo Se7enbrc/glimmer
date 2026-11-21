@@ -57,11 +57,11 @@ jobs:
       pull-requests: read
     outputs:
       apple_runner:
-        ${{ github.event_name == 'pull_request' &&
+        ${{ vars.GLIMMER_M4_ENABLED == 'true' && github.event_name ==
+        'pull_request' && github.event.pull_request.base.ref == 'main' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
-        github.actor == github.repository_owner && format('{0}',
-        github.event.number) == vars.GLIMMER_M4_BENCHMARK_PR &&
-        'glimmer-m4-benchmark' || 'macos-26' }}
+        github.event.pull_request.user.login == github.repository_owner &&
+        github.actor == github.repository_owner && 'glimmer-m4' || 'macos-26' }}
       build: ${{ steps.decide.outputs.build }}
       apple: ${{ steps.decide.outputs.apple }}
     steps:
@@ -110,6 +110,9 @@ jobs:
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 35
     env:
+      GLIMMER_M4_ADMISSION:
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
     defaults:
@@ -201,6 +204,9 @@ jobs:
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 30
     env:
+      GLIMMER_M4_ADMISSION:
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - name: Check out source
@@ -335,6 +341,9 @@ jobs:
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 40
     env:
+      GLIMMER_M4_ADMISSION:
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - name: Check out source
