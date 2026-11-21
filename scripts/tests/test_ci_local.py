@@ -148,8 +148,8 @@ class CILocalTests(FixtureTestCase):
         runtimes = '{"runtimes":[{"isAvailable":true,"platform":"iOS","version":"26.5","identifier":"ios-26-5"}]}'
         with patch.object(RUNNER, "output", side_effect=["26.5", runtimes, "fixture-udid"]), patch.object(RUNNER.subprocess, "run") as command:
             with self.assertRaisesRegex(ValueError, "test failed"):
-                with RUNNER.simulator() as destination:
-                    self.assertEqual(destination, "platform=iOS Simulator,id=fixture-udid")
+                with RUNNER.simulator() as ready_destination:
+                    self.assertEqual(ready_destination(), "platform=iOS Simulator,id=fixture-udid")
                     raise ValueError("test failed")
             operations = [call.args[0][-2:] for call in command.call_args_list]
             self.assertIn(["shutdown", "fixture-udid"], operations)
@@ -159,8 +159,8 @@ class CILocalTests(FixtureTestCase):
         runtimes = '{"runtimes":[{"isAvailable":true,"platform":"iOS","version":"26.5","identifier":"ios-26-5"}]}'
         with patch.object(RUNNER, "output", side_effect=["26.5", runtimes, "owned-device"]), \
                 patch.object(RUNNER.subprocess, "run") as command:
-            with RUNNER.simulator():
-                pass
+            with RUNNER.simulator() as ready_destination:
+                ready_destination()
         self.assertEqual([call.kwargs["timeout"] for call in command.call_args_list], [60, 300, 30, 30])
 
     def test_cleanup_errors_preserve_boot_or_test_exception_and_still_delete(self):
@@ -176,7 +176,8 @@ class CILocalTests(FixtureTestCase):
                     patch.object(RUNNER.subprocess, "run", side_effect=execute) as command, \
                     contextlib.redirect_stderr(io.StringIO()) as errors:
                 with self.assertRaises(type(original)) as raised:
-                    with RUNNER.simulator():
+                    with RUNNER.simulator() as ready_destination:
+                        ready_destination()
                         raise original
                 self.assertIs(raised.exception, original)
                 self.assertEqual([call.args[0][-2:] for call in command.call_args_list[-2:]],

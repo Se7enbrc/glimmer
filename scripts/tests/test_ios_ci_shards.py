@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fixture_git import FixtureTestCase
@@ -46,6 +47,42 @@ class IOSCIShardTests(FixtureTestCase):
         self.assertIn('test "$IOS_CORE" = "$expected"', workflow)
         self.assertIn("name: ios-core-results", core_job)
         self.assertIn("iOS/build/ci/render/", acceptance)
+
+    def test_build_overlaps_owned_simulator_boot_and_preserves_failures(self):
+        root = Path.cwd()
+        (root / "iOS").mkdir()
+        (root / "iOS/Makefile").touch()
+        products = root / "iOS/build/ci/DerivedData/Build/Products"
+        products.mkdir(parents=True)
+        manifest = products / "Glimmer-iOS_test.xctestrun"
+        runtime = '{"runtimes":[{"isAvailable":true,"platform":"iOS","version":"26.5","identifier":"ios"}]}'
+        for build_only, run_only, failure, expected in (
+            (False, False, 0, ["boot", "test-build", "bootstatus", "test-run", "shutdown", "delete"]),
+            (False, False, 65, ["boot", "test-build", "shutdown", "delete"]),
+            (True, False, 0, ["test-build"]),
+            (False, True, 0, ["boot", "bootstatus", "test-run", "shutdown", "delete"]),
+        ):
+            events = []
+            manifest.touch()
+            def execute(command, *args, **kwargs):
+                if "test-build" in command:
+                    events.append("test-build")
+                    if not failure:
+                        manifest.touch()
+                    return failure
+                if "test-run" in command:
+                    events.append("test-run")
+                    return 71
+                if command[:2] == ["xcrun", "simctl"]:
+                    events.append(command[2])
+                return subprocess.CompletedProcess(command, 0)
+            args = SimpleNamespace(shard="core", build_only=build_only, run_only=run_only, diagnostic_retry=False)
+            with self.subTest(expected=expected), patch.object(RUNNER, "ROOT", root), \
+                    patch.object(RUNNER, "filters", return_value=[]), \
+                    patch.object(RUNNER, "output", side_effect=["26.5", runtime, "owned"]), \
+                    patch.object(RUNNER, "run", side_effect=execute), patch.object(RUNNER.subprocess, "run", side_effect=execute):
+                self.assertEqual(RUNNER.ios(args), 0 if build_only else failure or 71)
+                self.assertEqual(events, expected)
 
     def test_test_without_building_retains_scheme_coverage_and_existing_products(self):
         root = Path.cwd()

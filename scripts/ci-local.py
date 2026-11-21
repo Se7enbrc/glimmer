@@ -126,8 +126,10 @@ def simulator():
     failed = False
     try:
         subprocess.run([*command, "boot", device], check=True, timeout=60)
-        subprocess.run([*command, "bootstatus", device, "-b"], check=True, timeout=300)
-        yield f"platform=iOS Simulator,id={device}"
+        def ready_destination():
+            subprocess.run([*command, "bootstatus", device, "-b"], check=True, timeout=300)
+            return f"platform=iOS Simulator,id={device}"
+        yield ready_destination
     except BaseException:
         failed = True
         raise
@@ -194,21 +196,29 @@ def ios(args):
     derived = ROOT / "iOS/build/ci/DerivedData"
     selection = filters(args.shard)
     make = ["make", "-C", "iOS", f"SCHEME={scheme}", f"DERIVED={derived}"]
-    if not args.run_only:
+
+    def build():
         manifests(derived, scheme, clear=True)
         status = run([*make, "test-build", "TEST_DESTINATION=generic/platform=iOS Simulator",
                       "TEST_FLAGS=-enableCodeCoverage YES"], folder / "build.log", 900)
         if status:
             subprocess.run([sys.executable, "scripts/ci-test-results.py", args.shard, str(folder / "missing.xcresult"),
                             str(folder / "build.log"), str(status)], check=True)
-        if status:
-            return status
+        else:
+            manifests(derived, scheme)
+        return status
+
+    if args.build_only:
+        return build()
+    if args.run_only:
         manifests(derived, scheme)
-        if args.build_only:
-            return 0
-    manifests(derived, scheme)
     result = folder / f"{uuid.uuid4()}.xcresult"
-    with simulator() as destination:
+    with simulator() as ready_destination:
+        if not args.run_only:
+            status = build()
+            if status:
+                return status
+        destination = ready_destination()
         flags = ["-enableCodeCoverage", "YES", "-resultBundlePath", str(result), *test_flags(args.diagnostic_retry), *selection]
         status = run([*make, "test-run", f"TEST_DESTINATION={destination}", "TEST_FLAGS=" + " ".join(flags)], folder / "test.log")
     status = status or receipt_status(result)
