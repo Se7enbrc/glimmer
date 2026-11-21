@@ -243,7 +243,7 @@ class CILocalTests(FixtureTestCase):
         gate = workflow.split("  gate:\n", 1)[1]
         self.assertIn("name: ${{ inputs.mode == 'acceptance' && 'Acceptance bookkeeping' || 'macOS' }}", " ".join(gate.split()))
         self.assertNotIn("name: ios-tests", workflow)
-        for name in ("verify", "ios-core", "fuzz", "checks", "gate"):
+        for name in ("verify", "mac-core", "apple-builds", "ios-core", "fuzz", "checks", "gate"):
             job = workflow.split(f"  {name}:\n", 1)[1].split("    steps:", 1)[0]
             self.assertIn("inputs.mode != 'acceptance'", job)
         self.assertIn("branches: [main, feat/2026.10.8]", workflow)

@@ -106,10 +106,16 @@ build.
 
 ### Hosted verification and local reproduction
 
-Pull requests use three Apple workers in Verify: independent Mac and iOS
-build/core workers, then one that runs the same Mac products on macOS 15. CodeQL
-uses one additional Apple worker. There is no Apple job matrix competing for all
-five available runners. Portable checks and libFuzzer run on Linux.
+For maintainer-owned PRs from this repository to main, the M4 macOS guest runs
+the Mac build and tests, iOS core tests and Swift CodeQL when the repository
+variable `GLIMMER_M4_ENABLED` is `true`. GitHub hosts macOS 15 compatibility,
+package and device builds, Linux checks and external contributions. Set the
+variable to `false` before starting a run to use hosted runners for every job.
+
+Verify compiles one instrumented Mac test bundle. macOS 26 and macOS 15 run it
+in parallel. The iOS Simulator tests can start alongside the package and
+production device builds. At peak, Verify can use four Apple workers and Swift
+CodeQL can use the fifth. Portable checks and libFuzzer run on Linux.
 
 Pushes, PRs and the default manual dispatch run the core gate. Candidates need
 `macOS` and CodeQL on their exact commit; the Release workflow still runs its

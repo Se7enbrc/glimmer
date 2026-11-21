@@ -24,12 +24,43 @@ class CodeQLCacheStepTests(FixtureTestCase):
                 step = workflow.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
                 self.assertIn('DYLD_INSERT_LIBRARIES: ""', step)
 
+    def test_framework_archive_round_trip_excludes_checkout(self):
+        workflow = (ROOT / ".github/workflows/codeql.yml").read_text()
+
+        def step(name):
+            return workflow.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
+
+        collect = step("Collect framework extraction")
+        condition = " ".join(collect.split())
+        self.assertIn("github.event_name == 'push' || github.event_name == 'workflow_dispatch'", condition)
+        self.assertIn("github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-candidate'", condition)
+        self.assertIn("if: steps.collect.outcome == 'success'", step("Save framework extraction"))
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory)
+            trap = scratch / "codeql-databases/swift/trap/swift"
+            workspace = "/Users/runner/work/glimmer/glimmer"
+            frameworks = [Path(kind) / "Applications/Xcode.app/Module.trap" for kind in ("modules", "lazy_decls")]
+            project = [Path(kind) / workspace[1:] / "Sources/File.trap" for kind in ("modules", "lazy_decls")]
+            for path in frameworks + project:
+                (trap / path).parent.mkdir(parents=True)
+                (trap / path).write_text(str(path))
+            env = dict(os.environ, RUNNER_TEMP=str(scratch), GITHUB_WORKSPACE=workspace)
+            for operation in (collect, step("Seed framework extraction")):
+                shell = textwrap.dedent(operation.split("        run: |\n", 1)[1])
+                subprocess.run(["bash", "-eu", "-c", shell], env=env, check=True, capture_output=True)
+                if operation == collect:
+                    trap.rename(scratch / "original")
+            for path in frameworks:
+                self.assertEqual((trap / path).read_text(), str(path))
+            for path in project:
+                self.assertFalse((trap / path).exists())
+
     def test_non_swift_changes_report_swift_check_without_queueing_a_mac(self):
         workflow = (ROOT / ".github/workflows/codeql.yml").read_text()
         decision = workflow.split("  changes:\n", 1)[1].split("  analyze:\n", 1)[0]
         self.assertIn("runs-on: ubuntu-latest", decision)
         self.assertIn("needs: changes", workflow)
-        self.assertIn("needs.changes.outputs.scan == 'true' && 'macos-26'", " ".join(workflow.split()))
+        self.assertIn("needs.changes.outputs.scan == 'true' && needs.changes.outputs.apple_runner", " ".join(workflow.split()))
         self.assertIn('test "$DECIDED" = success', workflow)
         self.assertIn("if: ${{ !cancelled() && github.event.action != 'closed' }}", workflow)
 

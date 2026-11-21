@@ -32,6 +32,12 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      apple_runner:
+        ${{ vars.GLIMMER_M4_ENABLED == 'true' && github.event_name ==
+        'pull_request' && github.event.pull_request.base.ref == 'main' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.login == github.repository_owner &&
+        github.actor == github.repository_owner && 'glimmer-m4' || 'macos-26' }}
       scan: ${{ steps.changes.outputs.scan }}
     steps:
       - name: Check out source
@@ -74,7 +80,12 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on:
       ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true' &&
-      'macos-26' || 'ubuntu-latest' }}
+      needs.changes.outputs.apple_runner || 'ubuntu-latest' }}
+    env:
+      GLIMMER_M4_ADMISSION:
+        ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true'
+        && needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
     timeout-minutes: 90
     permissions:
       contents: read
@@ -99,6 +110,10 @@ jobs:
         env:
           DECIDED: ${{ needs.changes.result }}
         run: test "$DECIDED" = success
+
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
 
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,7 +197,7 @@ jobs:
           inputs="$CODEQL_VERSION $xcode $sdk $ios_sdk $(cat "$XCODE_XCCONFIG_FILE")"
           headers="$(git ls-files -z '*.h' | xargs -0 shasum -a 256)"
           key="$(printf '%s\n%s\n' "$inputs" "$headers" | shasum -a 256 | cut -c1-32)"
-          printf 'key=codeql-swift-frameworks-v2-%s\n' "$key" >> "$GITHUB_OUTPUT"
+          printf 'key=codeql-swift-frameworks-v3-%s\n' "$key" >> "$GITHUB_OUTPUT"
 
       - name: Restore cached framework extraction
         id: restore
@@ -201,8 +216,7 @@ jobs:
         run: |
           trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
           mkdir -p "$trap"
-          cp -R "$RUNNER_TEMP/swift-framework-traps/." "$trap/"
-          du -sh "$trap"
+          tar -C "$trap" -xzf "$RUNNER_TEMP/swift-framework-traps/frameworks.tgz"
 
       - name: Build both apps, login item and privileged helper
         if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
@@ -223,23 +237,23 @@ jobs:
       # Only imported modules and their lazily extracted declarations are kept;
       # anything built from this checkout is extracted fresh every run.
       - name: Collect framework extraction
+        id: collect
         if:
           steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
-          steps.restore.outputs.cache-hit != 'true'
+          steps.restore.outputs.cache-hit != 'true' && (github.event_name ==
+          'push' || github.event_name == 'workflow_dispatch') && (github.ref ==
+          'refs/heads/main' || github.ref == 'refs/heads/release-candidate')
         env:
           DYLD_INSERT_LIBRARIES: ""
         run: |
           trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
           out="$RUNNER_TEMP/swift-framework-traps"
           mkdir -p "$out"
-          cp -R "$trap/modules" "$trap/lazy_decls" "$out/"
-          find "$out" -path "*${GITHUB_WORKSPACE#/}/*" -delete
-          du -sh "$out"
+          tar -C "$trap" --exclude "*${GITHUB_WORKSPACE#/}/*" -czf "$out/frameworks.tgz" modules lazy_decls
+          du -h "$out/frameworks.tgz"
 
       - name: Save framework extraction
-        if:
-          steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
-          steps.restore.outputs.cache-hit != 'true'
+        if: steps.collect.outcome == 'success'
         # Same-ref action receives only unsigned cache paths.
         uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:

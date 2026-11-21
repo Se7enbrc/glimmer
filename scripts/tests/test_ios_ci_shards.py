@@ -43,8 +43,7 @@ class IOSCIShardTests(FixtureTestCase):
         self.assertNotIn("  tier2:", workflow)
         self.assertNotIn("  schedule:", workflow)
         self.assertIn("IOS_CORE: ${{ needs.ios-core.result }}", workflow)
-        self.assertIn('test "$IOS_CORE" = success', workflow)
-        self.assertIn('test "$IOS_CORE" = skipped', workflow)
+        self.assertIn('test "$IOS_CORE" = "$expected"', workflow)
         self.assertIn("name: ios-core-results", core_job)
         self.assertIn("iOS/build/ci/render/", acceptance)
 

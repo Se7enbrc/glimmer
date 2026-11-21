@@ -56,6 +56,12 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      apple_runner:
+        ${{ vars.GLIMMER_M4_ENABLED == 'true' && github.event_name ==
+        'pull_request' && github.event.pull_request.base.ref == 'main' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.login == github.repository_owner &&
+        github.actor == github.repository_owner && 'glimmer-m4' || 'macos-26' }}
       build: ${{ steps.decide.outputs.build }}
       apple: ${{ steps.decide.outputs.apple }}
     steps:
@@ -97,39 +103,38 @@ jobs:
           fi
           printf 'build=%s\n' "$build" >> "$GITHUB_OUTPUT"
 
-  # Mac and iOS core workers progress independently; no Apple job matrix.
   verify:
-    name: Verify (Mac build and core)
+    name: Build Mac test products and check native tooling
     needs: changes
     if: inputs.mode != 'acceptance'
-    runs-on: macos-26
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 35
     env:
+      GLIMMER_M4_ADMISSION:
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
     defaults:
       run:
         shell: bash
     steps:
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check toolchain
-        run: |
-          test "$(uname -m)" = arm64
-          xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
-          xcrun swift --version
-          python3 --version
-
       - name: Prepare pinned tools
         uses: ./.github/actions/mise # zizmor: ignore[self-repository]
 
       - name: Prepare verification
         run: |
+          test "$(uname -m)" = arm64
           printf 'HOOK_PYTHON=%s\n' "$(python3 -c 'import platform; print(platform.python_version())')" >> "$GITHUB_ENV"
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
@@ -152,17 +157,16 @@ jobs:
         if: needs.changes.outputs.build == 'true'
         timeout-minutes: 10
         run: |
-          set -o pipefail
-          mkdir -p build/logs
           python3 scripts/ci-local.py mac --build-only
-          tar -C build/Build -czf "$RUNNER_TEMP/sequoia-tests.tgz" Products
+          tar -C build/Build -czf "$RUNNER_TEMP/mac-test-products.tgz" Products
 
-      - name: Hand the test products to the macOS 15 runner
+      - name: Share the Mac test products
         if: needs.changes.outputs.build == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sequoia-tests
-          path: ${{ runner.temp }}/sequoia-tests.tgz
+          name: mac-test-products
+          compression-level: 0
+          path: ${{ runner.temp }}/mac-test-products.tgz
           if-no-files-found: error
           retention-days: 1
 
@@ -170,20 +174,12 @@ jobs:
         timeout-minutes: 10
         run: make check-macos TEST_SUITE= COVERAGE=1
 
-      - name: Run Mac tests
-        if: needs.changes.outputs.build == 'true'
-        timeout-minutes: 20
-        run: python3 scripts/ci-local.py mac --run-only
-
-      - name: Save Mac results
-        if: always()
+      - name: Save failed Mac build diagnostics
+        if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: mac-results
-          path: |
-            build/logs/
-            build/Logs/Test/
-            build/coverage/swift/
+          name: mac-build-results
+          path: build/[Ll]ogs/
           if-no-files-found: ignore
           retention-days: 1
 
@@ -197,15 +193,6 @@ jobs:
           retention-days: 1
           include-hidden-files: true
 
-      - name: Upload Swift coverage
-        if: always() && needs.changes.outputs.build == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: coverage-swift-macos
-          path: build/coverage/swift/
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Save compiler and dependency caches
         if: success() && steps.build-cache.outputs.hit != 'true'
         # Same-ref action receives only unsigned cache paths.
@@ -214,8 +201,68 @@ jobs:
           path: ${{ steps.build-cache.outputs.paths }}
           key: ${{ steps.build-cache.outputs.key }}
 
-  ios-core:
-    name: Verify (iOS build and core)
+  mac-core:
+    name: Verify (Mac core)
+    needs: [changes, verify]
+    if: inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true'
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
+    timeout-minutes: 30
+    env:
+      GLIMMER_M4_ADMISSION:
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python
+          cache: "false"
+
+      - name: Receive the test products
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mac-test-products
+          path: ${{ runner.temp }}
+
+      - name: Run Mac tests
+        timeout-minutes: 20
+        run: |
+          mkdir -p build/Build
+          tar -C build/Build -xzf "$RUNNER_TEMP/mac-test-products.tgz"
+          python3 scripts/ci-local.py mac --run-only
+
+      - name: Save Mac results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-results
+          path: |
+            build/logs/
+            build/Logs/Test/
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Upload Swift coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-swift-macos
+          path: build/coverage/swift/
+          if-no-files-found: error
+          retention-days: 1
+
+  apple-builds:
+    name: Verify (package and production builds)
     needs: changes
     if:
       inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true' &&
@@ -232,23 +279,18 @@ jobs:
 
       - name: Prepare pinned tools
         uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
 
       - name: Restore compiler and dependency caches
         id: build-cache
         # Same-ref repository code; only unsigned compiler and dependency state.
         uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
         with:
-          variant: ios-core
-
-      - name: Enable compiler caching
-        run:
-          echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/glimmer-cache.xcconfig" >>
-          "$GITHUB_ENV"
+          variant: apple-builds
 
       - name: Build and test the source package
-        if:
-          needs.changes.outputs.build == 'true' && needs.changes.outputs.apple
-          == 'true'
         timeout-minutes: 5
         run: |
           set -o pipefail
@@ -257,13 +299,11 @@ jobs:
           swift test -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
 
       - name: Build engine for device and Simulator
-        if:
-          needs.changes.outputs.build == 'true' && needs.changes.outputs.apple
-          == 'true'
+        env:
+          XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
         # Cold device plus Simulator builds have taken nearly five minutes.
         timeout-minutes: 8
         run: |
-          xcodebuild -version
           for destination in 'generic/platform=iOS' 'generic/platform=iOS Simulator'; do
             xcodebuild -project Glimmer.xcodeproj -scheme GlimmerEngine -configuration Release \
               -destination "$destination" -derivedDataPath build/engine-ios \
@@ -271,10 +311,9 @@ jobs:
           done
 
       - name: Build production iPhone app without signing
+        env:
+          XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
         timeout-minutes: 10
-        if:
-          needs.changes.outputs.build == 'true' && needs.changes.outputs.apple
-          == 'true'
         shell: bash
         run: |
           set -o pipefail
@@ -283,9 +322,7 @@ jobs:
           if grep -E '(^|[[:space:]])warning:' iOS/build/logs/device.log; then exit 1; fi
 
       - name: Save package results
-        if:
-          always() && needs.changes.outputs.build == 'true' &&
-          needs.changes.outputs.apple == 'true'
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: engine-package-results
@@ -295,16 +332,58 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+      - name: Save compiler and dependency caches
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
+        with:
+          path: ${{ steps.build-cache.outputs.paths }}
+          key: ${{ steps.build-cache.outputs.key }}
+
+  ios-core:
+    name: Verify (iOS Simulator core)
+    needs: changes
+    if:
+      inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true' &&
+      needs.changes.outputs.apple == 'true'
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
+    timeout-minutes: 40
+    env:
+      GLIMMER_M4_ADMISSION:
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        secrets.GLIMMER_M4_ADMISSION || '' }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare pinned tools
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
+      - name: Restore compiler and dependency caches
+        id: build-cache
+        # Same-ref repository code; only unsigned compiler and dependency state.
+        uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
+        with:
+          variant: ios-core
+
       - name: Build Simulator tests and run core
-        if:
-          needs.changes.outputs.build == 'true' && needs.changes.outputs.apple
-          == 'true'
+        env:
+          XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
         timeout-minutes: 25
-        run: |
-          python3 scripts/ci-local.py core
+        run: python3 scripts/ci-local.py core
 
       - name: Save core results
-        if: always() && needs.changes.outputs.apple == 'true'
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-core-results
@@ -404,7 +483,7 @@ jobs:
       - name: Receive the test products
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: sequoia-tests
+          name: mac-test-products
           path: ${{ runner.temp }}
 
       - name: Run the unit tests on macOS 15
@@ -413,7 +492,7 @@ jobs:
           set -o pipefail
           sw_vers
           mkdir -p build/Build build/logs
-          tar -C build/Build -xzf "$RUNNER_TEMP/sequoia-tests.tgz"
+          tar -C build/Build -xzf "$RUNNER_TEMP/mac-test-products.tgz"
           status=0
           make test-run TEST_FLAGS='-resultBundlePath build/sequoia.xcresult' \
             2>&1 | tee build/logs/sequoia.log || status=$?
@@ -480,7 +559,8 @@ jobs:
   gate:
     name:
       ${{ inputs.mode == 'acceptance' && 'Acceptance bookkeeping' || 'macOS' }}
-    needs: [changes, checks, verify, ios-core, sequoia, fuzz]
+    needs:
+      [changes, checks, verify, mac-core, apple-builds, ios-core, sequoia, fuzz]
     if:
       always() && github.event.action != 'closed' && inputs.mode != 'acceptance'
     runs-on: ubuntu-latest
@@ -493,6 +573,8 @@ jobs:
           BUILD: ${{ needs.changes.outputs.build }}
           APPLE: ${{ needs.changes.outputs.apple }}
           CHECKS: ${{ needs.checks.result }}
+          MAC_CORE: ${{ needs.mac-core.result }}
+          APPLE_BUILDS: ${{ needs.apple-builds.result }}
           IOS_CORE: ${{ needs.ios-core.result }}
           SEQUOIA: ${{ needs.sequoia.result }}
           FUZZ: ${{ needs.fuzz.result }}
@@ -502,17 +584,16 @@ jobs:
           test "$CHECKS" = success
           case "$APPLE" in true|false) ;; *) exit 1 ;; esac
           case "$BUILD" in
-            true) test "$FUZZ" = success ;;
-            false) test "$FUZZ" = skipped ;;
+            true) expected=success ;;
+            false) expected=skipped ;;
             *) exit 1 ;;
           esac
-          if [ "$BUILD" = true ] && [ "$APPLE" = true ]; then
-            test "$IOS_CORE" = success
-            test "$SEQUOIA" = success
-          else
-            test "$IOS_CORE" = skipped
-            test "$SEQUOIA" = skipped
-          fi
+          test "$FUZZ" = "$expected"
+          test "$MAC_CORE" = "$expected"
+          if [ "$APPLE" = false ]; then expected=skipped; fi
+          test "$APPLE_BUILDS" = "$expected"
+          test "$IOS_CORE" = "$expected"
+          test "$SEQUOIA" = "$expected"
 
       - name: Check out coverage tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

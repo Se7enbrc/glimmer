@@ -29,12 +29,12 @@ class VerificationTimeoutTests(FixtureTestCase):
 
     def test_test_steps_leave_time_for_failure_uploads(self):
         for job, step in (("verify", "Build the shared Mac test products"),
-                          ("verify", "Check native tooling"), ("verify", "Run Mac tests"),
+                          ("verify", "Check native tooling"), ("mac-core", "Run Mac tests"),
                           ("sequoia", "Run the unit tests on macOS 15"),
                           ("ios-core", "Build Simulator tests and run core"),
-                          ("ios-core", "Build and test the source package"),
-                          ("ios-core", "Build engine for device and Simulator"),
-                          ("ios-core", "Build production iPhone app without signing"),
+                          ("apple-builds", "Build and test the source package"),
+                          ("apple-builds", "Build engine for device and Simulator"),
+                          ("apple-builds", "Build production iPhone app without signing"),
                           ("extended", "Run pending or affected acceptance cases"),
                           ("fuzz", "Fuzz protocol parsers")):
             with self.subTest(job=job, step=step):
@@ -46,7 +46,8 @@ class VerificationTimeoutTests(FixtureTestCase):
 
     def test_evidence_uploads_even_after_timeout(self):
         for job, step, paths in (
-            ("verify", "Save Mac results", ("build/logs/", "build/Logs/Test/", "build/coverage/swift/")),
+            ("mac-core", "Save Mac results", ("build/logs/", "build/Logs/Test/")),
+            ("mac-core", "Upload Swift coverage", ("build/coverage/swift/",)),
             ("sequoia", "Save macOS 15 results", ("build/logs/", "build/sequoia.xcresult")),
             ("ios-core", "Save core results", ("iOS/build/ci/core/",)),
             ("extended", "Save hosted acceptance evidence", ("iOS/build/ci/render/", "build/logs/", "build/acceptance/")),
@@ -60,13 +61,12 @@ class VerificationTimeoutTests(FixtureTestCase):
                 self.assertIn("uses: actions/upload-artifact@", upload)
                 for path in paths:
                     self.assertIn(path, upload)
-        for name in ("Upload script coverage", "Upload Swift coverage"):
-            self.assertIn("always()", self.step(self.job("verify"), name))
+        self.assertIn("always()", self.step(self.job("verify"), "Upload script coverage"))
 
     def test_each_executor_retains_output_and_failure_status(self):
         for job, step, path in (
-            ("ios-core", "Build and test the source package", "build/logs/package-test.log"),
-            ("ios-core", "Build production iPhone app without signing", "iOS/build/logs/device.log"),
+            ("apple-builds", "Build and test the source package", "build/logs/package-test.log"),
+            ("apple-builds", "Build production iPhone app without signing", "iOS/build/logs/device.log"),
             ("sequoia", "Run the unit tests on macOS 15", "build/logs/sequoia.log"),
             ("fuzz", "Fuzz protocol parsers", "build/logs/fuzz.log"),
         ):
@@ -76,7 +76,7 @@ class VerificationTimeoutTests(FixtureTestCase):
                 self.assertIn(f"2>&1 | tee {path}", source)
         for job, step, command in (
             ("verify", "Build the shared Mac test products", "mac --build-only"),
-            ("verify", "Run Mac tests", "mac --run-only"),
+            ("mac-core", "Run Mac tests", "mac --run-only"),
             ("ios-core", "Build Simulator tests and run core", "core"),
             ("extended", "Run pending or affected acceptance cases", "acceptance"),
         ):
