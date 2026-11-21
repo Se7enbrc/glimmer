@@ -85,9 +85,13 @@ class ReportModeTests(FixtureTestCase):
         profile = self.root / "build/Build/ProfileData/a/Coverage.profdata"
         profile.parent.mkdir(parents=True)
         profile.touch()
-        totals = {"data": [{"totals": {key: {"covered": 1, "count": 2} for key in ("lines", "regions", "branches")}}]}
+        totals = {"data": [{"files": [{"filename": "/producer/helper/Protocol.swift"}],
+                            "totals": {key: {"covered": 1, "count": 2} for key in ("lines", "regions", "branches")}}]}
         xccov = {"targets": [{"name": "Glimmer.app", "files": [{"path": "/r/A.swift", "executableLines": 10,
                                                                  "coveredLines": 5}]}]}
+
+        xccov["targets"].append({"name": "GlimmerTests.xctest", "files": [
+            {"path": "/producer/helper/Protocol.swift", "executableLines": 2, "coveredLines": 1}]})
 
         def run(command, **kwargs):
             body = json.dumps(xccov if command[1] == "xccov" else totals)
@@ -101,6 +105,10 @@ class ReportModeTests(FixtureTestCase):
         self.assertIn("| Login item | not measured (0 counted) | not executed", summary)
         self.assertTrue(any("-ignore-filename-regex=/DerivedSources/" in c for c in (x.args[0] for x in called.call_args_list)))
         self.assertTrue((self.root / "out/swift/llvm-helper.json").exists())
+        self.assertIn(f"-path-equivalence=/producer/helper,{self.root}/helper", called.call_args_list[-1].args[0])
+        totals["data"][0]["files"].append({"filename": "/producer/GlimmerTests/Unrelated.swift"})
+        with patch.object(REPORT.subprocess, "run", side_effect=run), self.assertRaisesRegex(SystemExit, "unexpected"):
+            REPORT.swift()
 
     def test_unknown_or_missing_mode_prints_usage_and_exits_nonzero(self):
         for argv in ([], ["bogus"], ["swift", "python"]):

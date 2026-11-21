@@ -32,13 +32,22 @@ def llvm_row(totals):
     return " | ".join(pct(totals[key]["covered"], totals[key]["count"]) for key in ("lines", "regions", "branches"))
 
 
-def llvm_totals(binary, profile, name, *sources):
+def llvm_totals(binary, profile, name, helper_dir=None):
+    sources = []
+    if helper_dir is not None:
+        local = Path("helper").resolve()
+        sources = [f"-path-equivalence={helper_dir},{local}", "--sources", str(local)]
     # Generated asset symbols are build output, not project source.
     data = subprocess.run(["xcrun", "llvm-cov", "export", "-summary-only", f"-instr-profile={profile}",
                            "-ignore-filename-regex=/DerivedSources/", str(binary), *sources],
                           check=True, capture_output=True, text=True).stdout
+    component = json.loads(data)["data"][0]
+    if helper_dir is not None:
+        files = {Path(entry["filename"]).parent for entry in component["files"]}
+        if not files or files - {helper_dir, local}:
+            sys.exit("ERROR: LLVM helper coverage includes unexpected or missing source files")
     (OUT / "swift" / name).write_text(data)
-    return json.loads(data)["data"][0]["totals"]
+    return component["totals"]
 
 
 def swift():
@@ -51,7 +60,11 @@ def swift():
     report = json.loads(data)
     app = llvm_totals(APP, profiles[0], "llvm-app.json")
     engine = llvm_totals(ENGINE, profiles[0], "llvm-engine.json")
-    helper = llvm_totals(TESTS, profiles[0], "llvm-helper.json", "helper/")
+    helper_dirs = {Path(f["path"]).parent for t in report["targets"] if t["name"] == "GlimmerTests.xctest"
+                   for f in t["files"] if Path(f["path"]).parent.name == "helper"}
+    if len(helper_dirs) != 1:
+        sys.exit("ERROR: expected one instrumented helper source directory")
+    helper = llvm_totals(TESTS, profiles[0], "llvm-helper.json", helper_dirs.pop())
     return ("## Swift coverage\n\n" + HEADER
             + f"| App (`Glimmer.debug.dylib`) | {xccov_lines(report, 'Glimmer.app')} | {llvm_row(app)} |\n"
             + f"| Engine | {xccov_lines(report, 'GlimmerEngine.framework')} | {llvm_row(engine)} |\n"
