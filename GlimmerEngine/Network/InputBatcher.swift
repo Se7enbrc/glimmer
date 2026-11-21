@@ -276,15 +276,19 @@ final class InputBatcher: @unchecked Sendable {
 
     // MARK: - Low-rate pass-through producers
 
-    /// Drain earlier motion, then hand the edge to ENet before reporting success.
+    /// Drain earlier motion, then submit the packet to ENet before reporting success.
     /// This waits for local acceptance only, never for a network round trip or ACK.
-    func passThrough(_ plaintext: @autoclosure () -> [UInt8], channel: UInt8) -> Int32 {
+    func passThrough(_ plaintext: @autoclosure () -> [UInt8], channel: UInt8, reliable: Bool = true) -> Int32 {
         let timing = InputTimingContext.take()
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         return queue.sync {
             guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
             flushLocked()
+            if !reliable {
+                return enet?.sendInputPacketUnreliable(plaintext(), channel: channel) == true
+                    ? InputBatcherResult.ok : InputBatcherResult.sendFailed
+            }
             let batch = InputTimingBatch(timing?.samples() ?? [], tracker: tracker())
             return enet?.sendInputPacket(plaintext(), channel: channel, timing: batch) == true
                 ? InputBatcherResult.ok : InputBatcherResult.sendFailed

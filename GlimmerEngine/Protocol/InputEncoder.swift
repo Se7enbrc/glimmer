@@ -66,6 +66,7 @@ private enum InputMagic {
     static let ssHscroll: UInt32 = 0x5500_0001        // SS_HSCROLL_MAGIC
     static let multiControllerGen5: UInt32 = 0x0000_000C // MULTI_CONTROLLER_MAGIC_GEN5
     static let ssControllerArrival: UInt32 = 0x5500_0004 // SS_CONTROLLER_ARRIVAL_MAGIC
+    static let ssTouch: UInt32 = 0x5500_0002             // SS_TOUCH_MAGIC
     static let ssControllerTouch: UInt32 = 0x5500_0005   // SS_CONTROLLER_TOUCH_MAGIC
     static let ssControllerMotion: UInt32 = 0x5500_0006  // SS_CONTROLLER_MOTION_MAGIC
     static let ssControllerBattery: UInt32 = 0x5500_0007 // SS_CONTROLLER_BATTERY_MAGIC
@@ -238,6 +239,21 @@ package enum InputEncoder {
         w.u32LE(supportedButtons)
         assert(w.bytes.count == 16, "SS_CONTROLLER_ARRIVAL_PACKET must be 16 bytes, got \(w.bytes.count)")
         return w.bytes
+    }
+
+    package static func screenTouch(_ phase: ScreenTouchPhase, id: UInt32, x: Float, y: Float) -> [UInt8] {
+        var writer = InputWriter()
+        writeHeader(into: &writer, magicLE: InputMagic.ssTouch, bodyLength: 32)
+        writer.u8(phase.rawValue)
+        writer.u8(0)
+        writer.u16LE(0xFFFF) // LI_ROT_UNKNOWN
+        writer.u32LE(id)
+        writer.netfloat(x)
+        writer.netfloat(y)
+        writer.netfloat(0)
+        writer.netfloat(0)
+        writer.netfloat(0)
+        return writer.bytes
     }
 
     // MARK: 9. Controller touch - LiSendControllerTouchEvent2 (24 bytes)

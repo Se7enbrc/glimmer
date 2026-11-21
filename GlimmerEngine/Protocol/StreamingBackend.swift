@@ -368,6 +368,7 @@ package protocol StreamingBackend: AnyObject, Sendable {
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32
     func sendMouseMove(dx: Int16, dy: Int16) -> Int32
     func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32
+    func sendScreenTouch(_ phase: ScreenTouchPhase, id: UInt32, x: Float, y: Float) -> Int32
     func sendMouseButton(action: Int8, button: Int32) -> Int32
     func sendScroll(_ amount: Int16) -> Int32
     func sendHScroll(_ amount: Int16) -> Int32
@@ -396,6 +397,10 @@ package protocol StreamingBackend: AnyObject, Sendable {
 }
 
 extension StreamingBackend {
+    package func sendScreenTouch(_ phase: ScreenTouchPhase, id: UInt32, x: Float, y: Float) -> Int32 {
+        StreamProtocol.LI_ERR_UNSUPPORTED
+    }
+
     /// Default: no control-stream health to report. Backends with an ENet
     /// control channel (NativeBackend) override this; a future C backend would
     /// inherit nil rather than be forced to fabricate the numbers.
@@ -421,6 +426,13 @@ extension StreamingBackend {
             interruptConnection()
         }
     }
+}
+
+package enum ScreenTouchPhase: UInt8 {
+    case down = 0x01
+    case up = 0x02
+    case move = 0x03
+    case cancelAll = 0x07
 }
 
 extension VideoSink {

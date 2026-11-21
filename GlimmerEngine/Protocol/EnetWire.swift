@@ -59,6 +59,7 @@ package enum Enet {
     // class rides its own ENet channel so retransmit ordering is per-class.
     package static let ctrlChannelKeyboard: UInt8 = 0x02  // CTRL_CHANNEL_KEYBOARD
     package static let ctrlChannelMouse: UInt8 = 0x03     // CTRL_CHANNEL_MOUSE (mouse/scroll/hscroll)
+    package static let ctrlChannelTouch: UInt8 = 0x05     // CTRL_CHANNEL_TOUCH
     package static let ctrlChannelUtf8: UInt8 = 0x06      // CTRL_CHANNEL_UTF8 (paste as text)
     package static let ctrlChannelGamepadBase: UInt8 = 0x10 // CTRL_CHANNEL_GAMEPAD_BASE + (num % 16)
     /// CTRL_CHANNEL_SENSOR_BASE + (num % 16) - controller motion uplink rides

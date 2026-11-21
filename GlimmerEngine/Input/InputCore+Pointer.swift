@@ -32,6 +32,30 @@ extension InputCore {
         }
     }
 
+    package func sendScreenTouch(_ phase: ScreenTouchPhase, id: UInt32, point: CGPoint) -> Bool {
+        withLock {
+            guard snapshot.ready, flushReleases() else { return false }
+            let result = backend?.sendScreenTouch(phase, id: id, x: Float(point.x), y: Float(point.y)) ?? -2
+            record("LiSendTouchEvent", result)
+            return result == 0
+        }
+    }
+
+    package func cancelScreenTouches() {
+        withLock {
+            pendingScreenTouchCancel = true
+            if snapshot.ready { _ = flushScreenTouchCancel() }
+        }
+    }
+
+    func flushScreenTouchCancel() -> Bool {
+        guard pendingScreenTouchCancel else { return true }
+        let result = backend?.sendScreenTouch(.cancelAll, id: 0, x: 0, y: 0) ?? -2
+        record("LiSendTouchEvent(cancel all)", result)
+        pendingScreenTouchCancel = result != 0 && result != StreamProtocol.LI_ERR_UNSUPPORTED
+        return !pendingScreenTouchCancel
+    }
+
     /// Native precise pixels or wheel lines; wire quantization and residuals have one owner.
     @discardableResult
     package func sendScroll(x: Double, y: Double, precise: Bool, ended: Bool = false)

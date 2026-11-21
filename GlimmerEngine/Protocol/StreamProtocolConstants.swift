@@ -173,7 +173,9 @@ package enum StreamProtocol {
     /// Sentinel percentage when the charge level can't be read.
     package static let LI_BATTERY_PERCENTAGE_UNKNOWN: Int32 = 0xFF
 
-    // MARK: Touch events (Limelight.h:651-658)
+    // MARK: Touch events
+
+    package static let LI_FF_PEN_TOUCH_EVENTS: UInt32 = 0x01
     package static let LI_TOUCH_EVENT_HOVER: Int32 = 0x00
     package static let LI_TOUCH_EVENT_DOWN: Int32 = 0x01
     package static let LI_TOUCH_EVENT_UP: Int32 = 0x02

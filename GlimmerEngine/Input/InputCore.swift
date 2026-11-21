@@ -62,6 +62,7 @@ package final class InputCore: @unchecked Sendable {
     }
     package var hidRegistrations: [UInt8: UUID] = [:]
     package var controllers: [ObjectIdentifier: ControllerSample] = [:]
+    package var pendingScreenTouchCancel = false
     package var pendingTouchReleases: [(slot: UInt8, finger: ControllerTouchpadFinger)] = []
     package var touchpadStates: [UInt8: ControllerTouchpadState] = [:]
     package var controllerMouseMapping = ControllerMouseMapping.rightStick {
@@ -126,7 +127,8 @@ package final class InputCore: @unchecked Sendable {
     }
 
     package var needsReconciliation: Bool {
-        !releases.pending.isEmpty || !pendingTouchReleases.isEmpty || !pendingArrivals.isEmpty || !releases.held.isEmpty
+        pendingScreenTouchCancel || !releases.pending.isEmpty || !pendingTouchReleases.isEmpty
+            || !pendingArrivals.isEmpty || !releases.held.isEmpty
             || controllerMouseStates.values.contains { $0.isMouse && ($0.buttons != 0 || $0.analog != Self.neutral) }
     }
 
@@ -211,8 +213,10 @@ package final class InputCore: @unchecked Sendable {
 
     @discardableResult
     package func flushReleases() -> Bool {
-        guard snapshot.ready else { return releases.pending.isEmpty && pendingTouchReleases.isEmpty }
-        guard flushTouchReleases() else { return false }
+        guard snapshot.ready else {
+            return !pendingScreenTouchCancel && releases.pending.isEmpty && pendingTouchReleases.isEmpty
+        }
+        guard flushScreenTouchCancel(), flushTouchReleases() else { return false }
         let count = releases.pending.count
         while let release = releases.pending.first {
             let timing = InputTimingContext.suspend(except: release)

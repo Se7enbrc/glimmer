@@ -72,3 +72,45 @@ struct PublicAudioBoundaryTests {
         decoder.shutdown()
     }
 }
+
+struct ScreenTouchTests {
+    @Test func retriesCancelledTouchesBeforeNewContacts() throws {
+        let core = InputCore()
+        let backend = SoakInputBackend()
+        core.publish(.init(ready: true), backend: backend)
+        try #require(core.sendScreenTouch(.down, id: 1, point: .zero))
+        backend.state.withLock { $0.reject = true }
+
+        core.cancelScreenTouches()
+        #expect(core.needsReconciliation)
+        #expect(!core.sendScreenTouch(.down, id: 2, point: .zero))
+
+        backend.state.withLock { $0.reject = false }
+        try #require(core.sendScreenTouch(.down, id: 3, point: .zero))
+        #expect(backend.state.withLock { $0.screenTouches } == [3])
+        #expect(!core.needsReconciliation)
+    }
+
+    @Test func encodesSunshineContact() {
+        let expected: [UInt8] = [
+            0, 0, 0, 32, 0x02, 0, 0, 0x55,
+            0x01, 0, 0xFF, 0xFF, 0x78, 0x56, 0x34, 0x12,
+            0, 0, 0x80, 0x3E, 0, 0, 0x40, 0x3F,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ]
+        #expect(InputEncoder.screenTouch(.down, id: 0x1234_5678, x: 0.25, y: 0.75) == expected)
+    }
+
+    @Test func mapsTouchToPictureAndRejectsBeginsInLetterbox() {
+        let view = CGSize(width: 1_000, height: 1_000)
+        let stream = CGSize(width: 2_000, height: 1_000)
+        let inPicture = CGPoint(x: 250, y: 625)
+        let inLetterbox = CGPoint(x: 250, y: 900)
+        #expect(PointerMapping.touchPoint(viewPoint: inPicture, viewSize: view, streamPixelSize: stream, begins: true)
+                == CGPoint(x: 0.25, y: 0.25))
+        #expect(PointerMapping.touchPoint(viewPoint: inLetterbox, viewSize: view, streamPixelSize: stream, begins: true)
+                == nil)
+        #expect(PointerMapping.touchPoint(viewPoint: inLetterbox, viewSize: view, streamPixelSize: stream, begins: false)
+                == CGPoint(x: 0.25, y: 0))
+    }
+}

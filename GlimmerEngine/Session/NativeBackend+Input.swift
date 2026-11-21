@@ -131,6 +131,15 @@ extension NativeBackend {
             channel: channel)
     }
 
+    package func sendScreenTouch(_ phase: ScreenTouchPhase, id: UInt32, x: Float, y: Float) -> Int32 {
+        guard let batcher = readyBatcher() else { return Self.inputNotReady }
+        guard withState({ featureFlags }) & StreamProtocol.LI_FF_PEN_TOUCH_EVENTS != 0 else {
+            return StreamProtocol.LI_ERR_UNSUPPORTED
+        }
+        return batcher.passThrough(InputEncoder.screenTouch(phase, id: id, x: x, y: y),
+                                   channel: Enet.ctrlChannelTouch, reliable: phase != .move)
+    }
+
     package func sendControllerTouch(
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float

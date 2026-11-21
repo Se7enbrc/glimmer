@@ -16,6 +16,7 @@ final class SoakInputBackend: StreamingBackend {
         var reject = false
         var loseAcceptedRelease = false
         var held: Set<Edge> = []
+        var screenTouches: Set<UInt32> = []
         var sends = 0
         var releases = 0
     }
@@ -58,6 +59,18 @@ final class SoakInputBackend: StreamingBackend {
     func hdrMetadata() -> HdrMetadata? { nil }
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
+    func sendScreenTouch(_ phase: ScreenTouchPhase, id: UInt32, x: Float, y: Float) -> Int32 {
+        state.withLock {
+            guard !$0.reject else { return -2 }
+            switch phase {
+            case .down: $0.screenTouches.insert(id)
+            case .up: $0.screenTouches.remove(id)
+            case .move: break
+            case .cancelAll: $0.screenTouches.removeAll()
+            }
+            return 0
+        }
+    }
     func sendMouseMove(dx: Int16, dy: Int16) -> Int32 { 0 }
     func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 { 0 }
     func sendScroll(_ amount: Int16) -> Int32 { 0 }
