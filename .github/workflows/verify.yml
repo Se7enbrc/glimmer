@@ -56,6 +56,12 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      apple_runner:
+        ${{ github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.actor == github.repository_owner && format('{0}',
+        github.event.number) == vars.GLIMMER_M4_BENCHMARK_PR &&
+        'glimmer-m4-benchmark' || 'macos-26' }}
       build: ${{ steps.decide.outputs.build }}
       apple: ${{ steps.decide.outputs.apple }}
     steps:
@@ -101,7 +107,7 @@ jobs:
     name: Build Mac test products and check native tooling
     needs: changes
     if: inputs.mode != 'acceptance'
-    runs-on: macos-26
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 35
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
@@ -192,7 +198,7 @@ jobs:
     name: Verify (Mac core)
     needs: [changes, verify]
     if: inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true'
-    runs-on: macos-26
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
@@ -326,7 +332,7 @@ jobs:
     if:
       inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true' &&
       needs.changes.outputs.apple == 'true'
-    runs-on: macos-26
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 40
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer

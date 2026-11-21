@@ -60,7 +60,7 @@ class CodeQLCacheStepTests(FixtureTestCase):
         decision = workflow.split("  changes:\n", 1)[1].split("  analyze:\n", 1)[0]
         self.assertIn("runs-on: ubuntu-latest", decision)
         self.assertIn("needs: changes", workflow)
-        self.assertIn("needs.changes.outputs.scan == 'true' && 'macos-26'", " ".join(workflow.split()))
+        self.assertIn("needs.changes.outputs.scan == 'true' && needs.changes.outputs.apple_runner", " ".join(workflow.split()))
         self.assertIn('test "$DECIDED" = success', workflow)
         self.assertIn("if: ${{ !cancelled() && github.event.action != 'closed' }}", workflow)
 

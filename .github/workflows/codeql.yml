@@ -32,6 +32,12 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      apple_runner:
+        ${{ github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.actor == github.repository_owner && format('{0}',
+        github.event.number) == vars.GLIMMER_M4_BENCHMARK_PR &&
+        'glimmer-m4-benchmark' || 'macos-26' }}
       scan: ${{ steps.changes.outputs.scan }}
     steps:
       - name: Check out source
@@ -74,7 +80,7 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on:
       ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true' &&
-      'macos-26' || 'ubuntu-latest' }}
+      needs.changes.outputs.apple_runner || 'ubuntu-latest' }}
     timeout-minutes: 90
     permissions:
       contents: read
