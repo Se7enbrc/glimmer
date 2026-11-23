@@ -173,7 +173,7 @@ jobs:
 
       - name: Check native tooling
         timeout-minutes: 10
-        run: make check-macos TEST_SUITE= COVERAGE=1
+        run: make check-macos-tools TEST_SUITE= COVERAGE=1
 
       - name: Save failed Mac build diagnostics
         if: failure()
@@ -296,6 +296,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build/logs
+          make check-package-boundary
           swift build -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
           swift test -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
 
