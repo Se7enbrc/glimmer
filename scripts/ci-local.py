@@ -210,6 +210,9 @@ def ios(args):
     result = folder / f"{uuid.uuid4()}.xcresult"
     with simulator() as destination:
         flags = ["-enableCodeCoverage", "YES", "-resultBundlePath", str(result), *test_flags(args.diagnostic_retry), *selection]
+        # On the M4, the host-matched XCTest drives the pinned compiler's products.
+        if test_driver := os.environ.get("XCTEST_DEVELOPER_DIR"):
+            make.append(f"DEVELOPER_DIR={test_driver}")
         status = run([*make, "test-run", f"TEST_DESTINATION={destination}", "TEST_FLAGS=" + " ".join(flags)], folder / "test.log")
     status = status or receipt_status(result)
     if not status:

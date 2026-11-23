@@ -381,6 +381,9 @@ jobs:
       - name: Build Simulator tests and run core
         env:
           XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
+          XCTEST_DEVELOPER_DIR:
+            ${{ runner.environment == 'self-hosted' &&
+            '/Applications/Xcode_27.2.app/Contents/Developer' || '' }}
         timeout-minutes: 25
         run: python3 scripts/ci-local.py core
 
