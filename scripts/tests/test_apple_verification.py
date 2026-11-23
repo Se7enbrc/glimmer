@@ -58,6 +58,8 @@ class AppleVerificationTests(FixtureTestCase):
         def git(*args):
             return subprocess.check_output(["git", *args], text=True).strip()
         git("init", "-qb", "main")
+        git("config", "user.name", "Fixture")
+        git("config", "user.email", "fixture@example.invalid")
         old = Path("Mac\nOld.swift")
         old.write_text("fixture")
         git("add", ".")
