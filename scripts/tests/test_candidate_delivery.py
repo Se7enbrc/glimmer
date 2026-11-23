@@ -107,7 +107,7 @@ class DeliveryControllerTests(FixtureTestCase):
 
     def test_mac_checks_require_admission_and_fail_closed_for_candidate_and_promotion(self):
         source = (Path(__file__).parents[1] / 'ci-release.sh').read_text()
-        phase = source.split('    checks)\n', 1)[1].split('        ;;', 1)[0]
+        phase = source.split('\n    checks)\n', 1)[1].split('        ;;', 1)[0]
         shell = '''set -euo pipefail
 check_source() { :; }
 python3() {

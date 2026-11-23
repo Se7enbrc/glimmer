@@ -62,8 +62,9 @@ class CICachePolicyTests(FixtureTestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         self.assertIn("cp build/coverage/parts/coverage-python-portable/.coverage build/coverage/python/.coverage.portable", workflow)
         self.assertIn("cp build/coverage/parts/coverage-python-macos/.coverage build/coverage/python/.coverage.macos", workflow)
-        self.assertIn('test "$CHECKS" = success', workflow)
-        self.assertIn('test "$RESULT" = success', workflow)
+        self.assertLess(workflow.index("python3 scripts/verify-changed.py --gate"), workflow.index("Combine complete script coverage"))
+        combine = workflow.split("      - name: Combine complete script coverage", 1)[1].split("        run:", 1)[0]
+        self.assertIn("if: github.event_name != 'pull_request'", combine)
 
     def test_missing_boundary_checker_cannot_turn_engine_verification_off(self):
         with tempfile.TemporaryDirectory() as directory:
