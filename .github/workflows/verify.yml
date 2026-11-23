@@ -282,7 +282,10 @@ jobs:
           mkdir -p build/logs
           make check-package-boundary
           package_flags=()
-          if [[ "$RUNNER_ENVIRONMENT" == self-hosted ]]; then package_flags=(--disable-sandbox); fi
+          if [[ "$RUNNER_ENVIRONMENT" == self-hosted ]]; then
+            # The native pod already provides the sandbox for manifests and Swift macro plugins.
+            package_flags=(--disable-sandbox -Xswiftc -disable-sandbox)
+          fi
           swift build "${package_flags[@]}" -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
           swift test "${package_flags[@]}" -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
 
