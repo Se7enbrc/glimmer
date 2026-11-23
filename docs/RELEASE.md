@@ -450,10 +450,12 @@ not repoint a live feed while a candidate awaits promotion.
 ## Hosted release
 
 Keep verification, compilation, signing and publication as separate phases.
-Three credential-free jobs verify checks, tests and ASan before the unsigned
-build. A fresh signing runner uses pinned trusted-main tooling and validates the
-exact unsigned artifact. Publication validates the signed artifact and retries
-only missing steps; it never replaces accepted bytes.
+Before the unsigned build, Linux checks confirm the successful Mac test step in
+the exact reserved candidate's Verify run and run the portable release checks. A
+separate Mac job runs AddressSanitizer. A fresh signing runner uses pinned
+trusted-main tooling and validates the exact unsigned artifact. Publication
+validates the signed artifact and retries only missing steps; it never replaces
+accepted bytes.
 
 Publication and Homebrew use GitHub App installation tokens, minted for each job
 and revoked afterward. There is no PAT fallback or periodic PAT rotation.

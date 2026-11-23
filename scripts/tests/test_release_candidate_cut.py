@@ -37,6 +37,7 @@ RELEASE_PATHS = (
     'scripts/release_progress.py',
     '.github/workflows/candidate-delivery.yml',
     '.github/workflows/verify.yml',
+    'scripts/verify-changed.py',
     '.github/workflows/codeql.yml',
     '.github/workflows/ios-testflight-build.yml',
     'scripts/ios-testflight.py',

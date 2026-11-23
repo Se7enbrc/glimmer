@@ -141,6 +141,20 @@ def validate_jobs(jobs, required, sha, run=None):
     return validated
 
 
+def desktop_test_job(jobs, sha, run):
+    # Older candidates can still be promoted using their original release evidence.
+    # Reusing a desktop test for a new build requires an exact job and a completed test step.
+    name = "Verify (Mac core)"
+    try:
+        job = validate_jobs(jobs, {name}, sha, run)[name]
+    except ValueError:
+        return None
+    steps = [step for step in job.get("steps", []) if step.get("name") == "Run Mac tests"]
+    if len(steps) == 1 and steps[0].get("status") == "completed" and steps[0].get("conclusion") == "success":
+        return job.get("id")
+    return None
+
+
 def analysis_ref(run):
     if run["event"] == "pull_request":
         requests = run.get("pull_requests", [])
@@ -213,6 +227,7 @@ def validate_uploads(analyses, jobs, candidate):
 
 def collect(sha, candidate=False):
     prerequisite_runs = []
+    desktop = None
     codeql_run = None
     codeql_jobs = {}
     for workflow, required in REQUIRED.items():
@@ -227,7 +242,10 @@ def collect(sha, candidate=False):
         prerequisite_runs.append({"workflow": workflow, "id": run["id"], "attempt": run["run_attempt"],
                                   "sha": sha, "ref": analysis_ref(run)})
         pages = api(f"actions/runs/{run['id']}/jobs?filter=latest&per_page=100")
-        jobs = validate_jobs([job for page in pages for job in page.get("jobs", [])], required, sha, run)
+        all_jobs = [job for page in pages for job in page.get("jobs", [])]
+        jobs = validate_jobs(all_jobs, required, sha, run)
+        if candidate and workflow.endswith("verify.yml"):
+            desktop = desktop_test_job(all_jobs, sha, run)
         if workflow.endswith("codeql.yml"):
             codeql_run = run
             codeql_jobs = jobs
@@ -251,7 +269,7 @@ def collect(sha, candidate=False):
     producers = [{"category": category, "run": job.get("run_id"),
                   "attempt": job.get("run_attempt"), "sha": job["head_sha"], "ref": ref}
                  for category, name in CATEGORIES.items() for job in [codeql_jobs[name]]]
-    return {"sha": sha, "runs": prerequisite_runs, "producers": producers, "analysis_ref": ref,
+    return {"sha": sha, "desktop_test_job": desktop, "runs": prerequisite_runs, "producers": producers, "analysis_ref": ref,
             "analyses": [{key: entry.get(key) for key in ("id", "sarif_id", "category", "commit_sha")}
                          for entry in latest]}
 

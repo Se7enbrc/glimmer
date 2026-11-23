@@ -40,8 +40,8 @@ class ReleaseWorkflowTests(FixtureTestCase):
                 job = workflow[start:end]
                 required = ["ref: ${{ github.sha }}", "EXPECTED_SHA: ${{ inputs.expected_sha }}",
                             "record: ${{ steps.verify.outputs.record }}",
-                            f"runs-on: {'ubuntu-24.04' if part == 'checks' else 'macos-26'}"]
-                if part != "checks":
+                            f"runs-on: {'ubuntu-24.04' if part != 'asan' else 'macos-26'}"]
+                if part == "asan":
                     required += ["DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
                                  "SWIFT_TREAT_WARNINGS_AS_ERRORS = YES", "GCC_TREAT_WARNINGS_AS_ERRORS = YES"]
                 for value in required:

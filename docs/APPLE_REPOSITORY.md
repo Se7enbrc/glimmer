@@ -54,14 +54,15 @@ required CI gate; a successful engine-only build does not validate an app.
 
 ## CI and releases
 
-The existing required `macOS` check remains named the same and now includes both
-iOS Simulator tests and the unsigned iOS Release device build. Shared or app
-code changes run both clients; documentation-only changes still run source
-checks. Render/UI and comprehensive journeys are one resumable acceptance pass
-per feature release; rerun only pending or affected cases. CodeQL builds both
-apps and requires successful extraction of every tracked production Swift file,
-including `iOS/Glimmer/`. Lint, credential scans, dependency updates and source
-checks are configured at the root.
+The required `macOS` check validates the jobs selected for each PR. Client
+changes build the affected app; shared engine changes build both. iOS changes
+run Simulator tests, and production changes also build for devices. Main and RC
+verification run the full matrix, including both desktop OS versions. Render/UI
+and comprehensive journeys are one resumable acceptance pass per feature
+release; rerun only pending or affected cases. CodeQL builds both apps and
+requires successful extraction of every tracked production Swift file, including
+`iOS/Glimmer/`. Lint, credential scans, dependency updates and source checks are
+configured at the root.
 
 Mac and iOS keep separate bundle identifiers and release lifecycles. The Mac and
 iOS apps share the CalVer in `Glimmer/Version.xcconfig`; iOS includes that file

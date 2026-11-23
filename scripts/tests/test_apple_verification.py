@@ -3,65 +3,71 @@
 
 """Exercise the required CI gate: no Apple consumer or the macOS 15 run may silently disappear."""
 
-import os
 from pathlib import Path
 import re
 import subprocess
-import textwrap
-import unittest
+from unittest.mock import patch
 
 from fixture_git import FixtureTestCase
-
-ROOT = Path(__file__).resolve().parents[2]
+from test_verify_changed import CHANGED, SCRIPT
 
 
 class AppleVerificationTests(FixtureTestCase):
-    def gate(self, **overrides):
-        source = (ROOT / ".github/workflows/verify.yml").read_text().split("  gate:\n", 1)[1]
-        match = re.search(r"        run: \|\n((?:          .*\n|\n)+)", source)
-        self.assertIsNotNone(match)
-        env = dict(os.environ, DECIDED="success", RESULT="success", BUILD="true",
-                   MAC_CORE="success", APPLE_BUILDS="success", IOS_CORE="success", SEQUOIA="success", FUZZ="success",
-                   APPLE="true", CHECKS="success")
-        env.update(overrides)
-        return subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", textwrap.dedent(match[1])],
-                              env=env, capture_output=True, timeout=10).returncode
+    def test_gate_tracks_all_jobs_and_rejects_missing_or_extra_results(self):
+        workflow = (SCRIPT.parents[1] / ".github/workflows/verify.yml").read_text()
+        gate = workflow.split("  gate:\n", 1)[1]
+        jobs = set(re.search(r"    needs:\s+\[(.*?)\]", gate)[1].split(", "))
+        self.assertEqual(jobs, {"changes", *CHANGED.JOB_TASKS})
+        self.assertIn("NEEDS: ${{ toJSON(needs) }}", gate)
+        for plan in (["checks"], ["checks", "verify", "ios-core"], sorted(CHANGED.JOB_TASKS)):
+            needs = {job: {"result": "success" if job in ["changes", *plan] else "skipped"} for job in jobs}
+            CHANGED.require_results(plan, needs)
+            for job in jobs:
+                for outcome in {"success", "failure", "cancelled", "skipped"} - {needs[job]["result"]}:
+                    with self.subTest(job=job, outcome=outcome), self.assertRaises(ValueError):
+                        CHANGED.require_results(plan, {**needs, job: {"result": outcome}})
+            with self.assertRaises(ValueError):
+                CHANGED.require_results(plan, {k: v for k, v in needs.items() if k != "checks"})
+            for invalid in ([], ["checks", "unknown"]):
+                with self.assertRaises(ValueError):
+                    CHANGED.require_results(invalid, needs)
 
-    def test_gate_depends_on_every_required_job(self):
-        source = (ROOT / ".github/workflows/verify.yml").read_text()
-        jobs = set(re.findall(r"^  ([a-z-]+):$", source.split("jobs:\n", 1)[1], re.MULTILINE)) - {"gate", "extended", "tier2"}
-        gate = source.split("  gate:\n", 1)[1]
-        needs = re.search(r"    needs:\s+\[(.*?)\]", gate)[1]
-        self.assertEqual(set(needs.split(", ")), jobs)
-        for job, variable in (("mac-core", "MAC_CORE"), ("apple-builds", "APPLE_BUILDS"),
-                              ("fuzz", "FUZZ"), ("ios-core", "IOS_CORE"), ("sequoia", "SEQUOIA")):
-            self.assertIn(f"{variable}: ${{{{ needs.{job}.result }}}}", gate)
+    def test_pull_request_selects_consumers_and_preserves_shared_ios_sources(self):
+        cases = {
+            "docs/INSTALL.md": {"portable"},
+            "iOS/Glimmer/Screen.swift": {"portable", "native", "ios", "device"},
+            "iOS/GlimmerTests/ScreenTests.swift": {"portable", "native", "ios"},
+            "Glimmer/AWDLHelperManager.swift": {"portable", "native", "mac"},
+            "Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift": {"portable", "native", "mac", "ios", "device"},
+            "GlimmerTests/ControllerChordHoldConflictTests.swift": {"portable", "native", "mac", "ios"},
+            "fuzz/opus.swift": {"portable", "native", "fuzz"},
+        }
+        for path, tasks in cases.items():
+            with self.subTest(path=path), patch.object(CHANGED, "changed_paths", return_value=[path]):
+                self.assertEqual(CHANGED.plan("pull_request", None, "1/merge"), tasks)
+        for paths in ([], ["GlimmerEngine/Input/test.swift"], ["mise.lock"], [".github/workflows/verify.yml"]):
+            with patch.object(CHANGED, "changed_paths", return_value=paths):
+                self.assertEqual(CHANGED.plan("pull_request", None, "1/merge"), CHANGED.FULL | {"portable"})
 
-    def test_both_apps_must_pass_for_code_changes(self):
-        self.assertEqual(self.gate(), 0)
-        for name in ("DECIDED", "RESULT", "CHECKS", "MAC_CORE", "APPLE_BUILDS", "IOS_CORE", "SEQUOIA", "FUZZ"):
-            for result in ("failure", "cancelled", "skipped"):
-                with self.subTest(job=name, result=result):
-                    self.assertNotEqual(self.gate(**{name: result}), 0)
+    def test_main_and_direct_candidate_dispatch_run_every_job(self):
+        for event, ref in (("push", "main"), ("workflow_dispatch", "release-candidate")):
+            self.assertEqual(CHANGED.plan(event, None, ref), CHANGED.FULL | {"portable", "desktop", "compat"})
+        self.assertFalse(CHANGED.plan("push", None, "feature") & {"desktop", "compat"})
 
-    def test_docs_skip_requires_successful_checks_and_explicit_skipped_builds(self):
-        skipped = dict(BUILD="false", MAC_CORE="skipped", APPLE_BUILDS="skipped", IOS_CORE="skipped", SEQUOIA="skipped",
-                       FUZZ="skipped")
-        self.assertEqual(self.gate(**skipped), 0)
-        for job in ("MAC_CORE", "APPLE_BUILDS", "IOS_CORE", "SEQUOIA", "FUZZ"):
-            self.assertNotEqual(self.gate(**{**skipped, job: "failure"}), 0)
-        self.assertNotEqual(self.gate(**skipped, RESULT="failure"), 0)
-        self.assertNotEqual(self.gate(**skipped, DECIDED="failure"), 0)
-        for decision in ("", "unknown"):
-            self.assertNotEqual(self.gate(**{**skipped, "BUILD": decision}), 0)
-
-    def test_mac_only_layout_requires_explicit_skips_and_fuzz(self):
-        absent = dict(APPLE="false", APPLE_BUILDS="skipped", IOS_CORE="skipped", SEQUOIA="skipped")
-        self.assertEqual(self.gate(**absent), 0)
-        self.assertNotEqual(self.gate(**absent, FUZZ="skipped"), 0)
-        self.assertNotEqual(self.gate(**absent, MAC_CORE="skipped"), 0)
-        self.assertNotEqual(self.gate(**{**absent, "APPLE": "unknown"}), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_exact_merge_diff_includes_old_and_new_paths_and_embedded_newlines(self):
+        def git(*args):
+            return subprocess.check_output(["git", *args], text=True).strip()
+        git("init", "-qb", "main")
+        old = Path("Mac\nOld.swift")
+        old.write_text("fixture")
+        git("add", ".")
+        git("commit", "-qm", "base")
+        base = git("rev-parse", "HEAD")
+        git("switch", "-qc", "topic")
+        old.rename("iOS-New.swift")
+        git("add", "-A")
+        git("commit", "-qm", "move")
+        git("switch", "-q", "main")
+        git("merge", "--no-ff", "topic", "-m", "merge")
+        self.assertEqual(set(CHANGED.changed_paths(base)), {str(old), "iOS-New.swift"})
+        self.assertEqual(CHANGED.changed_paths(git("rev-parse", "HEAD")), [])

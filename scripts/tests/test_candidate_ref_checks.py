@@ -24,6 +24,10 @@ class CandidateRefChecksTests(FixtureTestCase):
             self.jobs[CHECKS.CATEGORIES[entry['category']]]['steps'] = [
                 {'name': f"CodeQL upload {entry['sarif_id']}",
                  'status': 'completed', 'conclusion': 'success'}]
+        self.desktop = {"name": "Verify (Mac core)", "id": 4321, "head_sha": SHA, "run_id": 1,
+                        "run_attempt": 1, "head_branch": "release-candidate", "status": "completed",
+                        "conclusion": "success", "steps": [{"name": "Run Mac tests", "status": "completed",
+                                                            "conclusion": "success"}]}
         self.alerts = []
         self.branch = SHA
         self.processing = 'complete'
@@ -51,7 +55,7 @@ class CandidateRefChecksTests(FixtureTestCase):
             return [{'workflow_runs': [{**r, 'workflow_id': 2 if workflow == WORKFLOW else 3,
                                         'path': workflow} for r in self.runs]}]
         if '/jobs?' in path:
-            return [{'jobs': [*self.jobs.values(), *[{'name': name, 'head_sha': SHA,
+            return [{'jobs': [*self.jobs.values(), self.desktop, *[{'name': name, 'head_sha': SHA,
                                                      'status': 'completed', 'conclusion': 'success',
                                                      'run_id': 1, 'run_attempt': 1,
                                                      'head_branch': 'release-candidate'}
@@ -68,6 +72,12 @@ class CandidateRefChecksTests(FixtureTestCase):
         with patch.object(CHECKS, 'object_api', side_effect=self.objects), \
                 patch.object(CHECKS, 'api', side_effect=self.pages):
             return CHECKS.check(SHA, candidate=True)
+
+    def test_only_completed_desktop_tests_on_this_candidate_produce_evidence(self):
+        self.assertEqual(self.check()["desktop_test_job"], 4321)
+        for changes in ({"steps": []}, {"head_sha": MERGE}, {"run_id": 9}, {"conclusion": "skipped"}):
+            with self.subTest(changes=changes), patch.dict(self.desktop, changes):
+                self.assertIsNone(self.check()["desktop_test_job"])
 
     def test_pr_movement_and_same_head_merge_regeneration_do_not_replace_candidate(self):
         self.runs.extend([run(id=20, run_number=20, head_sha=MERGE), run(id=21, run_number=21)])
