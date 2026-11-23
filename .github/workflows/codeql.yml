@@ -32,19 +32,18 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      apple_runner:
-        ${{ github.event_name == 'pull_request' &&
-        github.event.pull_request.base.ref == 'main' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.user.login == github.repository_owner &&
-        github.actor == github.repository_owner && 'glimmer-native-m4' ||
-        'macos-26' }}
+      apple_runner: ${{ steps.runner.outputs.label }}
       scan: ${{ steps.changes.outputs.scan }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Select the Apple runner
+        id: runner
+        run:
+          python3 scripts/verify-changed.py --apple-runner >> "$GITHUB_OUTPUT"
 
       # Main, scheduled and dispatched runs scan everything; a pull request skips
       # only the Swift build when it changes nothing that build reads.
@@ -82,11 +81,6 @@ jobs:
     runs-on:
       ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true' &&
       needs.changes.outputs.apple_runner || 'ubuntu-latest' }}
-    env:
-      GLIMMER_M4_ADMISSION:
-        ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true'
-        && needs.changes.outputs.apple_runner == 'glimmer-native-m4' &&
-        secrets.GLIMMER_M4_ADMISSION || '' }}
     timeout-minutes: 90
     permissions:
       contents: read
@@ -114,6 +108,8 @@ jobs:
 
       - name: Verify M4 admission
         if: runner.environment == 'self-hosted'
+        env:
+          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}
         run: /Library/GlimmerActions/accept-job.sh --require-proof
 
       - name: Check out source

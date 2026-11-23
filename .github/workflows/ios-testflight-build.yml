@@ -48,9 +48,21 @@ jobs:
     if: >-
       github.repository == 'Se7enbrc/glimmer' && github.ref ==
       'refs/heads/release-candidate'
-    runs-on: macos-26
+    runs-on:
+      ${{ github.repository == 'Se7enbrc/glimmer' && github.event_name ==
+      'workflow_dispatch' && github.ref == 'refs/heads/release-candidate' &&
+      contains(fromJSON('["Se7enbrc","glimmer-ugfugl-io-release[bot]"]'),
+      github.actor) &&
+      contains(fromJSON('["Se7enbrc","glimmer-ugfugl-io-release[bot]"]'),
+      github.triggering_actor) && 'glimmer-native-m4' || 'macos-26' }}
     timeout-minutes: 40
     steps:
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        env:
+          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
       - name: Check out only this candidate workflow commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

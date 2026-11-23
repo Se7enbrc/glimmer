@@ -114,10 +114,11 @@ sources referenced by the iOS project also select the iOS checks. Shared engine,
 toolchain and unrecognized changes select both clients, package checks and
 protocol fuzzing. The required `macOS` check validates every selected job.
 
-For admitted maintainer PRs, the headless M4 pods build Mac test products, run
-native tooling, iOS Simulator tests and applicable Swift CodeQL. Xcode 26.6
-compiles the Simulator tests and Xcode 27.2 runs them on the M4. GitHub hosts
-package and device builds and external PRs. PRs finish without starting a Mac
+For maintainer PRs, main and the reviewed RC, headless M4 pods compile Mac test
+products, check native tooling, run iOS Simulator and Swift package tests, build
+the unsigned device app and run applicable Swift CodeQL. The pool accepts three
+jobs at once. Xcode 26.6 compiles the Simulator tests and Xcode 27.2 runs them.
+External PRs use GitHub-hosted workers. PRs finish without starting a Mac
 desktop session or uploading Mac test products.
 
 Main and the direct `release-candidate` dispatch compile the Mac test products
@@ -125,7 +126,9 @@ once and run them on hosted macOS 26 and macOS 15. They also collect full
 coverage, run the iOS suite and production builds, and fuzz the protocol. RC
 delivery confirms the exact candidate's successful desktop test before building
 the distributable. It runs AddressSanitizer separately. Human testing uses the
-actual RC before promotion.
+actual RC before promotion. The M4 also runs the monthly reproducibility check
+and builds unsigned Mac RCs and TestFlight archives. Signing, notarization and
+publication run on separate GitHub-hosted workers.
 
 Run comprehensive render/UI and journeys once per feature release, such as
 `2026.10.8`. Dispatch **Verify** with mode `acceptance` and that release key.
