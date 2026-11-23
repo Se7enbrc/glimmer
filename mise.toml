@@ -22,7 +22,7 @@ python = "3.14.10"
 "npm:prettier" = "4.0.0-alpha.13"
 "npm:markdownlint-cli" = "0.50.1"
 "pipx:yamllint" = "1.38.0"
-"pipx:coverage" = "7.17.5"
+"pipx:coverage" = "7.17.3"
 
 [env]
 HK_MISE = "1"

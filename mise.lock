@@ -181,9 +181,10 @@ backend = "npm:prettier"
 specifiers = ["4.0.0-alpha.13"]
 
 [[tools."pipx:coverage"]]
-version = "7.17.5"
+version = "7.17.3"
 backend = "pipx:coverage"
-specifiers = ["7.17.5"]
+specifiers = ["7.17.3"]
+uv = { path = ".mise/locks/pipx-coverage/7.17.3", digest = "sha256:3fe4602223e80220a1c64b6b486cb04d11abaf18d6fda09c5b43a7f9bf80a343" }
 
 [[tools."pipx:yamllint"]]
 version = "1.38.0"
