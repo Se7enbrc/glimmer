@@ -50,13 +50,16 @@ class ReleaseWorkflowTests(FixtureTestCase):
                     self.assertNotIn(forbidden, job)
                 self.assertLess(job.index("scripts/ci-release.sh checks"), job.index(f"ci-release.sh verify-{part}"))
 
-    def test_build_requires_every_job_and_has_no_secrets(self):
+    def test_build_requires_every_job_and_only_uses_runner_admission(self):
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
         job = workflow.split("\n  build:\n", 1)[1].split("\n  sign:", 1)[0]
         self.assertIn("needs: [verify-checks, verify-tests, verify-asan]", job)
         for part in ("checks", "tests", "asan"):
             self.assertIn(f"needs.verify-{part}.result == 'success'", " ".join(job.split()))
             self.assertIn(f"VERIFY_{part.upper()}_RECORD:", job)
+        admission = "          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}"
+        self.assertIn(admission + "\n        run: /Library/GlimmerActions/accept-job.sh --require-proof", job)
+        job = job.replace(admission, "", 1)
         for forbidden in ("environment:", "secrets.", "id-token:", "attestations:"):
             self.assertNotIn(forbidden, job)
         self.assertLess(job.index("scripts/ci-release.sh verified"), job.index("scripts/ci-release.sh build"))

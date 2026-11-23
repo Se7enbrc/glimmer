@@ -54,7 +54,7 @@ jobs:
   gate:
     if:
       github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
-    runs-on: macos-26
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       artifact: ${{ steps.resolve.outputs.artifact }}

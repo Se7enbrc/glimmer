@@ -191,7 +191,10 @@ def main():
     try:
         root = arguments.repo.resolve()
         if not arguments.projects_only:
-            validate_package(json.loads(subprocess.check_output(["swift", "package", "dump-package"], cwd=root)))
+            command = ["swift", "package"]
+            if os.environ.get("RUNNER_ENVIRONMENT") == "self-hosted" and sys.platform == "darwin":
+                command.append("--disable-sandbox")
+            validate_package(json.loads(subprocess.check_output([*command, "dump-package"], cwd=root)))
         if arguments.package_only:
             print("Swift package boundary verified")
             return 0

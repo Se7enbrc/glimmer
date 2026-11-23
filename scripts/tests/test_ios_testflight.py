@@ -514,7 +514,7 @@ class TestFlightTests(FixtureTestCase):
         workflow = (workflows / 'ios-testflight.yml').read_text()
         build = (workflows / 'ios-testflight-build.yml').read_text()
         signing_job = workflow.split('\n  distribute:\n')[1]
-        self.assertNotIn('secrets.', build)
+        self.assertNotIn("secrets.", build.replace("          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}", "", 1))
         self.assertNotIn('environment:', build)
         self.assertNotIn('id-token:', build)
         self.assertIn('CompilationCache.noindex', build)

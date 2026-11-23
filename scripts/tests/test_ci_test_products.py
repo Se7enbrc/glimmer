@@ -50,7 +50,7 @@ class CITestProductsTests(FixtureTestCase):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         self.assertNotIn("  engine-ios:\n", workflow)
         self.assertNotIn("platform: [Simulator, device]", workflow)
-        for command in ("swift build -Xswiftc -warnings-as-errors", "swift test -Xswiftc -warnings-as-errors",
+        for command in ('swift build "${package_flags[@]}" -Xswiftc -warnings-as-errors', 'swift test "${package_flags[@]}" -Xswiftc -warnings-as-errors',
                         "generic/platform=iOS Simulator", "generic/platform=iOS", "make ios-device"):
             self.assertIn(command, workflow)
         self.assertIn("contains(fromJSON(needs.changes.outputs.tasks), 'mac')", workflow)

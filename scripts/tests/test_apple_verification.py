@@ -54,6 +54,43 @@ class AppleVerificationTests(FixtureTestCase):
             self.assertEqual(CHANGED.plan(event, None, ref), CHANGED.FULL | {"portable", "desktop", "compat"})
         self.assertFalse(CHANGED.plan("push", None, "feature") & {"desktop", "compat"})
 
+    def test_native_routing_preserves_desktop_coverage_and_scopes_runner_proof(self):
+        workflows = SCRIPT.parents[1] / ".github/workflows"
+        verify = (workflows / "verify.yml").read_text()
+        codeql = (workflows / "codeql.yml").read_text()
+        for workflow in (verify, codeql):
+            self.assertIn("apple_runner: ${{ steps.runner.outputs.label }}", workflow)
+            self.assertIn("python3 scripts/verify-changed.py --apple-runner", workflow)
+        for name in ("verify", "apple-builds", "ios-core", "mac-core", "sequoia"):
+            job = re.split(r"\n  [a-z][a-z-]*:\n", verify.split(f"  {name}:\n")[1])[0]
+            if name in {"mac-core", "sequoia"}:
+                self.assertIn("runs-on: " + {"mac-core":"macos-26", "sequoia":"macos-15"}[name], job)
+            else:
+                self.assertIn("runs-on: ${{ needs.changes.outputs.apple_runner }}", job)
+                self.assertNotIn("GLIMMER_M4_ADMISSION", job.split("    steps:\n")[0])
+                self.assertLess(job.index("--require-proof"), job.index("actions/checkout@"))
+
+    def test_apple_runner_admits_only_reviewed_refs_and_actors(self):
+        owner, repo = "Se7enbrc", "Se7enbrc/glimmer"
+        env = dict(GITHUB_REPOSITORY=repo, GITHUB_ACTOR=owner, GITHUB_TRIGGERING_ACTOR=owner)
+        bot, native, hosted = "glimmer-ugfugl-io-release[bot]", "glimmer-native-m4", "macos-26"
+        origin = {"full_name": repo}
+        pr = {"number": 7, "base": {"repo": origin, "ref": "main"}, "user": {"login": owner}, "head": {"repo": origin}}
+        for kind, ref, actor, trigger, expected in [
+            ("push", "heads/main", owner, owner, native), ("schedule", "heads/main", owner, owner, native),
+            ("workflow_dispatch", "heads/main", owner, owner, native), ("push", "heads/feature", owner, owner, hosted),
+            ("workflow_dispatch", "heads/release-candidate", bot, owner, native),
+            ("workflow_dispatch", "heads/release-candidate", bot, bot, native),
+            ("workflow_dispatch", "heads/release-candidate", bot, "other", hosted),
+            ("pull_request", "pull/7/merge", owner, owner, native), ("pull_request", "pull/7/merge", owner, "other", hosted),
+            ("pull_request_target", "heads/main", owner, owner, hosted)
+        ]:
+            values = dict(env, GITHUB_EVENT_NAME=kind, GITHUB_REF="refs/"+ref, GITHUB_ACTOR=actor, GITHUB_TRIGGERING_ACTOR=trigger)
+            self.assertEqual(CHANGED.apple_runner(values, {"pull_request": pr}), expected)
+        values = dict(env, GITHUB_EVENT_NAME="pull_request", GITHUB_REF="refs/pull/7/merge")
+        for changed in ({"user": {"login": "outside"}}, {"head": {"repo": {"full_name": "outside/glimmer"}}}):
+            self.assertEqual(CHANGED.apple_runner(values, {"pull_request": {**pr, **changed}}), hosted)
+
     def test_exact_merge_diff_includes_old_and_new_paths_and_embedded_newlines(self):
         def git(*args):
             return subprocess.check_output(["git", *args], text=True).strip()

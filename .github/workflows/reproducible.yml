@@ -14,7 +14,11 @@ permissions:
 jobs:
   compare:
     name: Build twice and compare
-    runs-on: macos-26
+    runs-on:
+      ${{ github.repository == 'Se7enbrc/glimmer' && github.ref ==
+      'refs/heads/main' && github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner && 'glimmer-native-m4'
+      || 'macos-26' }}
     timeout-minutes: 60
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
@@ -22,6 +26,12 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        env:
+          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

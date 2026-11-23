@@ -55,13 +55,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      apple_runner:
-        ${{ github.event_name == 'pull_request' &&
-        github.event.pull_request.base.ref == 'main' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.user.login == github.repository_owner &&
-        github.actor == github.repository_owner && 'glimmer-native-m4' ||
-        'macos-26' }}
+      apple_runner: ${{ steps.runner.outputs.label }}
       jobs: ${{ steps.decide.outputs.jobs }}
       tasks: ${{ steps.decide.outputs.tasks }}
     steps:
@@ -70,6 +64,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
+
+      - name: Select the Apple runner
+        id: runner
+        run:
+          python3 scripts/verify-changed.py --apple-runner >> "$GITHUB_OUTPUT"
 
       - name: Decide
         id: decide
@@ -88,9 +87,6 @@ jobs:
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 35
     env:
-      GLIMMER_M4_ADMISSION:
-        ${{ needs.changes.outputs.apple_runner == 'glimmer-native-m4' &&
-        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
     defaults:
@@ -99,6 +95,8 @@ jobs:
     steps:
       - name: Verify M4 admission
         if: runner.environment == 'self-hosted'
+        env:
+          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}
         run: /Library/GlimmerActions/accept-job.sh --require-proof
 
       - name: Check out source
@@ -247,11 +245,17 @@ jobs:
     if:
       inputs.mode != 'acceptance' &&
       contains(fromJSON(needs.changes.outputs.jobs), 'apple-builds')
-    runs-on: macos-26
+    runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 40
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
+      - name: Verify M4 admission
+        if: runner.environment == 'self-hosted'
+        env:
+          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}
+        run: /Library/GlimmerActions/accept-job.sh --require-proof
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -277,8 +281,13 @@ jobs:
           set -o pipefail
           mkdir -p build/logs
           make check-package-boundary
-          swift build -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
-          swift test -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
+          package_flags=()
+          if [[ "$RUNNER_ENVIRONMENT" == self-hosted ]]; then
+            # The native pod already provides the sandbox for manifests and Swift macro plugins.
+            package_flags=(--disable-sandbox -Xswiftc -disable-sandbox)
+          fi
+          swift build "${package_flags[@]}" -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
+          swift test "${package_flags[@]}" -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
 
       - name: Build engine for device and Simulator
         if: contains(fromJSON(needs.changes.outputs.tasks), 'package')
@@ -333,13 +342,12 @@ jobs:
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 40
     env:
-      GLIMMER_M4_ADMISSION:
-        ${{ needs.changes.outputs.apple_runner == 'glimmer-native-m4' &&
-        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - name: Verify M4 admission
         if: runner.environment == 'self-hosted'
+        env:
+          GLIMMER_M4_ADMISSION: ${{ secrets.GLIMMER_M4_ADMISSION }}
         run: /Library/GlimmerActions/accept-job.sh --require-proof
 
       - name: Check out source

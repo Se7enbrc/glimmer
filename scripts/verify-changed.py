@@ -126,6 +126,30 @@ def plan(event, base, ref):
     return tasks
 
 
+def apple_runner(env, event):
+    hosted = "macos-26"
+    native = "glimmer-native-m4"
+    owner = "Se7enbrc"
+    repo = owner + "/glimmer"
+    if env.get("GITHUB_REPOSITORY") != repo:
+        return hosted
+    kind, ref = env.get("GITHUB_EVENT_NAME"), env.get("GITHUB_REF")
+    actors = {env.get("GITHUB_ACTOR"), env.get("GITHUB_TRIGGERING_ACTOR")}
+    if ref == "refs/heads/release-candidate" and kind == "workflow_dispatch":
+        return native if actors <= {owner, "glimmer-ugfugl-io-release[bot]"} else hosted
+    if actors != {owner}:
+        return hosted
+    if ref == "refs/heads/main" and kind in {"push", "schedule", "workflow_dispatch"}:
+        return native
+    pr = event.get("pull_request", {})
+    base = pr.get("base", {})
+    if (kind == "pull_request" and isinstance(pr.get("number"), int) and ref == f"refs/pull/{pr['number']}/merge"
+            and base.get("ref") == "main" and base.get("repo", {}).get("full_name") == repo
+            and pr.get("head", {}).get("repo", {}).get("full_name") == repo and pr.get("user", {}).get("login") == owner):
+        return native
+    return hosted
+
+
 def require_results(jobs, needs):
     eligible = set(JOB_TASKS)
     if not isinstance(jobs, list) or "checks" not in jobs or not set(jobs) <= eligible:
@@ -144,6 +168,8 @@ if __name__ == "__main__":
         jobs = sorted(name for name, required in JOB_TASKS.items() if required & tasks)
         print("jobs=" + json.dumps(jobs))
         print("tasks=" + json.dumps(sorted(tasks)))
+    elif sys.argv[1:] == ["--apple-runner"]:
+        print("label=" + apple_runner(os.environ, json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())))
     elif sys.argv[1:] == ["--gate"]:
         require_results(json.loads(os.environ["PLAN"]), json.loads(os.environ["NEEDS"]))
     else:
