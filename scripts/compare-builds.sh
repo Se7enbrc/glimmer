@@ -45,15 +45,19 @@ normalize() {
     done
 }
 
-compare() {
-    local report
-    if report="$(diff -u <(manifest "$1") <(manifest "$2"))"; then
+compare() (
+    local report manifests
+    manifests="$(mktemp -d "${TMPDIR:-/tmp}/glimmer-manifests.XXXXXX")"
+    trap 'rm -rf "$manifests"' EXIT
+    manifest "$1" > "$manifests/a"
+    manifest "$2" > "$manifests/b"
+    if report="$(diff -u "$manifests/a" "$manifests/b")"; then
         echo "identical: $1 and $2 ($(find "$1" -type f | wc -l | tr -d ' ') files)"
     else
         printf 'different: %s and %s\n%s\n' "$1" "$2" "$report" >&2
         return 1
     fi
-}
+)
 
 build_twice() {
     local work="${1:-$(mktemp -d "${TMPDIR:-/tmp}/glimmer-repro.XXXXXX")}"

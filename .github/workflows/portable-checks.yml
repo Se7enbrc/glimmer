@@ -4,6 +4,11 @@
 name: Portable checks
 on:
   workflow_call:
+    inputs:
+      run_fixtures:
+        description: Run script fixtures and collect coverage for code changes
+        type: boolean
+        default: true
 permissions:
   contents: read
   actions: read
@@ -20,7 +25,7 @@ jobs:
           persist-credentials: false
       - name: Prepare pinned tools
         uses: ./.github/actions/mise # zizmor: ignore[self-repository]
-      - name: Run every portable hook and script fixture
+      - name: Run portable hooks and source checks
         env:
           GLIMMER_SECRET_SCAN_ALL_FILES: "1"
           SCAN_FROM:
@@ -31,8 +36,13 @@ jobs:
           fi
           hk check --all
           scripts/check-spdx.sh
+      - name: Run portable fixtures
+        if: inputs.run_fixtures
+        run: |
+          make check-package-boundary
           make test-scripts TEST_PLATFORM=portable COVERAGE=1
       - name: Upload portable coverage
+        if: inputs.run_fixtures
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-python-portable

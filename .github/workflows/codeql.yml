@@ -33,11 +33,12 @@ jobs:
       pull-requests: read
     outputs:
       apple_runner:
-        ${{ vars.GLIMMER_M4_ENABLED == 'true' && github.event_name ==
-        'pull_request' && github.event.pull_request.base.ref == 'main' &&
+        ${{ github.event_name == 'pull_request' &&
+        github.event.pull_request.base.ref == 'main' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         github.event.pull_request.user.login == github.repository_owner &&
-        github.actor == github.repository_owner && 'glimmer-m4' || 'macos-26' }}
+        github.actor == github.repository_owner && 'glimmer-native-m4' ||
+        'macos-26' }}
       scan: ${{ steps.changes.outputs.scan }}
     steps:
       - name: Check out source
@@ -84,7 +85,7 @@ jobs:
     env:
       GLIMMER_M4_ADMISSION:
         ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true'
-        && needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        && needs.changes.outputs.apple_runner == 'glimmer-native-m4' &&
         secrets.GLIMMER_M4_ADMISSION || '' }}
     timeout-minutes: 90
     permissions:
@@ -172,7 +173,7 @@ jobs:
       - name: Initialize CodeQL
         id: init
         if: steps.changes.outputs.scan == 'true'
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -263,7 +264,7 @@ jobs:
       - name: Analyze
         id: analyze
         if: steps.changes.outputs.scan == 'true'
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           category: /language:${{ matrix.language }}
           output: ${{ runner.temp }}/codeql-results

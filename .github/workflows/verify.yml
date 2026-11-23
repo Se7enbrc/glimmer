@@ -45,8 +45,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Main and dispatched runs build everything; a pull request skips the build and
-  # tests only for documentation or verified numeric version metadata.
+  # Use the tested merge tree for PR routing. Main and RC run the full suite.
   changes:
     if: github.event.action != 'closed'
     name: Decide what to verify
@@ -57,61 +56,40 @@ jobs:
       pull-requests: read
     outputs:
       apple_runner:
-        ${{ vars.GLIMMER_M4_ENABLED == 'true' && github.event_name ==
-        'pull_request' && github.event.pull_request.base.ref == 'main' &&
+        ${{ github.event_name == 'pull_request' &&
+        github.event.pull_request.base.ref == 'main' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         github.event.pull_request.user.login == github.repository_owner &&
-        github.actor == github.repository_owner && 'glimmer-m4' || 'macos-26' }}
-      build: ${{ steps.decide.outputs.build }}
-      apple: ${{ steps.decide.outputs.apple }}
+        github.actor == github.repository_owner && 'glimmer-native-m4' ||
+        'macos-26' }}
+      jobs: ${{ steps.decide.outputs.jobs }}
+      tasks: ${{ steps.decide.outputs.tasks }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Prepare pinned runtime
-        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
-        with:
-          tools: python aqua:cli/cli
-          cache: "false"
+          fetch-depth: 2
 
       - name: Decide
         id: decide
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          apple=false
-          if [ -f Package.swift ] || [ -d GlimmerEngine ] || [ -f iOS/Makefile ]; then
-            test -f Package.swift && test -f iOS/Makefile && test -d GlimmerEngine
-            apple=true
-          fi
-          printf 'apple=%s\n' "$apple" >> "$GITHUB_OUTPUT"
-          build=true
-          if [ -n "$PR_NUMBER" ]; then
-            if paths="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
-                --jq '.[] | .filename, (.previous_filename // empty)')" &&
-                [ "$(printf '%s\n' "$paths" | wc -l)" -lt 3000 ] &&
-                decision="$(printf '%s\n' "$paths" | python3 scripts/verify-changed.py)" &&
-                [ "$decision" = skip ]; then
-              build=false
-              echo "Documentation or numeric version metadata only; main still runs the full gate."
-            fi
-          fi
-          printf 'build=%s\n' "$build" >> "$GITHUB_OUTPUT"
+          python3 scripts/verify-changed.py --plan >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
 
   verify:
     name: Build Mac test products and check native tooling
     needs: changes
-    if: inputs.mode != 'acceptance'
+    if:
+      inputs.mode != 'acceptance' &&
+      contains(fromJSON(needs.changes.outputs.jobs), 'verify')
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 35
     env:
       GLIMMER_M4_ADMISSION:
-        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-native-m4' &&
         secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -147,6 +125,7 @@ jobs:
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
       - name: Restore compiler and dependency caches
+        if: contains(fromJSON(needs.changes.outputs.tasks), 'mac')
         id: build-cache
         # Same-ref repository code; no external checkout or action mutation precedes this call.
         uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
@@ -154,14 +133,18 @@ jobs:
           variant: core
 
       - name: Build the shared Mac test products
-        if: needs.changes.outputs.build == 'true'
+        if: contains(fromJSON(needs.changes.outputs.tasks), 'mac')
         timeout-minutes: 10
         run: |
           python3 scripts/ci-local.py mac --build-only
+
+      - name: Archive Mac test products for desktop runs
+        if: contains(fromJSON(needs.changes.outputs.jobs), 'mac-core')
+        run:
           tar -C build/Build -czf "$RUNNER_TEMP/mac-test-products.tgz" Products
 
       - name: Share the Mac test products
-        if: needs.changes.outputs.build == 'true'
+        if: contains(fromJSON(needs.changes.outputs.jobs), 'mac-core')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mac-test-products
@@ -172,7 +155,7 @@ jobs:
 
       - name: Check native tooling
         timeout-minutes: 10
-        run: make check-macos TEST_SUITE= COVERAGE=1
+        run: make check-macos-tools TEST_SUITE= COVERAGE=1
 
       - name: Save failed Mac build diagnostics
         if: failure()
@@ -194,7 +177,9 @@ jobs:
           include-hidden-files: true
 
       - name: Save compiler and dependency caches
-        if: success() && steps.build-cache.outputs.hit != 'true'
+        if:
+          success() && steps.build-cache.outcome == 'success' &&
+          steps.build-cache.outputs.hit != 'true'
         # Same-ref action receives only unsigned cache paths.
         uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
@@ -204,19 +189,14 @@ jobs:
   mac-core:
     name: Verify (Mac core)
     needs: [changes, verify]
-    if: inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true'
-    runs-on: ${{ needs.changes.outputs.apple_runner }}
+    if:
+      inputs.mode != 'acceptance' &&
+      contains(fromJSON(needs.changes.outputs.jobs), 'mac-core')
+    runs-on: macos-26
     timeout-minutes: 30
     env:
-      GLIMMER_M4_ADMISSION:
-        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
-        secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
-      - name: Verify M4 admission
-        if: runner.environment == 'self-hosted'
-        run: /Library/GlimmerActions/accept-job.sh --require-proof
-
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -265,8 +245,8 @@ jobs:
     name: Verify (package and production builds)
     needs: changes
     if:
-      inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true' &&
-      needs.changes.outputs.apple == 'true'
+      inputs.mode != 'acceptance' &&
+      contains(fromJSON(needs.changes.outputs.jobs), 'apple-builds')
     runs-on: macos-26
     timeout-minutes: 40
     env:
@@ -291,14 +271,17 @@ jobs:
           variant: apple-builds
 
       - name: Build and test the source package
+        if: contains(fromJSON(needs.changes.outputs.tasks), 'package')
         timeout-minutes: 5
         run: |
           set -o pipefail
           mkdir -p build/logs
+          make check-package-boundary
           swift build -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
           swift test -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
 
       - name: Build engine for device and Simulator
+        if: contains(fromJSON(needs.changes.outputs.tasks), 'package')
         env:
           XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
         # Cold device plus Simulator builds have taken nearly five minutes.
@@ -311,6 +294,7 @@ jobs:
           done
 
       - name: Build production iPhone app without signing
+        if: contains(fromJSON(needs.changes.outputs.tasks), 'device')
         env:
           XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
         timeout-minutes: 10
@@ -344,13 +328,13 @@ jobs:
     name: Verify (iOS Simulator core)
     needs: changes
     if:
-      inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true' &&
-      needs.changes.outputs.apple == 'true'
+      inputs.mode != 'acceptance' &&
+      contains(fromJSON(needs.changes.outputs.jobs), 'ios-core')
     runs-on: ${{ needs.changes.outputs.apple_runner }}
     timeout-minutes: 40
     env:
       GLIMMER_M4_ADMISSION:
-        ${{ needs.changes.outputs.apple_runner == 'glimmer-m4' &&
+        ${{ needs.changes.outputs.apple_runner == 'glimmer-native-m4' &&
         secrets.GLIMMER_M4_ADMISSION || '' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
@@ -379,6 +363,9 @@ jobs:
       - name: Build Simulator tests and run core
         env:
           XCODE_XCCONFIG_FILE: ${{ runner.temp }}/glimmer-cache.xcconfig
+          XCTEST_DEVELOPER_DIR:
+            ${{ runner.environment == 'self-hosted' &&
+            '/Applications/Xcode_27.2.app/Contents/Developer' || '' }}
         timeout-minutes: 25
         run: python3 scripts/ci-local.py core
 
@@ -461,8 +448,8 @@ jobs:
     name: Verify (sequoia)
     needs: [changes, verify]
     if:
-      needs.changes.outputs.build == 'true' && needs.changes.outputs.apple ==
-      'true'
+      inputs.mode != 'acceptance' &&
+      contains(fromJSON(needs.changes.outputs.jobs), 'sequoia')
     runs-on: macos-15
     timeout-minutes: 30
     env:
@@ -514,7 +501,9 @@ jobs:
   fuzz:
     name: libFuzzer
     needs: changes
-    if: inputs.mode != 'acceptance' && needs.changes.outputs.build == 'true'
+    if:
+      inputs.mode != 'acceptance' &&
+      contains(fromJSON(needs.changes.outputs.jobs), 'fuzz')
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -554,6 +543,9 @@ jobs:
     if: inputs.mode != 'acceptance'
     # Same-ref repository code; no external checkout or action mutation precedes this call.
     uses: ./.github/workflows/portable-checks.yml # zizmor: ignore[self-repository]
+    with:
+      run_fixtures:
+        ${{ contains(fromJSON(needs.changes.outputs.tasks), 'native') }}
 
   # The required check: green only when every part of the gate passed.
   gate:
@@ -566,49 +558,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require every part
-        env:
-          DECIDED: ${{ needs.changes.result }}
-          RESULT: ${{ needs.verify.result }}
-          BUILD: ${{ needs.changes.outputs.build }}
-          APPLE: ${{ needs.changes.outputs.apple }}
-          CHECKS: ${{ needs.checks.result }}
-          MAC_CORE: ${{ needs.mac-core.result }}
-          APPLE_BUILDS: ${{ needs.apple-builds.result }}
-          IOS_CORE: ${{ needs.ios-core.result }}
-          SEQUOIA: ${{ needs.sequoia.result }}
-          FUZZ: ${{ needs.fuzz.result }}
-        run: |
-          test "$DECIDED" = success
-          test "$RESULT" = success
-          test "$CHECKS" = success
-          case "$APPLE" in true|false) ;; *) exit 1 ;; esac
-          case "$BUILD" in
-            true) expected=success ;;
-            false) expected=skipped ;;
-            *) exit 1 ;;
-          esac
-          test "$FUZZ" = "$expected"
-          test "$MAC_CORE" = "$expected"
-          if [ "$APPLE" = false ]; then expected=skipped; fi
-          test "$APPLE_BUILDS" = "$expected"
-          test "$IOS_CORE" = "$expected"
-          test "$SEQUOIA" = "$expected"
-
-      - name: Check out coverage tooling
+      - name: Check out verification tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Require every part
+        env:
+          PLAN: ${{ needs.changes.outputs.jobs }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/verify-changed.py --gate
+
       - name: Prepare coverage tools
+        if: github.event_name != 'pull_request'
         uses: ./.github/actions/mise # zizmor: ignore[self-repository]
         with:
           tools: python aqua:astral-sh/uv pipx:coverage aqua:cli/cli
       - name: Receive every script coverage partition
+        if: github.event_name != 'pull_request'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-python-*
           path: build/coverage/parts
       - name: Combine complete script coverage
+        if: github.event_name != 'pull_request'
         run: |
           export COVERAGE_PY=coverage
           mkdir -p build/coverage/python
@@ -617,6 +590,7 @@ jobs:
           python3 scripts/coverage-report.py python
           cat build/coverage/python/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload complete script coverage
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-python

@@ -106,12 +106,12 @@ jobs:
         run: scripts/ci-release.sh verify-checks
 
   verify-tests:
-    name: Unit tests
+    name: Confirm candidate Mac tests
     if: >-
       github.repository == 'Se7enbrc/glimmer' && inputs.operation == 'candidate'
       && github.ref == 'refs/heads/release-candidate'
-    runs-on: macos-26
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
@@ -122,8 +122,6 @@ jobs:
       EXPECTED_SHA: ${{ inputs.expected_sha }}
       RELEASE_OPERATION: ${{ inputs.operation }}
       RC_TAG: ${{ inputs.rc_tag }}
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      HOMEBREW_NO_AUTO_UPDATE: "1"
     defaults:
       run:
         shell: bash
@@ -140,40 +138,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
 
-      - name: Prepare pinned tools
-        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
-
-      - name: Prepare verification
-        run: |
-          test "$(uname -m)" = arm64
-          xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
-          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
-          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
-          SWIFT_SUPPRESS_WARNINGS = NO
-          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
-          GCC_TREAT_WARNINGS_AS_ERRORS = YES
-          XCCONFIG
-          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
-
-      - name: Restore unsigned compiler state
-        id: build-cache
-        # Same-ref source runs only in this credential-free verification job.
-        uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
-        with:
-          variant: tests
-
-      - name: Verify without signing credentials
+      - name: Confirm the exact candidate desktop test result
         id: verify
         run: scripts/ci-release.sh verify-tests
-
-      - name: Save unsigned compiler state
-        if: success() && steps.build-cache.outputs.hit != 'true'
-        # Same-ref action receives only unsigned cache paths.
-        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
-        with:
-          path: ${{ steps.build-cache.outputs.paths }}
-          key: ${{ steps.build-cache.outputs.key }}
 
   verify-asan:
     name: AddressSanitizer

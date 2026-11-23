@@ -38,7 +38,7 @@ change needs, and [docs/SECURITY.md](docs/SECURITY.md) covers the root helper.
 | `Glimmer/Models/`                                     | Native PC records and settings adapters                                       |
 | `helper/`                                             | Opt-in root daemon that parks AirDrop's radio during a stream                 |
 | `LoginHelper/`                                        | Login item                                                                    |
-| `GlimmerTests/`, `EnginePackageTests/`                | Mac hostless and external shared-package tests                                |
+| `GlimmerTests/`, `EnginePackageTests/`                | Mac app-hosted and external shared-package tests                              |
 | `scripts/`                                            | Build, boundary audits, signing and release tooling used by the Makefile      |
 
 ## Protect the bar
@@ -74,19 +74,20 @@ Install the [guarded shared hooks](docs/CONTRIBUTING.md#migrate-shared-hooks)
 before committing. Older worktrees must remain usable during migration.
 
 - `make app`: Debug build, unsigned. A compile check.
-- `make test`: the Mac unit tests. Hostless, no PC needed.
+- `make test`: the Mac app-hosted tests. No streaming PC needed.
 - `make ios-test`, `make ios-device`: Simulator tests and unsigned Release
   device build.
 - `make verify-all`: the local checks for both apps; see
   [ownership](docs/APPLE_REPOSITORY.md).
 - `make verify`: Actionlint, the SPDX notice check, strict SwiftLint,
   release-tool tests, `make test` and protocol fuzz tests under
-  AddressSanitizer. Hosted Verify runs checks, builds and core tests under
-  `macOS`, reusing Mac test products on macOS 15. Render/UI and comprehensive
-  journeys are one explicit, resumable acceptance pass per feature release, not
-  a gate on every push or RC. The release owner selects affected reruns;
-  retained receipts name the source actually tested. Candidates still require
-  exact-commit `macOS` and CodeQL plus the Release workflow's sanitizer checks.
+  AddressSanitizer. Verify selects PR jobs by changed inputs. Main and RC run
+  the complete `macOS` gate and reuse Mac test products on macOS 26 and 15.
+  Render/UI and comprehensive journeys are one explicit, resumable acceptance
+  pass per feature release, not a gate on every push or RC. The release owner
+  selects affected reruns; retained receipts name the source actually tested.
+  Candidates still require exact-commit `macOS` and CodeQL plus the Release
+  workflow's sanitizer checks.
   `make ci-local SHARD=mac|core|render|journeys|acceptance` reproduces hosted
   test filters and coverage with Xcode 26.6; see
   [local reproduction](docs/CONTRIBUTING.md#hosted-verification-and-local-reproduction).

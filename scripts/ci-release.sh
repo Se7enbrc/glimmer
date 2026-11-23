@@ -112,7 +112,7 @@ require_verified() {
 }
 
 verify_part() {
-    local part="$1" target started=$SECONDS
+    local part="$1" desktop_job started=$SECONDS
     check_source
     [ "$OPERATION" = candidate ] || die "promotion never builds"
     if ! { [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ]; }; then
@@ -120,16 +120,20 @@ verify_part() {
     fi
     [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
     case "$part" in
-        checks) target=check-portable; GLIMMER_SECRET_SCAN_ALL_FILES=1 hk check --all ;;
-        tests) target="test"; make check-macos ;;
-        asan) target=test-asan ;;
+        checks)
+            GLIMMER_SECRET_SCAN_ALL_FILES=1 hk check --all
+            make check-portable "DERIVED=$ROOT/build" TEST_SUITE=
+            ;;
+        tests)
+            desktop_job=$(jq -er --arg sha "$EXPECTED_SHA" '
+                select(.sha == $sha and .analysis_ref == "refs/heads/release-candidate")
+                | .desktop_test_job | numbers | select(. > 0 and . == floor)
+            ' "$RUNNER_TEMP/glimmer-prerequisites.json") || die "missing exact candidate desktop test evidence"
+            echo "Candidate Mac tests passed: https://github.com/$GITHUB_REPOSITORY/runs/$desktop_job"
+            ;;
+        asan) make test-asan "DERIVED=$ROOT/build" TEST_SUITE= ;;
         *) die "unknown verification part" ;;
     esac
-    if [ "$part" = tests ]; then
-        make "$target" "DERIVED=$ROOT/build" TEST_SUITE= COVERAGE=1
-    else
-        make "$target" "DERIVED=$ROOT/build" TEST_SUITE=
-    fi
     check_source
     printf 'record=%s %s %s %s\n' "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$part" \
         >> "$GITHUB_OUTPUT"

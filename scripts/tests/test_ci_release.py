@@ -33,6 +33,9 @@ if name == "rm":
     if os.environ.get("FIXTURE_FAIL_REMOVE") and args == ["-rf", str(private)]:
         sys.exit(8)
     sys.exit(subprocess.run(["/bin/rm", *args]).returncode)
+elif name == "release-checks.py" and os.environ.get("RELEASE_CHECKS_FILE"):
+    pathlib.Path(os.environ["RELEASE_CHECKS_FILE"]).write_text(json.dumps({
+        "sha": args[0], "analysis_ref": "refs/heads/release-candidate", "desktop_test_job": 4321}))
 elif name == "git":
     if args == ["rev-parse", "HEAD"]:
         print(os.environ.get("FIXTURE_HEAD", "a" * 40))
@@ -261,17 +264,19 @@ class HostedReleaseTests(FixtureTestCase):
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
-    def test_native_checks_must_finish_before_the_test_record(self):
+    def test_desktop_record_requires_a_direct_candidate_test_on_the_same_sha(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
-        output = Path(self.env["GITHUB_OUTPUT"])
-        output.write_text("")
-        self.env["FIXTURE_FAIL"] = "make:check-macos"
-        self.assertNotEqual(self.run_phase("verify-tests").returncode, 0)
-        self.assertNotIn("record=", output.read_text())
+        Path(self.env["GITHUB_OUTPUT"]).write_text("")
+        evidence = self.runner / "glimmer-prerequisites.json"
+        original = json.loads(evidence.read_text())
+        for changes in ({"sha": "b" * 40}, {"analysis_ref": "refs/pull/1/merge"}, {"desktop_test_job": None}):
+            evidence.write_text(json.dumps({**original, **changes}))
+            self.assertNotEqual(self.run_phase("verify-tests").returncode, 0)
+            self.assertNotIn("record=", Path(self.env["GITHUB_OUTPUT"]).read_text())
     def test_each_verification_part_must_finish_before_emitting_a_record(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         output = Path(self.env["GITHUB_OUTPUT"])
-        for part in ("checks", "tests", "asan"):
+        for part in ("checks", "asan"):
             with self.subTest(part=part):
                 output.write_text("")
                 self.env["FIXTURE_FAIL"] = "make:" + " ".join(self.verification_args(part))
@@ -308,7 +313,11 @@ class HostedReleaseTests(FixtureTestCase):
         self.verified()
         for part in ("checks", "tests", "asan"):
             self.assertEqual(self.env[f"VERIFY_{part.upper()}_RECORD"], f"{SHA} 12 1 {part}")
-            self.assertIn(self.verification_args(part), [call["args"] for call in self.calls()])
+            commands = [call["args"] for call in self.calls()]
+            if part == "tests":
+                self.assertNotIn(self.verification_args(part), commands)
+            else:
+                self.assertIn(self.verification_args(part), commands)
             self.assertIn(f"Verification {part}: {SHA}, run 12, attempt 1,",
                           Path(self.env["GITHUB_STEP_SUMMARY"]).read_text())
     def test_checks_and_precreated_tag_are_required_before_any_compilation(self):

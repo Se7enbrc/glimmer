@@ -97,7 +97,7 @@ build.
 | ----------------------------------------- | ------------------------------------------------------------- |
 | `make app`                                | Unsigned Debug compile check.                                 |
 | `make check`                              | hk checks, SPDX notices, boundary audits and tooling tests.   |
-| `make test`                               | Hostless Swift unit tests.                                    |
+| `make test`                               | Mac app-hosted Swift tests.                                   |
 | `make test TEST_SUITE=DatagramBatchTests` | One suite; append `/testName` for one test.                   |
 | `make test-asan`                          | Protocol fuzz tests under AddressSanitizer.                   |
 | `make verify`                             | All checks above; ignores `TEST_SUITE` so the full gate runs. |
@@ -106,21 +106,26 @@ build.
 
 ### Hosted verification and local reproduction
 
-For maintainer-owned PRs from this repository to main, the M4 macOS guest runs
-the Mac build and tests, iOS core tests and Swift CodeQL when the repository
-variable `GLIMMER_M4_ENABLED` is `true`. GitHub hosts macOS 15 compatibility,
-package and device builds, Linux checks and external contributions. Set the
-variable to `false` before starting a run to use hosted runners for every job.
+On pull requests, Verify compares the tested merge tree with its base. Portable
+hooks always run. Documentation-only changes finish there. Mac source changes
+compile the Mac app and tests. iOS source changes run Simulator tests and an
+unsigned device build. An iOS test-only change runs the Simulator suite. Mac
+sources referenced by the iOS project also select the iOS checks. Shared engine,
+toolchain and unrecognized changes select both clients, package checks and
+protocol fuzzing. The required `macOS` check validates every selected job.
 
-Verify compiles one instrumented Mac test bundle. macOS 26 and macOS 15 run it
-in parallel. The iOS Simulator tests can start alongside the package and
-production device builds. At peak, Verify can use four Apple workers and Swift
-CodeQL can use the fifth. Portable checks and libFuzzer run on Linux.
+For admitted maintainer PRs, the headless M4 pods build Mac test products, run
+native tooling, iOS Simulator tests and applicable Swift CodeQL. Xcode 26.6
+compiles the Simulator tests and Xcode 27.2 runs them on the M4. GitHub hosts
+package and device builds and external PRs. PRs finish without starting a Mac
+desktop session or uploading Mac test products.
 
-Pushes, PRs and the default manual dispatch run the core gate. Candidates need
-`macOS` and CodeQL on their exact commit; the Release workflow still runs its
-sanitizer checks. Security queries, complete extraction, coverage reports,
-production device builds, and macOS 15 validation remain required.
+Main and the direct `release-candidate` dispatch compile the Mac test products
+once and run them on hosted macOS 26 and macOS 15. They also collect full
+coverage, run the iOS suite and production builds, and fuzz the protocol. RC
+delivery confirms the exact candidate's successful desktop test before building
+the distributable. It runs AddressSanitizer separately. Human testing uses the
+actual RC before promotion.
 
 Run comprehensive render/UI and journeys once per feature release, such as
 `2026.10.8`. Dispatch **Verify** with mode `acceptance` and that release key.
@@ -425,7 +430,7 @@ Wait for the required checks on the exact commit under review.
 
 | Check                         | Scope                                                                                                               |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `macOS`                       | Checks, Mac/iOS core tests, production builds, macOS 15 and libFuzzer; docs-only PRs run checks alone.              |
+| `macOS`                       | Checks selected for the PR diff; full automation and both desktop OS versions on main and RC.                       |
 | CodeQL                        | Required Swift, Python and Actions analysis; Swift uses Xcode 26.6, the other jobs Linux.                           |
 | Swift extraction              | Requires every tracked production Swift file; unsupported compilers or incomplete extraction fail.                  |
 | Documentation-only Swift skip | PRs with no traced build inputs can skip Swift analysis; release candidates still need exact-commit analysis.       |

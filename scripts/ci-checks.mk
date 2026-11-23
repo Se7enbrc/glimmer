@@ -9,8 +9,14 @@ check-hooks:
 	@GLIMMER_SECRET_SCAN_ALL_FILES=1 $(TOOLS) hk check --all
 	@scripts/check-spdx.sh
 
-check-boundaries:
-	@if [ -f Package.swift ] || [ -d GlimmerEngine ]; then $(TOOLS) python3 scripts/check-engine-boundary.py; fi
+.PHONY: check-package-boundary check-project-boundaries check-macos-tools
+check-boundaries: check-package-boundary check-project-boundaries
+
+check-package-boundary:
+	@if [ -f Package.swift ] || [ -d GlimmerEngine ]; then $(TOOLS) python3 scripts/check-engine-boundary.py --package-only; fi
+
+check-project-boundaries:
+	@if [ -f Package.swift ] || [ -d GlimmerEngine ]; then $(TOOLS) python3 scripts/check-engine-boundary.py --projects-only; fi
 	@if [ -f Package.swift ] || [ -d GlimmerEngine ]; then $(TOOLS) python3 scripts/check-ios-boundary.py; fi
 
 check-portable:
@@ -18,7 +24,9 @@ check-portable:
 	@scripts/check-spdx.sh
 	@$(MAKE) test-scripts TEST_PLATFORM=portable
 
-check-macos: check-boundaries
+check-macos: check-package-boundary check-macos-tools
+
+check-macos-tools: check-project-boundaries
 	@$(TOOLS) hk check --all --step swiftlint
 	@$(MAKE) test-scripts TEST_PLATFORM=macos
 

@@ -19,12 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ChangeDecisionTests(FixtureTestCase):
-    def decision(self, workflow, paths, classifier=None, api_status="0"):
-        verify = workflow == "verify"
-        script = "verify-changed.py" if verify else "codeql-swift-changed.py"
-        key = "build" if verify else "scan"
-        source = (ROOT / f".github/workflows/{workflow}.yml").read_text()
-        start = source.index(f"          {key}=true")
+    def decision(self, paths, classifier=None, api_status="0"):
+        script = "codeql-swift-changed.py"
+        source = (ROOT / ".github/workflows/codeql.yml").read_text()
+        start = source.index("          scan=true")
         end = source.index('>> "$GITHUB_OUTPUT"', start) + len('>> "$GITHUB_OUTPUT"')
         shell = textwrap.dedent(source[start:end])
         with tempfile.TemporaryDirectory() as temporary:
@@ -45,7 +43,7 @@ class ChangeDecisionTests(FixtureTestCase):
                    "FIXTURE_PATHS": paths, "FIXTURE_API_STATUS": api_status}
             result = run_fixture(["/bin/bash", "-euo", "pipefail", "-c", shell], cwd=root, env=env)
             self.assertEqual(result.returncode, 0, result.stderr)
-            return dict(line.split("=", 1) for line in output.read_text().splitlines())[key]
+            return dict(line.split("=", 1) for line in output.read_text().splitlines())["scan"]
 
     def test_only_successful_explicit_skip_can_omit_work(self):
         cases = [
@@ -61,7 +59,6 @@ class ChangeDecisionTests(FixtureTestCase):
             ("docs/README.md\n", None, "1", "true"),
             ("docs/README.md\n" * 3000, None, "0", "true"),
         ]
-        for workflow in ("verify", "codeql"):
-            for paths, classifier, status, expected in cases:
-                with self.subTest(workflow=workflow, classifier=classifier, status=status, count=len(paths)):
-                    self.assertEqual(self.decision(workflow, paths, classifier, status), expected)
+        for paths, classifier, status, expected in cases:
+            with self.subTest(classifier=classifier, status=status, count=len(paths)):
+                self.assertEqual(self.decision(paths, classifier, status), expected)

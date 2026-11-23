@@ -162,7 +162,7 @@ def validate_scheme(path, engine_id):
         raise ValueError("Shared engine scheme references another project")
 
 
-def check(root):
+def check_projects(root):
     expected = {}
     for target, directories in {"GlimmerEngine": ("GlimmerEngine",), "Glimmer": ("Glimmer",),
                                 "GlimmerTests": ("GlimmerTests", "EnginePackageTests")}.items():
@@ -175,8 +175,6 @@ def check(root):
     expected["GlimmerTests"].update(("helper/Protocol.swift", "helper/AWDLSuppressor.swift", "helper/HelperService.swift",
                                      "Glimmer/AWDLStreamLease.swift", "Glimmer/AWDLProcess.swift"))
     engine_id = validate_graph(load_project(root / "Glimmer.xcodeproj/project.pbxproj"), expected)
-    package = json.loads(subprocess.check_output(["swift", "package", "dump-package"], cwd=root))
-    validate_package(package)
     for path in expected["GlimmerEngine"]:
         validate_imports(path, (root / path).read_text())
     validate_scheme(root / "Glimmer.xcodeproj/xcshareddata/xcschemes/GlimmerEngine.xcscheme", engine_id)
@@ -186,9 +184,18 @@ def check(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path.cwd())
+    part = parser.add_mutually_exclusive_group()
+    part.add_argument("--package-only", action="store_true")
+    part.add_argument("--projects-only", action="store_true")
     arguments = parser.parse_args()
     try:
-        count = check(arguments.repo.resolve())
+        root = arguments.repo.resolve()
+        if not arguments.projects_only:
+            validate_package(json.loads(subprocess.check_output(["swift", "package", "dump-package"], cwd=root)))
+        if arguments.package_only:
+            print("Swift package boundary verified")
+            return 0
+        count = check_projects(root)
     except (ValueError, OSError, KeyError, ET.ParseError, subprocess.CalledProcessError) as error:
         print(f"Engine boundary check failed: {error}", file=sys.stderr)
         return 1
